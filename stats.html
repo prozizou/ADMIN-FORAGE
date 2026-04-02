@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASUFOR Diandioly - Analyse Pro</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --bg: #f8fafc; --primary: #0052fe; --card-bg: #ffffff;
+            --text-main: #1e293b; --text-sub: #64748b; --success: #22c55e;
+            --border-color: rgba(0, 0, 0, 0.05);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: var(--bg); color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 0; padding: 0;
+        }
+
+        .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 15px; }
+
+        .header { padding: 10px 0 20px 0; display: flex; justify-content: space-between; align-items: center; }
+
+        .select-wrapper { position: relative; margin-bottom: 20px; }
+        #agent-spinner {
+            appearance: none; -webkit-appearance: none; width: 100%;
+            padding: 15px 20px; font-size: 0.95rem; font-weight: 600;
+            color: var(--text-main); background-color: var(--card-bg);
+            border: 1px solid var(--border-color); border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .select-wrapper::after {
+            content: '\f0d7'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
+            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+            color: var(--text-sub); pointer-events: none;
+        }
+
+        #agent-spinner:focus { outline: none; border-color: var(--primary); box-shadow: 0 4px 15px rgba(0, 82, 254, 0.1); }
+
+        .wallet-card {
+            background: var(--primary); color: white; padding: 25px;
+            border-radius: 30px; margin-bottom: 20px;
+            box-shadow: 0 12px 24px rgba(0, 82, 254, 0.2);
+        }
+        .wallet-card h1 { margin: 8px 0; font-size: 2.2rem; font-weight: 800; }
+        .wallet-card small { opacity: 0.7; font-size: 0.8rem; }
+
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-card {
+            background: white; padding: 18px; border-radius: 24px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.02); border: 1px solid var(--border-color);
+        }
+        .stat-val { font-size: 1.2rem; font-weight: 800; display: block; color: var(--text-main); }
+        .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; font-weight: 700; margin-top: 4px; display: block; }
+
+        .chart-container {
+            background: white; padding: 20px; border-radius: 28px;
+            margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+            border: 1px solid var(--border-color);
+        }
+
+        .list-section { 
+            background: white; border-radius: 35px 35px 0 0; 
+            padding: 25px 20px; min-height: 400px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.02);
+        }
+        .item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 0; border-bottom: 1px solid #f1f5f9;
+        }
+        .amt { font-weight: 800; color: var(--success); font-size: 1rem; }
+        .item b { font-size: 0.95rem; color: var(--text-main); }
+
+        .loader {
+            position: fixed; top: 15px; right: 15px; font-size: 0.65rem;
+            background: var(--success); color: white; padding: 5px 12px;
+            border-radius: 20px; font-weight: bold; z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sync-status" class="loader">SYNCHRONISATION...</div>
+
+<div class="container">
+    <div class="header">
+        <div>
+            <small style="color: var(--text-sub); font-weight: 600;">Tableau de bord</small>
+            <h2 style="margin:0; font-size: 1.2rem;">ASUFOR Diandioly</h2>
+        </div>
+        <i class="fa-solid fa-circle-user" style="font-size: 2rem; color: #cbd5e1;"></i>
+    </div>
+
+    <div class="select-wrapper">
+        <select id="agent-spinner" onchange="applyFilter()"></select>
+    </div>
+
+    <div class="wallet-card">
+        <small>Total des Recettes Encaissées</small>
+        <h1 id="total-money">0 CFA</h1>
+        <small id="date-now"></small>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-val" id="stat-vol">0 m³</span>
+            <span class="stat-label">Volume Total</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-val" id="stat-ratio">0 F/m³</span>
+            <span class="stat-label">Ratio Moyen</span>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <p style="font-size: 0.75rem; font-weight: 800; color: var(--text-sub); margin-bottom: 15px; text-align: center; text-transform: uppercase;">
+            Analyse : Prix (CFA) par rapport au Volume (m³)
+        </p>
+        <canvas id="ratioChart" style="max-height: 200px;"></canvas>
+    </div>
+</div>
+
+<div class="list-section">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h3 style="margin:0; font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;">Détails paiements</h3>
+        <span id="stat-count" style="background: var(--bg); padding: 4px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 800;">0 Relevés</span>
+    </div>
+    <div id="releves-list"></div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+        authDomain: "asufor-67a06.firebaseapp.com",
+        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+        projectId: "asufor-67a06"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let storeReleves = {};
+    let storeAgents = {};
+    let myChart = null;
+
+    function startSync() {
+        // Chargement des Agents
+        onValue(ref(db, 'db_agents'), (snap) => {
+            storeAgents = snap.val() || {};
+            const spinner = document.getElementById('agent-spinner');
+            const active = spinner.value || "all";
+            
+            let html = '<option value="all">🟢 Tous les agents (Global)</option>';
+            Object.entries(storeAgents).forEach(([key, a]) => {
+                let name = (a.agent || "Inconnu").trim().toLowerCase();
+                let formatted = name.split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
+                let zone = a.zone ? ` [${a.zone}]` : "";
+                html += `<option value="${key}">👤 ${formatted}${zone}</option>`;
+            });
+            spinner.innerHTML = html;
+            spinner.value = active;
+        });
+
+        // Chargement des Relevés
+        onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
+            storeReleves = snap.val() || {};
+            applyFilter();
+            document.getElementById('sync-status').innerText = "LIVE ✅";
+        });
+    }
+
+    function initChart(plotData) {
+        const ctx = document.getElementById('ratioChart').getContext('2d');
+        if (myChart) myChart.destroy();
+
+        plotData.sort((a, b) => a.x - b.x);
+
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Paiement',
+                    data: plotData,
+                    borderColor: '#0052fe',
+                    backgroundColor: 'rgba(0, 82, 254, 0.08)',
+                    borderWidth: 3,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#ffffff',
+                    pointBorderColor: '#0052fe',
+                    pointBorderWidth: 2,
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'linear', title: { display: true, text: 'Volume (m³)', font: { size: 9, weight: 'bold' } }, grid: { display: false } },
+                    y: { title: { display: true, text: 'Prix (F)', font: { size: 9, weight: 'bold' } }, grid: { color: '#f1f5f9' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    window.applyFilter = function() {
+        const selectedId = document.getElementById('agent-spinner').value;
+        const listDiv = document.getElementById('releves-list');
+        let tCFA = 0, tM3 = 0, count = 0;
+        let plotData = [];
+
+        listDiv.innerHTML = "";
+        const entries = Object.values(storeReleves).reverse();
+
+        entries.forEach(item => {
+            const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
+            if (isNaN(apaid) || apaid <= 0) return;
+
+            const match = (selectedId === "all") || (item.agent_id === selectedId);
+
+            if (match) {
+                const nIdx = parseFloat(item.new_index || 0);
+                const lIdx = parseFloat(item.last_index || 0);
+                const conso = Math.max(0, nIdx - lIdx);
+                
+                tCFA += apaid; tM3 += conso; count++;
+                if (conso > 0) plotData.push({ x: conso, y: apaid });
+
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerHTML = `
+                    <div>
+                        <b>${item.name || 'Client'}</b><br>
+                        <small style="color:var(--text-sub)">${lIdx} → ${nIdx} (${conso.toFixed(1)} m³)</small>
+                    </div>
+                    <div style="text-align:right">
+                        <span class="amt">${apaid.toLocaleString()} F</span>
+                    </div>
+                `;
+                listDiv.appendChild(div);
+            }
+        });
+
+        document.getElementById('total-money').innerText = tCFA.toLocaleString() + " CFA";
+        document.getElementById('stat-vol').innerText = tM3.toFixed(1) + " m³";
+        document.getElementById('stat-count').innerText = count + " Relevés";
+        document.getElementById('stat-ratio').innerText = tM3 > 0 ? Math.round(tCFA / tM3) + " F/m³" : "0 F/m³";
+        
+        initChart(plotData);
+    }
+
+    document.getElementById('date-now').innerText = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    window.onload = startSync;
+</script>
+</body>
+</html>

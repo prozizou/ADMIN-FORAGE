@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASUFOR Diandioly - Système Pro v3</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --bg-dark: #0f172a; --card-dark: #1e293b; --accent-green: #22c55e; --accent-blue: #3b82f6; --text-gray: #94a3b8; }
+        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
+
+        .top-bar { 
+            display: flex; gap: 15px; justify-content: space-between; align-items: center; 
+            background: #1a2235; padding: 15px 25px; border-radius: 40px; 
+            margin: 0 auto 30px auto; max-width: 900px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            position: sticky; top: 10px; z-index: 1000;
+        }
+
+        .search-box { flex: 1; position: relative; max-width: 300px; }
+        .search-box input { 
+            width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
+            border: none; background: #242c40; color: white; outline: none; font-size: 1rem;
+        }
+        .search-box i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-gray); }
+
+        .btn-print { 
+            background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
+            border-radius: 20px; cursor: pointer; font-weight: bold; 
+            display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.3s;
+        }
+        .btn-print:hover { transform: scale(1.05); background: #16a34a; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+
+        .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
+        .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
+
+        .list-container { max-width: 900px; margin: auto; }
+        .facture-item { 
+            background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
+            margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; 
+            border: 1px solid rgba(255,255,255,0.05); transition: 0.2s;
+        }
+        .facture-item:hover { border-color: var(--accent-blue); }
+        .btn-solder { background: var(--accent-blue); color: white; border: none; padding: 8px 15px; border-radius: 10px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+
+        #print-zone { display: none; }
+
+        @media print {
+            @page { size: A4; margin: 0; }
+            body * { visibility: hidden; }
+            #print-zone, #print-zone * { visibility: visible; }
+            #print-zone { display: block !important; position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
+            
+            .invoice-page { width: 210mm; height: 297mm; padding: 12mm 18mm; box-sizing: border-box; background: white; page-break-after: always; }
+            .p-header { text-align: center; margin-bottom: 5px; font-size: 19px; font-weight: bold; line-height: 1.4; }
+            .section-title { font-family: 'Dancing Script', cursive; font-size: 26px; text-align: center; margin: 12px 0 6px 0; }
+            .info-box { border: 2.5px solid #333; border-radius: 18px; padding: 15px 25px; margin-bottom: 18px; }
+            .p-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 18px; }
+            .bold { font-weight: 900; }
+            .deadline { margin-top: 15px; font-size: 18px; font-weight: bold; }
+            .tresorier { font-family: 'Dancing Script', cursive; font-size: 28px; text-align: right; margin-top: -30px; }
+            .p-dashed { border-top: 2px dashed #000; margin: 35px 0; position: relative; }
+            .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
+            .sc-left { left: 10%; } .sc-right { right: 10%; }
+            .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="filterList()">
+    </div>
+
+    <button class="btn-print" onclick="window.print()">
+        <i class="fas fa-print"></i>
+        <span>Imprimer</span>
+    </button>
+
+    <div class="master-selection">
+        <input type="checkbox" id="master-cb" onchange="toggleAll(this)">
+        <label for="master-cb">Tout</label>
+    </div>
+</div>
+
+<div class="list-container" id="list-container">Chargement des données Firebase...</div>
+
+<div id="print-zone"></div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+        authDomain: "asufor-67a06.firebaseapp.com",
+        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+        projectId: "asufor-67a06"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    let dataCache = {};
+
+    const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
+
+    function formatSmartDates(dateReleve) {
+        const dFin = dateReleve ? new Date(dateReleve) : new Date();
+        const dDebut = new Date(dFin.getFullYear(), dFin.getMonth(), 0); 
+        const dEcheance = new Date(dFin.getFullYear(), dFin.getMonth(), 15);
+        const f = (d) => d.toLocaleDateString('fr-FR');
+        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance) };
+    }
+
+    onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
+        const list = document.getElementById('list-container');
+        let html = ""; dataCache = {};
+        
+        snap.forEach(child => {
+            const d = child.val();
+            const vol = (parseInt(d.new_index) - parseInt(d.last_index)) || 0;
+            const arrieres = parseInt(d.arrieres) || 0;
+            const montantMois = parseInt(d.apaid) || 0;
+            const total = montantMois + arrieres;
+
+            if (vol > 0 || arrieres > 0) {
+                dataCache[child.key] = { ...d, vol, total, arrieres, montantMois };
+                html += `
+                <div class="facture-item" data-search="${d.name.toLowerCase()} ${d.numero_compteur}">
+                    <div>
+                        <strong style="font-size:1.1rem">${d.name}</strong><br>
+                        <small style="color:var(--text-gray)">N°${d.numero_compteur} | Dette: ${fPrice(arrieres)}</small>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:20px">
+                        <button class="btn-solder" onclick="solderDette('${child.key}')">✅ Solder</button>
+                        <div style="text-align:right"><span style="color:#fbbf24; font-weight:bold; font-size:1.1rem;">${fPrice(total)}</span></div>
+                        <input type="checkbox" class="bill-cb" data-id="${child.key}" onchange="renderPrint()" style="width:25px; height:25px; cursor:pointer;">
+                    </div>
+                </div>`;
+            }
+        });
+        list.innerHTML = html || "<p style='text-align:center'>Aucun abonné à facturer pour le moment.</p>";
+    });
+
+    window.solderDette = function(id) {
+        if(confirm("Confirmer le paiement total et remettre les arriérés à 0 FCFA ?")) {
+            update(ref(db, 'asufor_db_diandioly/' + id), { arrieres: 0 });
+        }
+    }
+
+    window.filterList = function() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        document.querySelectorAll('.facture-item').forEach(it => {
+            it.style.display = it.getAttribute('data-search').includes(q) ? 'flex' : 'none';
+        });
+    }
+
+    window.toggleAll = function(src) {
+        document.querySelectorAll('.facture-item').forEach(it => {
+            if(it.style.display !== 'none') it.querySelector('.bill-cb').checked = src.checked;
+        });
+        window.renderPrint();
+    }
+
+    window.renderPrint = function() {
+        const selected = document.querySelectorAll('.bill-cb:checked');
+        const printZone = document.getElementById('print-zone');
+        let html = "";
+
+        selected.forEach(box => {
+            const d = dataCache[box.getAttribute('data-id')];
+            const dates = formatSmartDates(d.date);
+
+            html += `
+            <div class="invoice-page">
+                <div class="p-header">Forage DIANDIOLY 🚰<br>77 624 70 30</div>
+                <div class="section-title">Période de consommation</div>
+                <div class="info-box">
+                    <div class="p-row"><span>DU : <strong>${dates.debut}</strong></span><span>AU : <strong>${dates.fin}</strong></span></div>
+                </div>
+                <div class="section-title">Détails du client</div>
+                <div class="info-box">
+                    <div class="p-row"><span>Numéro Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
+                    <div class="p-row"><span>Prénom/Nom</span><span>${d.name}</span></div>
+                    <div class="p-row"><span>Adresse</span><span>${d.zone || 'DIANDIOLY'}</span></div>
+                </div>
+                <div class="section-title">Détails consommation</div>
+                <div class="info-box">
+                    <div class="p-row"><span>Dernier index</span><span>${d.last_index} m³</span></div>
+                    <div class="p-row"><span>Nouvel index</span><span>${d.new_index} m³</span></div>
+                    <div class="p-row bold"><span>m³ vendus</span><span>${d.vol} m³</span></div>
+                    <div class="p-row"><span>Prix Unitaire</span><span>250 FCFA</span></div>
+                    <div class="p-row"><span>Montant du mois</span><span>${fPrice(d.montantMois)}</span></div>
+                    <div class="p-row" style="color:#e53e3e"><span>Arriérés de paiement</span><span>${fPrice(d.arrieres)}</span></div>
+                    <div class="p-row bold" style="font-size:22px; border-top:2px solid #000; padding-top:8px; margin-top:5px;">
+                        <span>Montant Total à Payer</span><span>${fPrice(d.total)}</span>
+                    </div>
+                </div>
+                <div class="deadline">À payer avant le <strong>${dates.echeance}</strong></div>
+                <div class="tresorier">Le trésorier</div>
+                <div class="p-dashed"><i class="fas fa-scissors scissors sc-left"></i><i class="fas fa-scissors scissors sc-right"></i></div>
+                <div class="section-title" style="font-size:20px">Reçu de paiement</div>
+                <div class="p-row"><span>N° Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
+                <div class="p-row"><span>Prénom & Nom</span><span>${d.name}</span></div>
+                <div class="footer-line">
+                    <div class="p-row"><span>Consommation (${d.vol} m³)</span><span>${fPrice(d.montantMois)}</span></div>
+                    <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}</span></div>
+                    <div class="p-row bold" style="font-size:22px"><span>Total Reçu</span><span>${fPrice(d.total)}</span></div>
+                    <div style="font-size:12px; margin-top:5px; opacity:0.7">Date du relevé : ${dates.fin}</div>
+                </div>
+            </div>`;
+        });
+        printZone.innerHTML = html;
+    }
+</script>
+</body>
+</html>

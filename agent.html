@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ajouter un Agent - ASUFOR Glass</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #38bdf8;
+            --text-white: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            color: var(--text-white);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+
+        .glass-card {
+            width: 100%; max-width: 420px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: 30px;
+            padding: 35px 25px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        h2 { text-align: center; margin-bottom: 30px; font-weight: 600; color: var(--accent-blue); font-size: 1.4rem; }
+
+        .field { margin-bottom: 20px; }
+        
+        label {
+            display: block; margin-bottom: 8px;
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 1px;
+            opacity: 0.6;
+        }
+
+        input {
+            width: 100%; padding: 14px 18px; border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: white; font-size: 1rem;
+            outline: none; transition: 0.3s;
+            box-sizing: border-box;
+        }
+
+        input:focus { border-color: var(--accent-blue); background: rgba(255, 255, 255, 0.08); }
+
+        .btn-submit {
+            width: 100%; padding: 16px; margin-top: 10px;
+            background: var(--accent-blue);
+            border: none; border-radius: 12px;
+            color: #0f172a; font-weight: 800;
+            text-transform: uppercase; cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-submit:active { transform: scale(0.97); }
+
+        .footer-link {
+            display: block; text-align: center; margin-top: 25px;
+            color: rgba(255, 255, 255, 0.4); text-decoration: none; font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="glass-card">
+        <h2>Nouvel Agent</h2>
+        
+        <div class="field">
+            <label>Nom complet (Agent)</label>
+            <input type="text" id="agent_name" placeholder="Ex: Abou Diop">
+        </div>
+
+        <div class="field">
+            <label>Numéro Téléphone</label>
+            <input type="tel" id="agent_tel" placeholder="Ex: 775076770">
+        </div>
+
+        <div class="field">
+            <label>Passcode (6 chiffres)</label>
+            <input type="password" id="agent_pass" placeholder="******" maxlength="6" inputmode="numeric">
+        </div>
+
+        <div class="field">
+            <label>Zone / Quartier</label>
+            <input type="text" id="agent_zone" placeholder="Ex: HLM 2">
+        </div>
+
+        <button class="btn-submit" onclick="sendToFirebase()">Enregistrer l'agent</button>
+        
+        <a href="accueil.html" class="footer-link">← Retourner à l'accueil</a>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+            authDomain: "asufor-67a06.firebaseapp.com",
+            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+            projectId: "asufor-67a06"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Rendre la fonction accessible globalement pour le bouton onclick
+        window.sendToFirebase = async function() {
+            const name = document.getElementById('agent_name').value.trim();
+            const tel = document.getElementById('agent_tel').value.trim();
+            const pass = document.getElementById('agent_pass').value;
+            const zone = document.getElementById('agent_zone').value.trim();
+
+            if (!name || !tel || !pass || !zone) {
+                alert("Veuillez remplir tous les champs.");
+                return;
+            }
+
+            if (pass.length !== 6) {
+                alert("Le passcode doit faire exactement 6 chiffres.");
+                return;
+            }
+
+            try {
+                const agentsListRef = ref(db, 'db_agents');
+                const newAgentRef = push(agentsListRef);
+                const uniqueId = newAgentRef.key;
+                
+                await set(newAgentRef, {
+                    agent: name,
+                    agent_id: uniqueId,
+                    agent_tel: tel,
+                    passcode: pass,
+                    id_source: "267b175fb210e9be", // ID admin par défaut
+                    key: uniqueId,
+                    siege: "DIANDIOLY",
+                    zone: zone
+                });
+                
+                alert("Agent " + name + " enregistré avec succès !");
+                document.querySelectorAll('input').forEach(i => i.value = "");
+            } catch (error) {
+                alert("Erreur : " + error.message);
+            }
+        };
+    </script>
+</body>
+</html>

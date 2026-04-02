@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asufor Admin | Maintenance Master</title>
+    <style>
+        :root {
+            --bg: #0f172a; --card: rgba(30, 41, 59, 0.9);
+            --primary: #3b82f6; --success: #10b981;
+            --danger: #ef4444; --text: #f8fafc;
+            --text-dim: #94a3b8; --border: rgba(255, 255, 255, 0.1);
+        }
+        body {
+            margin: 0; padding: 15px; background: var(--bg); color: var(--text);
+            font-family: -apple-system, system-ui, sans-serif;
+            display: flex; align-items: center; justify-content: center; min-height: 100vh;
+        }
+        .card {
+            background: var(--card); backdrop-filter: blur(15px);
+            border: 1px solid var(--border); border-radius: 28px;
+            padding: 30px; width: 100%; max-width: 400px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align: center;
+        }
+        .icon-db {
+            width: 60px; height: 60px; background: rgba(59, 130, 246, 0.1);
+            border-radius: 20px; display: inline-flex; align-items: center;
+            justify-content: center; margin-bottom: 20px; color: var(--primary);
+        }
+        h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .badge { color: var(--primary); font-family: monospace; font-size: 12px; background: rgba(59, 130, 246, 0.1); padding: 4px 12px; border-radius: 20px; text-transform: uppercase; }
+        
+        .status-panel { background: rgba(15, 23, 42, 0.5); border-radius: 16px; padding: 15px; margin: 25px 0; text-align: left; font-size: 13px; border: 1px solid var(--border); }
+        .status-line { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        
+        .input-group { margin-bottom: 25px; }
+        .input-group label { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px; }
+        input[type="password"] {
+            width: 100%; background: rgba(15, 23, 42, 0.6); border: 2px solid var(--border);
+            border-radius: 12px; padding: 15px; color: white; font-size: 24px;
+            text-align: center; letter-spacing: 5px; outline: none; box-sizing: border-box;
+        }
+        input[type="password"]:focus { border-color: var(--primary); }
+
+        button {
+            width: 100%; padding: 18px; background: var(--primary); color: white;
+            border: none; border-radius: 16px; font-size: 16px; font-weight: 700;
+            cursor: pointer; transition: 0.2s; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+        }
+        button:disabled { background: #475569; opacity: 0.6; cursor: not-allowed; box-shadow: none; }
+        
+        #log-msg { margin-top: 15px; font-size: 11px; font-weight: bold; color: var(--text-dim); }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div class="icon-db">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+        </div>
+        
+        <h1>Maintenance Diandioly</h1>
+        <div style="margin: 12px 0;"><span class="badge">asufor_db_diandioly</span></div>
+
+        <div class="status-panel">
+            <div class="status-line"><span>Cycle actuel :</span><span id="cycle-display" style="color:var(--primary)">--/----</span></div>
+            <div class="status-line"><span>État :</span><span id="state-display">Vérification...</span></div>
+        </div>
+
+        <div class="input-group">
+            <label>Passcode Dynamique (AnnéeMois)</label>
+            <input type="password" id="passcode" maxlength="6" placeholder="YYYYMM" inputmode="numeric">
+        </div>
+
+        <button id="btn-action" onclick="runMaintenance()" disabled>Chargement...</button>
+        <div id="log-msg">Initialisation Firebase</div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, update, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+            authDomain: "asufor-67a06.firebaseapp.com",
+            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+            projectId: "asufor-67a06"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const cycleKey = `${year}-${month}`; 
+        const expectedPasscode = `${year}${month}`; 
+
+        const btn = document.getElementById('btn-action');
+        const log = document.getElementById('log-msg');
+        const stateDisp = document.getElementById('state-display');
+        document.getElementById('cycle-display').innerText = cycleKey;
+
+        async function checkStatus() {
+            try {
+                const backupRef = ref(db, `asufor_backup/${cycleKey}`);
+                const snap = await get(backupRef);
+
+                if (snap.exists()) {
+                    stateDisp.innerText = "DÉJÀ EFFECTUÉ";
+                    stateDisp.style.color = "var(--danger)";
+                    btn.innerText = "Action verrouillée";
+                    btn.disabled = true;
+                    log.innerText = "Le backup du mois existe déjà.";
+                } else {
+                    stateDisp.innerText = "PRÊT / DISPONIBLE";
+                    stateDisp.style.color = "var(--success)";
+                    btn.innerText = "Lancer Maintenance";
+                    btn.disabled = false;
+                    log.innerText = "En attente du passcode.";
+                }
+            } catch (e) {
+                log.innerText = "Erreur de connexion Firebase.";
+            }
+        }
+
+        checkStatus();
+
+        window.runMaintenance = async function() {
+            const inputPass = document.getElementById('passcode').value;
+
+            if (inputPass !== expectedPasscode) {
+                alert(`Passcode incorrect !\nLe code actuel est : ${expectedPasscode}`);
+                return;
+            }
+
+            if (!confirm(`Attention : Voulez-vous créer le backup dans "asufor_backup/${cycleKey}" et réinitialiser la branche Diandioly ?`)) return;
+
+            btn.disabled = true;
+            log.innerText = "Traitement en cours...";
+
+            try {
+                const sourceRef = ref(db, 'asufor_db_diandioly');
+                const snapshot = await get(sourceRef);
+
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    const updates = {};
+                    const isoDate = now.toISOString();
+                    const count = Object.keys(data).length;
+
+                    snapshot.forEach((child) => {
+                        const key = child.key;
+                        const val = child.val();
+                        
+                        updates[`asufor_db_diandioly/${key}/last_index`] = String(val.new_index || "0");
+                        updates[`asufor_db_diandioly/${key}/new_index`] = 0;
+                        updates[`asufor_db_diandioly/${key}/diff`] = "0";
+                        updates[`asufor_db_diandioly/${key}/apaid`] = 0;
+                        updates[`asufor_db_diandioly/${key}/facture`] = "false";
+                        updates[`asufor_db_diandioly/${key}/print`] = "false";
+                        updates[`asufor_db_diandioly/${key}/date_paiement`] = isoDate;
+                    });
+
+                    // Backup
+                    await set(ref(db, `asufor_backup/${cycleKey}`), {
+                        info: {
+                            date_sauvegarde: now.toLocaleString(),
+                            total_entrees: count,
+                            cycle: cycleKey
+                        },
+                        donnees: data
+                    });
+
+                    // Reset
+                    await update(ref(db), updates);
+
+                    log.innerText = "MAINTENANCE RÉUSSIE";
+                    log.style.color = "var(--success)";
+                    btn.innerText = "Cycle Clôturé";
+                    btn.style.background = "var(--success)";
+                    stateDisp.innerText = "ARCHIVÉ";
+                } else {
+                    throw new Error("La branche asufor_db_diandioly est vide.");
+                }
+            } catch (e) {
+                log.innerText = "Erreur : " + e.message;
+                log.style.color = "var(--danger)";
+                btn.disabled = false;
+            }
+        };
+    </script>
+</body>
+</html>
