@@ -9,13 +9,33 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
+        /* Variables CSS pour gérer facilement le Thème Clair / Sombre */
         :root {
-            --bg: #f8fafc; --primary: #0052fe; --card-bg: #ffffff;
-            --text-main: #1e293b; --text-sub: #64748b; --success: #22c55e;
+            --bg: #f8fafc; 
+            --primary: #0052fe; 
+            --card-bg: #ffffff;
+            --text-main: #1e293b; 
+            --text-sub: #64748b; 
+            --success: #22c55e;
+            --danger: #ef4444;
             --border-color: rgba(0, 0, 0, 0.05);
+            --item-bg: transparent;
+            --chart-grid: #f1f5f9;
         }
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        /* Variables du Mode Sombre */
+        body.dark-mode {
+            --bg: #0f172a; 
+            --primary: #3b82f6; 
+            --card-bg: #1e293b;
+            --text-main: #f8fafc; 
+            --text-sub: #94a3b8; 
+            --border-color: rgba(255, 255, 255, 0.08);
+            --item-bg: #1e293b;
+            --chart-grid: rgba(255, 255, 255, 0.05);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; transition: background-color 0.3s, color 0.3s; }
 
         body {
             background: var(--bg); color: var(--text-main);
@@ -23,9 +43,19 @@
             margin: 0; padding: 0;
         }
 
+        .main-layout { display: flex; flex-direction: column; width: 100%; }
         .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 15px; }
 
+        /* En-tête et Bouton Mode Sombre */
         .header { padding: 10px 0 20px 0; display: flex; justify-content: space-between; align-items: center; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        
+        .theme-toggle {
+            background: var(--card-bg); border: 1px solid var(--border-color);
+            color: var(--text-main); padding: 8px 12px; border-radius: 50px;
+            cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
 
         .select-wrapper { position: relative; margin-bottom: 20px; }
         #agent-spinner {
@@ -34,55 +64,67 @@
             color: var(--text-main); background-color: var(--card-bg);
             border: 1px solid var(--border-color); border-radius: 20px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); cursor: pointer;
-            transition: all 0.3s ease;
         }
-
         .select-wrapper::after {
             content: '\f0d7'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
             position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
             color: var(--text-sub); pointer-events: none;
         }
 
-        #agent-spinner:focus { outline: none; border-color: var(--primary); box-shadow: 0 4px 15px rgba(0, 82, 254, 0.1); }
+        .finance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+        @media (max-width: 650px) { .finance-grid { grid-template-columns: 1fr; } }
 
-        .wallet-card {
-            background: var(--primary); color: white; padding: 25px;
-            border-radius: 30px; margin-bottom: 20px;
-            box-shadow: 0 12px 24px rgba(0, 82, 254, 0.2);
-        }
-        .wallet-card h1 { margin: 8px 0; font-size: 2.2rem; font-weight: 800; }
-        .wallet-card small { opacity: 0.7; font-size: 0.8rem; }
+        .wallet-card { padding: 15px; border-radius: 20px; color: white; text-align: center; }
+        .wallet-card h1 { margin: 5px 0; font-size: 1.4rem; font-weight: 800; }
+        .wallet-card small { opacity: 0.9; font-size: 0.65rem; text-transform: uppercase; font-weight: bold; }
+
+        .bg-total { background: #3b82f6; }
+        .bg-paid { background: #10b981; }
+        .bg-unpaid { background: var(--danger); }
 
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .stat-card {
-            background: white; padding: 18px; border-radius: 24px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.02); border: 1px solid var(--border-color);
-        }
+        .stat-card { background: var(--card-bg); padding: 18px; border-radius: 24px; border: 1px solid var(--border-color); }
         .stat-val { font-size: 1.2rem; font-weight: 800; display: block; color: var(--text-main); }
         .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; font-weight: 700; margin-top: 4px; display: block; }
 
-        .chart-container {
-            background: white; padding: 20px; border-radius: 28px;
-            margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.03);
-            border: 1px solid var(--border-color);
-        }
+        .chart-container { background: var(--card-bg); padding: 20px; border-radius: 28px; margin-bottom: 25px; border: 1px solid var(--border-color); }
 
-        .list-section { 
-            background: white; border-radius: 35px 35px 0 0; 
-            padding: 25px 20px; min-height: 400px;
-            box-shadow: 0 -5px 20px rgba(0,0,0,0.02);
-        }
-        .item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 15px 0; border-bottom: 1px solid #f1f5f9;
-        }
-        .amt { font-weight: 800; color: var(--success); font-size: 1rem; }
+        .list-section { background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px; }
+        
+        .item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid var(--border-color); background: var(--item-bg);}
+        body:not(.dark-mode) .item.paid-bg { background-color: #dcfce7; border-color: #bbf7d0; }
+        body:not(.dark-mode) .item.unpaid-bg { background-color: #fee2e2; border-color: #fecaca; }
+        
+        /* Ajustement des couleurs de liste pour le mode sombre */
+        body.dark-mode .item.paid-bg { border-left: 5px solid var(--success); }
+        body.dark-mode .item.unpaid-bg { border-left: 5px solid var(--danger); }
+
+        .amt { font-weight: 800; font-size: 1rem; }
         .item b { font-size: 0.95rem; color: var(--text-main); }
 
-        .loader {
-            position: fixed; top: 15px; right: 15px; font-size: 0.65rem;
-            background: var(--success); color: white; padding: 5px 12px;
-            border-radius: 20px; font-weight: bold; z-index: 1000;
+        .btn-toggle { padding: 6px 12px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; }
+        .btn-pay { background: var(--success); color: white; }
+        .btn-revoke { background: var(--text-sub); color: white; }
+
+        .loader { position: fixed; top: 15px; left: 15px; font-size: 0.65rem; background: var(--success); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; z-index: 1000; }
+
+        /* Notification Toast */
+        .toast {
+            visibility: hidden; min-width: 250px; background-color: #333; color: #fff;
+            text-align: center; border-radius: 12px; padding: 16px; position: fixed;
+            z-index: 9999; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
+            font-size: 0.9rem; font-weight: 600; opacity: 0; transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.error { background-color: var(--danger); }
+        .toast.success { background-color: var(--success); }
+
+        @media (min-width: 850px) {
+            body { padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+            .main-layout { flex-direction: row; max-width: 1100px; margin: 0 auto; gap: 40px; align-items: flex-start; }
+            .container { max-width: 450px; margin: 0; padding: 0; }
+            .list-section { flex: 1; border-radius: 35px; height: calc(100vh - 40px); max-height: 800px; overflow-y: auto; }
         }
     </style>
 </head>
@@ -90,55 +132,72 @@
 
 <div id="sync-status" class="loader">SYNCHRONISATION...</div>
 
-<div class="container">
-    <div class="header">
-        <div>
-            <small style="color: var(--text-sub); font-weight: 600;">Tableau de bord</small>
-            <h2 style="margin:0; font-size: 1.2rem;">ASUFOR Diandioly</h2>
+<div id="toast" class="toast">Message</div>
+
+<div class="main-layout">
+    <div class="container">
+        <div class="header">
+            <div>
+                <small style="color: var(--text-sub); font-weight: 600;">Tableau de bord</small>
+                <h2 style="margin:0; font-size: 1.2rem;">ASUFOR Diandioly</h2>
+            </div>
+            <div class="header-actions">
+                <button class="theme-toggle" onclick="toggleDarkMode()" id="theme-btn" title="Basculer le thème">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+                <i class="fa-solid fa-circle-user" style="font-size: 2rem; color: var(--text-sub);"></i>
+            </div>
         </div>
-        <i class="fa-solid fa-circle-user" style="font-size: 2rem; color: #cbd5e1;"></i>
-    </div>
 
-    <div class="select-wrapper">
-        <select id="agent-spinner" onchange="applyFilter()"></select>
-    </div>
-
-    <div class="wallet-card">
-        <small>Total des Recettes Encaissées</small>
-        <h1 id="total-money">0 CFA</h1>
-        <small id="date-now"></small>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-val" id="stat-vol">0 m³</span>
-            <span class="stat-label">Volume Total</span>
+        <div class="select-wrapper">
+            <select id="agent-spinner" onchange="applyFilter()"></select>
         </div>
-        <div class="stat-card">
-            <span class="stat-val" id="stat-ratio">0 F/m³</span>
-            <span class="stat-label">Ratio Moyen</span>
+
+        <div class="finance-grid">
+            <div class="wallet-card bg-total">
+                <small>Total Encaissé</small>
+                <h1 id="total-all">0 F</h1>
+            </div>
+            <div class="wallet-card bg-paid">
+                <small>Réel Argent Payé</small>
+                <h1 id="total-paid">0 F</h1>
+            </div>
+            <div class="wallet-card bg-unpaid">
+                <small>Argent Non Payé</small>
+                <h1 id="total-unpaid">0 F</h1>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-val" id="stat-vol">0 m³</span>
+                <span class="stat-label">Volume Total</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-val" id="stat-ratio">0 F/m³</span>
+                <span class="stat-label">Ratio Moyen</span>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <p style="font-size: 0.75rem; font-weight: 800; color: var(--text-sub); margin-bottom: 15px; text-align: center; text-transform: uppercase;">
+                Dispersion : Volume vs Prix (Analyse des tarifs)
+            </p>
+            <canvas id="ratioChart" style="max-height: 200px;"></canvas>
         </div>
     </div>
 
-    <div class="chart-container">
-        <p style="font-size: 0.75rem; font-weight: 800; color: var(--text-sub); margin-bottom: 15px; text-align: center; text-transform: uppercase;">
-            Analyse : Prix (CFA) par rapport au Volume (m³)
-        </p>
-        <canvas id="ratioChart" style="max-height: 200px;"></canvas>
+    <div class="list-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: sticky; top: 0; background: var(--card-bg); padding-bottom: 10px; border-bottom: 1px solid var(--border-color); z-index: 10;">
+            <h3 style="margin:0; font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;">Détails paiements (100 derniers)</h3>
+            <span id="stat-count" style="background: var(--bg); padding: 4px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 800;">0 Relevés</span>
+        </div>
+        <div id="releves-list"></div>
     </div>
 </div>
-
-<div class="list-section">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h3 style="margin:0; font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;">Détails paiements</h3>
-        <span id="stat-count" style="background: var(--bg); padding: 4px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 800;">0 Relevés</span>
-    </div>
-    <div id="releves-list"></div>
-</div>
-
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, onValue, update, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -154,8 +213,82 @@
     let storeAgents = {};
     let myChart = null;
 
+    // --- VARIABLES POUR LE DÉFILEMENT INFINI ---
+    let currentLimit = 100; // On commence à 100
+    let relevesUnsubscribe = null; // Pour stocker et annuler l'ancienne écoute Firebase
+    let isLoadingMore = false; // Sécurité pour éviter de charger 10 fois en scrollant vite
+
+    // --- GESTION DU MODE SOMBRE ---
+    window.toggleDarkMode = function() {
+        const body = document.body;
+        const icon = document.querySelector('#theme-btn i');
+        body.classList.toggle('dark-mode');
+        
+        if (body.classList.contains('dark-mode')) {
+            icon.classList.remove('fa-moon');
+            icon.classList.add('fa-sun');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            icon.classList.remove('fa-sun');
+            icon.classList.add('fa-moon');
+            localStorage.setItem('theme', 'light');
+        }
+        if(myChart) applyFilter();
+    };
+
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark-mode');
+        document.querySelector('#theme-btn i').classList.replace('fa-moon', 'fa-sun');
+    }
+
+    // --- GESTION DES NOTIFICATIONS TOAST ---
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.className = `toast show ${type}`;
+        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+    }
+
+    // --- FONCTION DE MISE À JOUR FIREBASE AVEC CONFIRMATION ---
+    window.toggleFacture = async function(key, currentStatus) {
+        const action = currentStatus ? "révoquer" : "valider";
+        if (!confirm(`Êtes-vous sûr de vouloir ${action} ce paiement ?`)) return;
+
+        const newStatus = !currentStatus;
+        const dbRef = ref(db, `asufor_db_diandioly/${key}`);
+        
+        try {
+            await update(dbRef, { facture: newStatus });
+            showToast(currentStatus ? "Paiement révoqué" : "Paiement validé avec succès", "success");
+        } catch (e) {
+            console.error("Erreur Firebase:", e);
+            showToast("Erreur lors de la mise à jour.", "error");
+        }
+    };
+
+    // --- NOUVEAU : FONCTION POUR CHARGER LES DONNÉES ---
+    function loadRelevesData(limit) {
+        isLoadingMore = true;
+        document.getElementById('sync-status').innerText = "CHARGEMENT...";
+
+        const recentRelevesQuery = query(ref(db, 'asufor_db_diandioly'), limitToLast(limit));
+
+        // Si une connexion en temps réel existe déjà, on la coupe avant d'en relancer une plus grande
+        if (relevesUnsubscribe) {
+            relevesUnsubscribe(); 
+        }
+
+        // onValue retourne une fonction permettant de couper l'écoute plus tard
+        relevesUnsubscribe = onValue(recentRelevesQuery, (snap) => {
+            storeReleves = snap.val() || {};
+            applyFilter();
+            document.getElementById('sync-status').innerText = "LIVE ✅";
+            isLoadingMore = false; // On débloque le chargement
+        });
+    }
+
     function startSync() {
-        // Chargement des Agents
+        // 1. Chargement des agents (inchangé)
         onValue(ref(db, 'db_agents'), (snap) => {
             storeAgents = snap.val() || {};
             const spinner = document.getElementById('agent-spinner');
@@ -172,11 +305,20 @@
             spinner.value = active;
         });
 
-        // Chargement des Relevés
-        onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
-            storeReleves = snap.val() || {};
-            applyFilter();
-            document.getElementById('sync-status').innerText = "LIVE ✅";
+        // 2. Premier chargement des factures (les 100 dernières)
+        loadRelevesData(currentLimit);
+
+        // 3. Écoute du défilement de la liste pour charger la suite
+        const listSection = document.querySelector('.list-section');
+        listSection.addEventListener('scroll', () => {
+            // Détection : si on est à moins de 50 pixels du bas de la zone défilable
+            if (listSection.scrollTop + listSection.clientHeight >= listSection.scrollHeight - 50) {
+                if (!isLoadingMore) {
+                    currentLimit += 100; // On demande 100 factures de plus
+                    showToast(`Chargement de l'historique (${currentLimit})...`, 'success');
+                    loadRelevesData(currentLimit);
+                }
+            }
         });
     }
 
@@ -184,32 +326,29 @@
         const ctx = document.getElementById('ratioChart').getContext('2d');
         if (myChart) myChart.destroy();
 
-        plotData.sort((a, b) => a.x - b.x);
+        const gridColor = getComputedStyle(document.body).getPropertyValue('--chart-grid').trim();
+        const textColor = getComputedStyle(document.body).getPropertyValue('--text-sub').trim();
 
         myChart = new Chart(ctx, {
-            type: 'line',
+            type: 'scatter',
             data: {
                 datasets: [{
-                    label: 'Paiement',
+                    label: 'Facture (Volume vs Prix)',
                     data: plotData,
-                    borderColor: '#0052fe',
-                    backgroundColor: 'rgba(0, 82, 254, 0.08)',
-                    borderWidth: 3,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#0052fe',
-                    pointBorderWidth: 2,
-                    tension: 0.3,
-                    fill: true
+                    backgroundColor: '#0052fe',
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: {
-                    x: { type: 'linear', title: { display: true, text: 'Volume (m³)', font: { size: 9, weight: 'bold' } }, grid: { display: false } },
-                    y: { title: { display: true, text: 'Prix (F)', font: { size: 9, weight: 'bold' } }, grid: { color: '#f1f5f9' } }
+                    x: { type: 'linear', position: 'bottom', title: { display: true, text: 'Volume (m³)', color: textColor, font: { size: 10, weight: 'bold' } }, grid: { color: gridColor }, ticks: { color: textColor } },
+                    y: { title: { display: true, text: 'Prix (F)', color: textColor, font: { size: 10, weight: 'bold' } }, grid: { color: gridColor }, ticks: { color: textColor } }
                 },
-                plugins: { legend: { display: false } }
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) { return `Vol: ${context.parsed.x} m³ - Prix: ${context.parsed.y} F`; } } } }
             }
         });
     }
@@ -217,15 +356,17 @@
     window.applyFilter = function() {
         const selectedId = document.getElementById('agent-spinner').value;
         const listDiv = document.getElementById('releves-list');
-        let tCFA = 0, tM3 = 0, count = 0;
+        
+        let tTotal = 0, tPaid = 0, tUnpaid = 0, tM3 = 0, count = 0;
         let plotData = [];
 
         listDiv.innerHTML = "";
-        const entries = Object.values(storeReleves).reverse();
+        
+        const entries = Object.entries(storeReleves).reverse();
 
-        entries.forEach(item => {
+        entries.forEach(([key, item]) => {
             const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
-            if (isNaN(apaid) || apaid <= 0) return;
+            if (isNaN(apaid) || apaid < 0) return;
 
             const match = (selectedId === "all") || (item.agent_id === selectedId);
 
@@ -234,33 +375,52 @@
                 const lIdx = parseFloat(item.last_index || 0);
                 const conso = Math.max(0, nIdx - lIdx);
                 
-                tCFA += apaid; tM3 += conso; count++;
-                if (conso > 0) plotData.push({ x: conso, y: apaid });
+                const isPaid = item.facture === true;
+                
+                tTotal += apaid; 
+                if (isPaid) tPaid += apaid; else tUnpaid += apaid; 
+                tM3 += conso; 
+                count++;
+                
+                if (conso > 0 && apaid > 0) plotData.push({ x: conso, y: apaid });
+
+                const bgClass = isPaid ? 'paid-bg' : 'unpaid-bg';
+                const btnClass = isPaid ? 'btn-revoke' : 'btn-pay';
+                const btnText = isPaid ? 'Révoquer' : 'Payé';
+                const isDark = document.body.classList.contains('dark-mode');
+                const textColor = isPaid ? (isDark ? '#4ade80' : '#15803d') : (isDark ? '#f87171' : '#b91c1c');
 
                 const div = document.createElement('div');
-                div.className = 'item';
+                div.className = `item ${bgClass}`;
                 div.innerHTML = `
-                    <div>
+                    <div style="flex:1;">
                         <b>${item.name || 'Client'}</b><br>
                         <small style="color:var(--text-sub)">${lIdx} → ${nIdx} (${conso.toFixed(1)} m³)</small>
                     </div>
-                    <div style="text-align:right">
-                        <span class="amt">${apaid.toLocaleString()} F</span>
+                    <div style="text-align:right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                        <span class="amt" style="color: ${textColor}">${apaid.toLocaleString()} F</span>
+                        <button class="btn-toggle ${btnClass}" onclick="toggleFacture('${key}', ${isPaid})">${btnText}</button>
                     </div>
                 `;
                 listDiv.appendChild(div);
             }
         });
 
-        document.getElementById('total-money').innerText = tCFA.toLocaleString() + " CFA";
+        document.getElementById('total-all').innerText = tTotal.toLocaleString() + " CFA";
+        document.getElementById('total-paid').innerText = tPaid.toLocaleString() + " CFA";
+        document.getElementById('total-unpaid').innerText = tUnpaid.toLocaleString() + " CFA";
+        
         document.getElementById('stat-vol').innerText = tM3.toFixed(1) + " m³";
+        
+        // Mise à jour du titre pour refléter le nombre réel affiché
+        document.querySelector('.list-section h3').innerText = `Détails paiements (${count} affichés)`;
         document.getElementById('stat-count').innerText = count + " Relevés";
-        document.getElementById('stat-ratio').innerText = tM3 > 0 ? Math.round(tCFA / tM3) + " F/m³" : "0 F/m³";
+        
+        document.getElementById('stat-ratio').innerText = tM3 > 0 ? Math.round(tTotal / tM3) + " F/m³" : "0 F/m³";
         
         initChart(plotData);
     }
 
-    document.getElementById('date-now').innerText = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
     window.onload = startSync;
 </script>
 </body>

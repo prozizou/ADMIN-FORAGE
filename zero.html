@@ -50,6 +50,21 @@
         button:disabled { background: #475569; opacity: 0.6; cursor: not-allowed; box-shadow: none; }
         
         #log-msg { margin-top: 15px; font-size: 11px; font-weight: bold; color: var(--text-dim); }
+
+        /* --- ADAPTATION POUR TRÈS PETITS ÉCRANS ET TV/4K --- */
+        @media (max-width: 380px) {
+            .card { padding: 25px 15px; }
+            h1 { font-size: 1.2rem; }
+        }
+        @media (min-width: 1400px) { 
+            .card { max-width: 600px; padding: 60px; }
+            h1 { font-size: 2.5rem; }
+            .badge, .status-panel { font-size: 1.2rem; }
+            input[type="password"] { font-size: 30px; padding: 25px; }
+            button { font-size: 1.5rem; padding: 25px; }
+            .icon-db { width: 90px; height: 90px; }
+            svg { width: 45px; height: 45px; }
+        }
     </style>
 </head>
 <body>
@@ -78,7 +93,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, get, update, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -130,14 +145,14 @@
             const inputPass = document.getElementById('passcode').value;
 
             if (inputPass !== expectedPasscode) {
-                alert(`Passcode incorrect !\nLe code actuel est : ${expectedPasscode}`);
+                alert(`Passcode incorrect !`);
                 return;
             }
 
-            if (!confirm(`Attention : Voulez-vous créer le backup dans "asufor_backup/${cycleKey}" et réinitialiser la branche Diandioly ?`)) return;
+            if (!confirm(`Attention : Voulez-vous clôturer le cycle ${cycleKey} et réinitialiser la branche Diandioly ? L'opération est irréversible.`)) return;
 
             btn.disabled = true;
-            log.innerText = "Traitement en cours...";
+            log.innerText = "Traitement en cours, ne fermez pas la page...";
 
             try {
                 const sourceRef = ref(db, 'asufor_db_diandioly');
@@ -145,9 +160,18 @@
 
                 if (snapshot.exists()) {
                     const data = snapshot.val();
-                    const updates = {};
+                    const updates = {}; 
                     const isoDate = now.toISOString();
                     const count = Object.keys(data).length;
+
+                    updates[`asufor_backup/${cycleKey}`] = {
+                        info: {
+                            date_sauvegarde: now.toLocaleString(),
+                            total_entrees: count,
+                            cycle: cycleKey
+                        },
+                        donnees: data
+                    };
 
                     snapshot.forEach((child) => {
                         const key = child.key;
@@ -162,20 +186,9 @@
                         updates[`asufor_db_diandioly/${key}/date_paiement`] = isoDate;
                     });
 
-                    // Backup
-                    await set(ref(db, `asufor_backup/${cycleKey}`), {
-                        info: {
-                            date_sauvegarde: now.toLocaleString(),
-                            total_entrees: count,
-                            cycle: cycleKey
-                        },
-                        donnees: data
-                    });
-
-                    // Reset
                     await update(ref(db), updates);
 
-                    log.innerText = "MAINTENANCE RÉUSSIE";
+                    log.innerText = "MAINTENANCE RÉUSSIE AVEC SUCCÈS";
                     log.style.color = "var(--success)";
                     btn.innerText = "Cycle Clôturé";
                     btn.style.background = "var(--success)";

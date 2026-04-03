@@ -66,6 +66,25 @@
             .sc-left { left: 10%; } .sc-right { right: 10%; }
             .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
         }
+
+        /* --- ADAPTATION MOBILE ET TV --- */
+        @media (max-width: 650px) {
+            .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
+            .search-box { max-width: 100%; margin-bottom: 10px; }
+            .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 10px; }
+            .master-selection { justify-content: center; }
+            
+            .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .facture-item > div:last-child { width: 100%; justify-content: space-between; }
+        }
+
+        @media (min-width: 1400px) {
+            .list-container, .top-bar { max-width: 1400px; }
+            .search-box { max-width: 500px; }
+            .search-box input { font-size: 1.3rem; padding: 18px 18px 18px 50px; }
+            .facture-item { font-size: 1.2rem; padding: 25px; }
+            .btn-solder { font-size: 1rem; padding: 12px 25px; }
+        }
     </style>
 </head>
 <body>
@@ -109,11 +128,19 @@
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
 
     function formatSmartDates(dateReleve) {
-        const dFin = dateReleve ? new Date(dateReleve) : new Date();
-        const dDebut = new Date(dFin.getFullYear(), dFin.getMonth(), 0); 
-        const dEcheance = new Date(dFin.getFullYear(), dFin.getMonth(), 15);
-        const f = (d) => d.toLocaleDateString('fr-FR');
-        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance) };
+        const dRef = dateReleve ? new Date(dateReleve) : new Date();
+        const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
+        const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
+        const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
+        
+        const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        
+        return { 
+            debut: f(dDebut), 
+            fin: f(dFin), 
+            echeance: f(dEcheance),
+            date_edition: f(new Date())
+        };
     }
 
     onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
@@ -210,7 +237,7 @@
                     <div class="p-row"><span>Consommation (${d.vol} m³)</span><span>${fPrice(d.montantMois)}</span></div>
                     <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}</span></div>
                     <div class="p-row bold" style="font-size:22px"><span>Total Reçu</span><span>${fPrice(d.total)}</span></div>
-                    <div style="font-size:12px; margin-top:5px; opacity:0.7">Date du relevé : ${dates.fin}</div>
+                    <div style="font-size:12px; margin-top:5px; opacity:0.7">Date du relevé : ${dates.date_edition}</div>
                 </div>
             </div>`;
         });

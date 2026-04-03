@@ -79,6 +79,19 @@
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- ADAPTATION POUR TRÈS PETITS ÉCRANS ET TV/4K --- */
+        @media (max-width: 380px) {
+            .card { padding: 25px 15px; }
+            h2 { font-size: 1.2rem; }
+        }
+        @media (min-width: 1400px) { 
+            .card { max-width: 600px; padding: 60px; }
+            h2 { font-size: 2.5rem; }
+            input, select, #btnSubmit { font-size: 1.2rem; padding: 10px; }
+            .input-layout { padding: 20px; }
+            .input-layout label { font-size: 0.9rem; top: -12px; }
+        }
     </style>
 </head>
 <body>
@@ -95,12 +108,12 @@
 
     <div class="input-layout">
         <label>Nom du propriétaire</label>
-        <input type="text" id="ownerName" placeholder="ex: Samba Soumare">
+        <input type="text" id="ownerName" placeholder="ex: Amadou Bâ">
     </div>
 
     <div class="input-layout">
         <label>Numéro téléphone</label>
-        <input type="tel" id="ownerPhone" placeholder="ex: 773500595">
+        <input type="tel" id="ownerPhone" placeholder="ex: 77#######">
     </div>
 
     <div class="input-layout">
@@ -115,7 +128,7 @@
 
     <button id="btnSubmit" onclick="enregistrer()">
         <div class="spinner" id="loader"></div>
-        <span id="btnText">ENREGISTRER DANS DIANDIOLY</span>
+        <span id="btnText">ENREGISTRER</span>
     </button>
 </div>
 
@@ -133,7 +146,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Charger agents depuis db_agents
     const agentsRef = ref(db, 'db_agents');
     onValue(agentsRef, (snapshot) => {
         const select = document.getElementById('agentSelect');
@@ -199,6 +211,5 @@
         }
     }
 </script>
-
 </body>
 </html>

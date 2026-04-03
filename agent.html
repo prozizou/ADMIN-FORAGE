@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ajouter un Agent - ASUFOR Glass</title>
+    <title>Gérer les Agents - ASUFOR Glass</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --bg-color: #0f172a;
             --glass-bg: rgba(255, 255, 255, 0.03);
             --glass-border: rgba(255, 255, 255, 0.1);
             --accent-blue: #38bdf8;
+            --accent-green: #10b981;
+            --danger-red: #ef4444;
             --text-white: #f8fafc;
         }
 
@@ -32,9 +35,15 @@
             border-radius: 30px;
             padding: 35px 25px;
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            max-height: 95vh;
+            overflow-y: auto;
         }
 
-        h2 { text-align: center; margin-bottom: 30px; font-weight: 600; color: var(--accent-blue); font-size: 1.4rem; }
+        .glass-card::-webkit-scrollbar { width: 6px; }
+        .glass-card::-webkit-scrollbar-track { background: transparent; }
+        .glass-card::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 10px; }
+
+        h2 { text-align: center; margin-bottom: 30px; font-weight: 600; color: var(--accent-blue); font-size: 1.4rem; transition: color 0.3s; }
 
         .field { margin-bottom: 20px; }
         
@@ -56,8 +65,12 @@
 
         input:focus { border-color: var(--accent-blue); background: rgba(255, 255, 255, 0.08); }
 
+        .form-actions {
+            display: flex; gap: 10px; margin-top: 10px;
+        }
+
         .btn-submit {
-            width: 100%; padding: 16px; margin-top: 10px;
+            flex: 1; padding: 16px; 
             background: var(--accent-blue);
             border: none; border-radius: 12px;
             color: #0f172a; font-weight: 800;
@@ -65,27 +78,65 @@
             transition: 0.3s;
         }
 
+        .btn-submit.edit-mode { background: var(--accent-green); color: white; }
         .btn-submit:active { transform: scale(0.97); }
+
+        .btn-cancel {
+            padding: 16px; background: rgba(255,255,255,0.1);
+            border: 1px solid var(--glass-border); border-radius: 12px;
+            color: white; cursor: pointer; display: none; transition: 0.3s;
+        }
+        .btn-cancel:hover { background: rgba(255,255,255,0.2); }
+
+        .agents-list-container {
+            margin-top: 30px; border-top: 1px solid var(--glass-border); padding-top: 20px;
+        }
+        .agents-list-container h3 { font-size: 1rem; color: var(--accent-blue); margin-bottom: 15px; text-align: center; }
+
+        .agent-item {
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255, 255, 255, 0.03); border: 1px solid var(--glass-border);
+            padding: 12px 15px; border-radius: 12px; margin-bottom: 10px; transition: 0.2s;
+        }
+        .agent-item:hover { background: rgba(255, 255, 255, 0.06); }
+
+        .agent-info { flex: 1; overflow: hidden; }
+        .agent-info strong { font-size: 0.95rem; display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+        .agent-info span { font-size: 0.75rem; opacity: 0.6; display: block; }
+
+        .agent-actions { display: flex; gap: 8px; }
+
+        .btn-icon {
+            border: none; padding: 10px; border-radius: 8px; color: white;
+            cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        .btn-edit { background: var(--accent-blue); }
+        .btn-delete { background: var(--danger-red); }
+        
+        .btn-icon:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        .btn-icon:active { transform: scale(0.95); }
 
         .footer-link {
             display: block; text-align: center; margin-top: 25px;
             color: rgba(255, 255, 255, 0.4); text-decoration: none; font-size: 0.8rem;
         }
+
+        @media (max-width: 380px) { .glass-card { padding: 25px 15px; } }
     </style>
 </head>
 <body>
 
     <div class="glass-card">
-        <h2>Nouvel Agent</h2>
+        <h2 id="form-title">Nouvel Agent</h2>
         
         <div class="field">
             <label>Nom complet (Agent)</label>
-            <input type="text" id="agent_name" placeholder="Ex: Abou Diop">
+            <input type="text" id="agent_name" placeholder="Ex: Nom de l'agent ici">
         </div>
 
         <div class="field">
             <label>Numéro Téléphone</label>
-            <input type="tel" id="agent_tel" placeholder="Ex: 775076770">
+            <input type="tel" id="agent_tel" placeholder="Ex: Le numero de téléphone ici" inputmode="tel">
         </div>
 
         <div class="field">
@@ -95,17 +146,28 @@
 
         <div class="field">
             <label>Zone / Quartier</label>
-            <input type="text" id="agent_zone" placeholder="Ex: HLM 2">
+            <input type="text" id="agent_zone" placeholder="Ex: Le quartier de l'agent ici">
         </div>
 
-        <button class="btn-submit" onclick="sendToFirebase()">Enregistrer l'agent</button>
+        <div class="form-actions">
+            <button class="btn-submit" id="main-btn" onclick="handleFormSubmit()">Enregistrer l'agent</button>
+            <button class="btn-cancel" id="cancel-btn" onclick="cancelEdit()" title="Annuler la modification"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="agents-list-container">
+            <h3>Agents Existants</h3>
+            <div id="agents-list">
+                <p style="text-align: center; font-size: 0.8rem; opacity: 0.5;">Chargement des agents...</p>
+            </div>
+        </div>
         
         <a href="accueil.html" class="footer-link">← Retourner à l'accueil</a>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        // Ajout de "update" dans les imports
+        import { getDatabase, ref, push, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -116,9 +178,91 @@
         
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        const agentsListRef = ref(db, 'db_agents');
 
-        // Rendre la fonction accessible globalement pour le bouton onclick
-        window.sendToFirebase = async function() {
+        // Variable globale pour savoir si on est en mode édition
+        let currentEditKey = null;
+
+        onValue(agentsListRef, (snapshot) => {
+            const listDiv = document.getElementById('agents-list');
+            listDiv.innerHTML = "";
+            
+            const data = snapshot.val();
+            if (data) {
+                Object.entries(data).reverse().forEach(([key, agentData]) => {
+                    // Sécurisation des données pour les passer dans la fonction JavaScript
+                    const safeName = (agentData.agent || '').replace(/'/g, "\\'");
+                    const safeTel = (agentData.agent_tel || '').replace(/'/g, "\\'");
+                    const safePass = (agentData.passcode || '').replace(/'/g, "\\'");
+                    const safeZone = (agentData.zone || '').replace(/'/g, "\\'");
+
+                    const div = document.createElement('div');
+                    div.className = 'agent-item';
+                    div.innerHTML = `
+                        <div class="agent-info">
+                            <strong>${agentData.agent || 'Inconnu'}</strong>
+                            <span>Zone: ${agentData.zone || 'N/A'} | Tél: ${agentData.agent_tel || 'N/A'}</span>
+                        </div>
+                        <div class="agent-actions">
+                            <button class="btn-icon btn-edit" onclick="startEdit('${key}', '${safeName}', '${safeTel}', '${safePass}', '${safeZone}')" title="Modifier">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="btn-icon btn-delete" onclick="deleteAgent('${key}', '${safeName}')" title="Supprimer">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    listDiv.appendChild(div);
+                });
+            } else {
+                listDiv.innerHTML = '<p style="text-align: center; font-size: 0.8rem; opacity: 0.5;">Aucun agent enregistré.</p>';
+            }
+        });
+
+        // --- NOUVELLE FONCTION : Préparer le formulaire pour la modification ---
+        window.startEdit = function(key, name, tel, pass, zone) {
+            currentEditKey = key;
+            
+            // Remplir les champs
+            document.getElementById('agent_name').value = name;
+            document.getElementById('agent_tel').value = tel;
+            document.getElementById('agent_pass').value = pass;
+            document.getElementById('agent_zone').value = zone;
+
+            // Modifier l'apparence de l'interface
+            document.getElementById('form-title').innerText = "Modifier l'Agent";
+            document.getElementById('form-title').style.color = "var(--accent-green)";
+            
+            const mainBtn = document.getElementById('main-btn');
+            mainBtn.innerText = "Mettre à jour";
+            mainBtn.classList.add('edit-mode');
+            
+            document.getElementById('cancel-btn').style.display = "block";
+
+            // Remonter en haut de la page si on était descendu
+            document.querySelector('.glass-card').scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        // --- NOUVELLE FONCTION : Annuler la modification ---
+        window.cancelEdit = function() {
+            currentEditKey = null;
+            
+            // Vider les champs
+            document.querySelectorAll('input').forEach(i => i.value = "");
+
+            // Restaurer l'apparence de l'interface
+            document.getElementById('form-title').innerText = "Nouvel Agent";
+            document.getElementById('form-title').style.color = "var(--accent-blue)";
+            
+            const mainBtn = document.getElementById('main-btn');
+            mainBtn.innerText = "Enregistrer l'agent";
+            mainBtn.classList.remove('edit-mode');
+            
+            document.getElementById('cancel-btn').style.display = "none";
+        };
+
+        // --- FONCTION MODIFIÉE : Gère à la fois l'Ajout et la Mise à jour ---
+        window.handleFormSubmit = async function() {
             const name = document.getElementById('agent_name').value.trim();
             const tel = document.getElementById('agent_tel').value.trim();
             const pass = document.getElementById('agent_pass').value;
@@ -135,25 +279,51 @@
             }
 
             try {
-                const agentsListRef = ref(db, 'db_agents');
-                const newAgentRef = push(agentsListRef);
-                const uniqueId = newAgentRef.key;
-                
-                await set(newAgentRef, {
-                    agent: name,
-                    agent_id: uniqueId,
-                    agent_tel: tel,
-                    passcode: pass,
-                    id_source: "267b175fb210e9be", // ID admin par défaut
-                    key: uniqueId,
-                    siege: "DIANDIOLY",
-                    zone: zone
-                });
-                
-                alert("Agent " + name + " enregistré avec succès !");
-                document.querySelectorAll('input').forEach(i => i.value = "");
+                if (currentEditKey) {
+                    // MODE MISE À JOUR (UPDATE)
+                    const agentRef = ref(db, `db_agents/${currentEditKey}`);
+                    // On ne met à jour que les champs modifiables, on garde les clés comme "id_source" intactes
+                    await update(agentRef, {
+                        agent: name,
+                        agent_tel: tel,
+                        passcode: pass,
+                        zone: zone
+                    });
+                    alert(`✅ Les informations de ${name} ont été mises à jour.`);
+                    cancelEdit(); // Réinitialise le formulaire
+                } else {
+                    // MODE CRÉATION (PUSH + SET)
+                    const newAgentRef = push(agentsListRef);
+                    const uniqueId = newAgentRef.key;
+                    
+                    await set(newAgentRef, {
+                        agent: name,
+                        agent_id: uniqueId,
+                        agent_tel: tel,
+                        passcode: pass,
+                        id_source: "267b175fb210e9be", 
+                        key: uniqueId,
+                        siege: "DIANDIOLY",
+                        zone: zone
+                    });
+                    alert(`✅ Agent ${name} enregistré avec succès !`);
+                    document.querySelectorAll('input').forEach(i => i.value = "");
+                }
             } catch (error) {
-                alert("Erreur : " + error.message);
+                alert("❌ Erreur : " + error.message);
+            }
+        };
+
+        window.deleteAgent = async function(key, agentName) {
+            const isConfirmed = confirm(`⚠️ ATTENTION ⚠️\n\nÊtes-vous sûr de vouloir supprimer l'agent "${agentName}" ?\nAction DÉFINITIVE.`);
+            if (isConfirmed) {
+                try {
+                    await remove(ref(db, `db_agents/${key}`));
+                    // Si on était en train de modifier l'agent qu'on vient de supprimer, on annule l'édition
+                    if (currentEditKey === key) cancelEdit();
+                } catch (error) {
+                    alert("❌ Erreur lors de la suppression : " + error.message);
+                }
             }
         };
     </script>
