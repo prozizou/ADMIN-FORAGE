@@ -1,8 +1,13 @@
+<script src="security.js"></script>
+<script>
+    // Seul le président peut réinitialiser les données
+    checkAccess(['président']);
+</script>
 <!DOCTYPE html>
 <html lang="fr">
-    <link rel="manifest" href="Manifest.json">
-    
 <head>
+<link rel="manifest" href="manifest.json">
+<script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Asufor Admin | Maintenance Master</title>

@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="fr" data-theme="dark">
-    <link rel="manifest" href="Manifest.json">
 <head>
+<link rel="manifest" href="manifest.json">
+<script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ASUFOR Admin Pro - Glassmorph</title>
-    
+    <title>ASUFOR Admin Pro - Dashboard</title>
     <style>
+        /* --- Thèmes et Variables --- */
         :root {
             --bg-color: #1a1e21;
             --text-main: #dfe6e9;
@@ -15,7 +16,6 @@
             --glass-border: rgba(255, 255, 255, 0.1);
             --glow: rgba(56, 189, 248, 0.15);
         }
-
         [data-theme="light"] {
             --bg-color: #f0f2f5;
             --text-main: #2d3436;
@@ -24,6 +24,7 @@
             --glow: rgba(0, 0, 0, 0.05);
         }
 
+        /* --- Global --- */
         body {
             background: radial-gradient(circle at top right, #2d3436, var(--bg-color));
             color: var(--text-main);
@@ -44,19 +45,19 @@
 
         .header { text-align: center; margin-bottom: 40px; margin-top: 20px; }
         h1 { font-weight: 300; letter-spacing: 2px; margin-bottom: 5px; }
-        .subtitle { opacity: 0.6; font-size: 0.9rem; }
+        .subtitle { opacity: 0.6; font-size: 0.9rem; text-transform: uppercase; }
 
+        /* --- Grille de Navigation --- */
         .grid {
             display: grid; 
             grid-template-columns: repeat(2, 1fr);
             gap: 20px; 
             width: 100%; 
-            max-width: 1400px;
+            max-width: 1200px;
             padding-bottom: 60px;
         }
 
         .glass-btn {
-            position: relative;
             background: var(--glass);
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
@@ -66,44 +67,25 @@
             display: flex; flex-direction: column; align-items: center;
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
             text-decoration: none; color: inherit;
             box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            opacity: 0; 
-            animation: fadeInUp 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         }
 
-        .grid a:nth-child(even) { --base-translate: 35px; transform: translateY(var(--base-translate)); }
-        .grid a:nth-child(odd) { --base-translate: 0px; }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(calc(var(--base-translate) + 20px)); }
-            to { opacity: 1; transform: translateY(var(--base-translate)); }
+        .glass-btn:hover { 
+            border-color: var(--accent-blue); 
+            box-shadow: 0 15px 35px var(--glow); 
+            transform: translateY(-5px); 
         }
 
-        @keyframes fadeInSimple {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .grid a:nth-child(1) { animation-delay: 0.1s; }
-        .grid a:nth-child(2) { animation-delay: 0.2s; }
-        .grid a:nth-child(3) { animation-delay: 0.3s; }
-        .grid a:nth-child(4) { animation-delay: 0.4s; }
-        .grid a:nth-child(5) { animation-delay: 0.5s; }
-        .grid a:nth-child(6) { animation-delay: 0.6s; }
-
-        .glass-btn:hover { border-color: var(--accent-blue); box-shadow: 0 15px 35px var(--glow); }
-        .grid a:nth-child(odd):hover { transform: translateY(-5px) scale(1.02); }
-        .grid a:nth-child(even):hover { transform: translateY(30px) scale(1.02); }
-
-        .icon-box {
-            width: 45px; height: 45px; margin-bottom: 12px;
-            fill: var(--accent-blue); filter: drop-shadow(0 0 8px var(--glow));
+        .icon-box { 
+            width: 45px; height: 45px; margin-bottom: 12px; 
+            fill: var(--accent-blue); 
+            filter: drop-shadow(0 0 8px var(--glow));
         }
 
         span { font-weight: 500; font-size: 0.95rem; text-align: center; }
 
+        /* --- Utilitaires --- */
         .theme-switch {
             position: fixed; top: 20px; right: 20px;
             width: 45px; height: 45px; border-radius: 50%;
@@ -113,173 +95,125 @@
             backdrop-filter: blur(10px);
         }
 
-        @media (max-width: 360px) {
-            .grid { grid-template-columns: 1fr; }
-            .grid a:nth-child(even), .grid a:nth-child(odd) { transform: none !important; animation-name: fadeInSimple; }
-        }
+        /* Classe pour masquer totalement les éléments interdits */
+        .restricted { display: none !important; }
 
         @media (min-width: 768px) {
             .grid { grid-template-columns: repeat(3, 1fr); gap: 30px; }
-            .grid a:nth-child(even), .grid a:nth-child(odd) { transform: none; animation-name: fadeInSimple; }
-            .glass-btn:hover { transform: translateY(-10px) scale(1.02) !important; }
-        }
-
-        @media (min-width: 1400px) {
-            .grid { grid-template-columns: repeat(5, 1fr); gap: 40px; }
-            .header h1 { font-size: 3.5rem; }
-            .subtitle { font-size: 1.5rem; }
-            .glass-btn { padding: 50px 20px; }
-            .icon-box { width: 70px; height: 70px; margin-bottom: 25px; }
-            .glass-btn span { font-size: 1.3rem; }
-            .theme-switch { width: 60px; height: 60px; font-size: 1.5rem; }
         }
     </style>
 </head>
 <body>
-
     <div class="bg-blob" style="top: -50px; left: -50px;"></div>
     <div class="bg-blob" style="bottom: 50px; right: -50px; background: #60efff;"></div>
 
-    <button class="theme-switch" onclick="toggleTheme()" aria-label="Changer le thème">🌓</button>
+    <button class="theme-switch" onclick="window.toggleTheme()" aria-label="Changer le thème">🌓</button>
 
     <div class="header">
-        <h1>ASUFOR Admin</h1>
-        <div class="subtitle">Siège: DIANDIOLY | Gestion Pro</div>
+        <h1 id="welcomeTitle">ASUFOR Admin</h1>
+        <div class="subtitle" id="userRoleDisplay">Chargement...</div>
     </div>
 
     <div class="grid">
-        <a href="agent.html" class="glass-btn">
-            <div class="icon-box">
-                <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            </div>
+        <a href="agent.html" id="btn-agent" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
             <span>Ajouter Agent</span>
         </a>
 
-        <a href="list.html" class="glass-btn">
-            <div class="icon-box">
-                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
-            </div>
+        <a href="list.html" id="btn-list" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg></div>
             <span>Compteur</span>
         </a>
 
-        <a href="stats.html" class="glass-btn">
-            <div class="icon-box">
-                <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>
-            </div>
+        <a href="stats.html" id="btn-stats" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg></div>
             <span>Statistiques</span>
         </a>
 
-        <a href="zero.html" class="glass-btn">
-            <div class="icon-box">
-                <svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6z"/></svg>
-            </div>
-            <span>Réinitialiser</span>
-        </a>
-
-        <a href="impression.html" class="glass-btn">
-            <div class="icon-box">
-                <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-            </div>
+        <a href="impression.html" id="btn-impression" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></div>
             <span>Impression</span>
         </a>
 
-        <a href="#" class="glass-btn" onclick="deconnexion(event)" style="border-color: rgba(255, 99, 132, 0.3);">
-            <div class="icon-box" style="fill: #ff6b81; filter: drop-shadow(0 0 8px rgba(255, 107, 129, 0.3));">
-                <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-            </div>
-            <span style="color: #ff6b81;">Déconnexion</span>
+        <a href="zero.html" id="btn-zero" class="glass-btn" style="border-color: rgba(255, 99, 132, 0.2);">
+            <div class="icon-box" style="fill: #ff6b81;"><svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6z"/></svg></div>
+            <span style="color: #ff6b81;">Réinitialiser</span>
+        </a>
+
+        <a href="#" class="glass-btn" onclick="confirmLogout(event)" style="border-color: rgba(255, 255, 255, 0.1);">
+            <div class="icon-box" style="fill: #ff6b81;"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></div>
+            <span>Déconnexion</span>
         </a>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <script src="security.js"></script>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-            authDomain: "asufor-67a06.firebaseapp.com",
-            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-            projectId: "asufor-67a06"
-        };
+    <script>
+        // 1. Vérification de sécurité au chargement
+        const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app);
-
-        // --- GESTION DU THÈME ---
-        const doc = document.documentElement;
-        const savedTheme = localStorage.getItem('asufor-theme') || 'dark';
-        doc.setAttribute('data-theme', savedTheme);
-
-        // Permet d'appeler la fonction depuis le bouton HTML en la rattachant à l'objet 'window'
-        window.toggleTheme = function() {
-            const currentTheme = doc.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            doc.setAttribute('data-theme', newTheme);
-            localStorage.setItem('asufor-theme', newTheme);
-        };
-
-        // --- EFFET 3D BOUTONS ---
-        document.querySelectorAll('.glass-btn').forEach(btn => {
-            btn.addEventListener('mousemove', e => {
-                if(window.innerWidth < 768) return; 
-                const rect = btn.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                
-                btn.style.setProperty('--x', `${x}px`);
-                btn.style.setProperty('--y', `${y}px`);
-                
-                const rotateX = ((y / rect.height) - 0.5) * 10;
-                const rotateY = ((x / rect.width) - 0.5) * -10;
-                
-                btn.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
-            });
-
-            btn.addEventListener('mouseleave', () => {
-                if(window.innerWidth >= 768) btn.style.transform = "";
-            });
-        });
-
-        // --- GARDIEN D'AUTHENTIFICATION ET SÉCURITÉ MULTI-APPAREILS ---
-        onAuthStateChanged(auth, (user) => {
-            if (!user) {
-                // L'utilisateur n'est pas connecté, retour forcé à l'accueil
-                window.location.replace("index.html");
-            } else {
-                // Vérification de la session pour s'assurer qu'il n'est pas connecté ailleurs
-                const localSessionId = localStorage.getItem('asufor_session_id');
-                const sessionRef = ref(db, 'sessions_actives/' + user.uid);
-                
-                onValue(sessionRef, (snapshot) => {
-                    const activeSessionId = snapshot.val();
-                    
-                    // Si l'identifiant dans la base de données ne correspond pas à cet appareil
-                    if (activeSessionId && activeSessionId !== localSessionId) {
-                        alert("Votre compte a été connecté sur un autre appareil. Votre session va être fermée.");
-                        signOut(auth).then(() => {
-                            window.location.replace("index.html");
-                        });
-                    }
-                });
-            }
-        });
-
-        // --- FONCTION DE DECONNEXION ---
-        // Rattachée à 'window' pour que le HTML puisse la déclencher
-        window.deconnexion = function(event) {
-            event.preventDefault(); 
+        // 2. Vérification BLINDÉE : On s'assure que session, session.role existent et que le rôle est bien une chaîne de texte
+        if (session && session.role && typeof session.role === 'string') {
+            const role = session.role;
             
-            if(confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
-                signOut(auth).then(() => {
-                    window.location.replace("index.html"); 
-                }).catch((error) => {
-                    console.error("Erreur de déconnexion:", error);
-                    alert("Une erreur est survenue lors de la déconnexion.");
-                });
+            // Mise à jour de l'affichage utilisateur sans risque de plantage
+            document.getElementById('userRoleDisplay').textContent = `Session : ${role}`;
+            document.getElementById('welcomeTitle').textContent = `Bienvenue ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+
+            // 3. Gestion des permissions visuelles (Masquage des boutons)
+            
+            // Le Trésorier ne voit que les Stats et la Déconnexion
+            if (role === 'trésorier') {
+                document.getElementById('btn-agent').classList.add('restricted');
+                document.getElementById('btn-list').classList.add('restricted');
+                document.getElementById('btn-impression').classList.add('restricted');
+                document.getElementById('btn-zero').classList.add('restricted');
             }
+
+            // Le Secrétaire voit tout sauf la Réinitialisation (Zero)
+            if (role === 'secrétaire') {
+                document.getElementById('btn-zero').classList.add('restricted');
+            }
+
+            // Le Président a accès à tout, on ne masque rien.
+
+        } else if (session) {
+            // Si par hasard la session existe mais est corrompue (pas de rôle), on déconnecte pour nettoyer
+            if (typeof window.logout === 'function') {
+                window.logout();
+            } else {
+                localStorage.removeItem('asufor_session');
+                window.location.replace('index.html');
+            }
+        }
+
+        // --- Fonctions globales ---
+
+        // Gestion du Thème
+        window.toggleTheme = function() {
+            const doc = document.documentElement;
+            const current = doc.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            doc.setAttribute('data-theme', next);
+            localStorage.setItem('asufor-theme', next);
         };
+        
+        // Appliquer le thème sauvegardé au démarrage
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('asufor-theme') || 'dark');
+
+        // Fonction de déconnexion
+        function confirmLogout(e) {
+            e.preventDefault();
+            if (confirm("Voulez-vous vraiment vous déconnecter ?")) {
+                if (typeof window.logout === 'function') {
+                    window.logout();
+                } else {
+                    // Fallback de sécurité si security.js a un problème
+                    localStorage.removeItem('asufor_session');
+                    window.location.replace('index.html');
+                }
+            }
+        }
     </script>
 </body>
 </html>

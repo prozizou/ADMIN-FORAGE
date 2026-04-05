@@ -1,8 +1,13 @@
+<script src="security.js"></script>
+<script>
+    // Les trois rôles peuvent consulter les statistiques
+    checkAccess(['trésorier', 'président', 'secrétaire']);
+</script>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <link rel="manifest" href="Manifest.json">
-    
+<link rel="manifest" href="manifest.json">
+<script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Gestion Pro</title>
@@ -88,6 +93,17 @@
         .filter-row input, .filter-row select {
             flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px;
             font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main);
+        }
+
+        /* --- ANIMATION MICROPHONE --- */
+        @keyframes pulse-mic {
+            0% { transform: translateY(-50%) scale(1); opacity: 1; }
+            50% { transform: translateY(-50%) scale(1.2); opacity: 0.7; }
+            100% { transform: translateY(-50%) scale(1); opacity: 1; }
+        }
+        .mic-active {
+            color: var(--danger) !important;
+            animation: pulse-mic 1.5s infinite;
         }
 
         .list-section { 
@@ -189,7 +205,12 @@
 
     <div class="list-section" id="scrollable-list">
         <div class="filter-row">
-            <input type="text" id="search-client" placeholder="🔍 Rechercher client..." oninput="applyFilter()">
+            <div style="position: relative; display: flex; flex: 1;">
+                <input type="text" id="search-client" placeholder="🔍 Rechercher client ou compteur..." oninput="applyFilter()" style="padding-right: 45px; width: 100%;">
+                <button id="btn-mic" onclick="startVoiceSearch()" title="Recherche vocale" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-sub); transition: 0.3s;">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+            </div>
         </div>
         <div class="filter-row" style="margin-bottom: 20px;">
             <select id="sort-spinner" onchange="applyFilter()">
@@ -230,7 +251,7 @@
     
     // Variables globales
     let currentTab = 'all'; 
-    let displayLimit = 100; // Augmenté pour correspondre à votre logique de défilement
+    let displayLimit = 100; 
     let currentFilteredData = []; 
 
     // --- FONCTIONS UTILITAIRES & THEME ---
@@ -329,10 +350,112 @@
         });
     }
 
+    // --- UTILITAIRES POUR LA RECHERCHE INTELLIGENTE ---
+    function normalizeText(text) {
+        if (!text) return "";
+        return text.normalize("NFD")
+                   .replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+                   .replace(/['"_-]/g, " ") // Remplace apostrophes par des espaces
+                   .toLowerCase()
+                   .trim();
+    }
+
+    // Algorithme de distance de Levenshtein (calcule le nombre de lettres de différence)
+    function getEditDistance(a, b) {
+        if (a.length === 0) return b.length;
+        if (b.length === 0) return a.length;
+        const matrix = [];
+        for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+        for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= b.length; i++) {
+            for (let j = 1; j <= a.length; j++) {
+                if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                    matrix[i][j] = matrix[i - 1][j - 1];
+                } else {
+                    matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+                }
+            }
+        }
+        return matrix[b.length][a.length];
+    }
+
+    // Vérifie si deux mots se ressemblent (tolérance aux fautes du vocal)
+    function isFuzzyMatch(query, target) {
+        if (!query) return true;
+        if (!target) return false;
+        
+        const q = normalizeText(query);
+        const t = normalizeText(target);
+        
+        if (t.includes(q)) return true; // Si c'est inclus directement, bingo
+
+        const queryWords = q.split(/\s+/);
+        const targetWords = t.split(/\s+/);
+
+        // Chaque mot prononcé doit ressembler à un mot dans le nom du client
+        return queryWords.every(qWord => {
+            return targetWords.some(tWord => {
+                if (tWord.includes(qWord)) return true;
+                // On tolère 1 erreur pour les mots courts (<=4), 2 erreurs pour les longs
+                const maxErrors = qWord.length <= 4 ? 1 : 2;
+                return getEditDistance(qWord, tWord) <= maxErrors;
+            });
+        });
+    }
+
+    // --- RECHERCHE VOCALE ---
+    window.startVoiceSearch = function() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            showToast("⚠️ Votre navigateur ne supporte pas la recherche vocale.", true);
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'fr-FR'; 
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        const micBtn = document.getElementById('btn-mic');
+        const searchInput = document.getElementById('search-client');
+
+        recognition.onstart = function() {
+            micBtn.classList.add('mic-active');
+            searchInput.placeholder = "Écoute en cours...";
+        };
+
+        recognition.onresult = function(event) {
+            let transcript = event.results[0][0].transcript.toLowerCase();
+            
+            // On supprime les mots parasites souvent prononcés naturellement
+            transcript = transcript.replace(/\b(le|la|les|un|une|des|cherche|trouve|numero|numéro|compteur|client|pour)\b/g, ' ');
+            transcript = transcript.replace(/\s+/g, ' ').trim(); // Nettoie les espaces en trop
+            
+            // Met le texte nettoyé dans la barre
+            searchInput.value = transcript;
+            
+            // Lance la recherche intelligente
+            applyFilter();
+            showToast("Reconnu : " + transcript);
+        };
+
+        recognition.onerror = function(event) {
+            showToast("Erreur vocale : " + event.error, true);
+        };
+
+        recognition.onend = function() {
+            micBtn.classList.remove('mic-active');
+            searchInput.placeholder = "🔍 Rechercher client ou compteur...";
+        };
+
+        recognition.start();
+    };
+
     // --- MOTEUR DE FILTRAGE & TRI ---
     window.applyFilter = function() {
         const selectedId = document.getElementById('agent-spinner').value;
-        const searchQuery = document.getElementById('search-client').value.toLowerCase().trim();
+        const searchQuery = document.getElementById('search-client').value.trim();
         const sortOption = document.getElementById('sort-spinner').value;
         
         let entries = Object.entries(storeReleves).map(([key, item]) => ({ key, ...item })).reverse();
@@ -340,11 +463,10 @@
         let tCFA_Paye = 0;
         let tCFA_Impaye = 0;
 
-        // 1. Filtrer les données
+        // 1. Filtrer les données avec l'algorithme intelligent
         currentFilteredData = entries.filter(item => {
             const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
             
-            // ✅ NOUVELLE LIGNE : On n'exclut plus les factures à 0 CFA
             if (isNaN(apaid)) return false; 
 
             const isPaid = item.status !== 'impaye';
@@ -355,8 +477,23 @@
             if (currentTab === 'impaye' && isPaid) return false;
             if (selectedId !== "all" && item.agent_id !== selectedId) return false;
             
-            const clientName = (item.name || "").toLowerCase();
-            return clientName.includes(searchQuery);
+            // --- NOUVELLE RECHERCHE INTELLIGENTE ---
+            const rawName = item.name || "";
+            const rawCompteur = String(item.numero_compteur || "");
+
+            // A) Test sur les numéros (ignore les espaces, tirets, etc.)
+            const queryDigits = searchQuery.replace(/\D/g, ''); // Garde que les chiffres de la recherche
+            const compteurDigits = rawCompteur.replace(/\D/g, '');
+            let isCompteurMatch = false;
+            if (queryDigits.length > 0 && compteurDigits.includes(queryDigits)) {
+                isCompteurMatch = true;
+            }
+
+            // B) Test sur le nom (tolérance aux fautes d'orthographe/vocal)
+            let isNameMatch = isFuzzyMatch(searchQuery, rawName);
+            
+            // On valide si le compteur correspond OU si le nom correspond
+            return isNameMatch || isCompteurMatch;
         });
 
         // 2. Trier
@@ -474,7 +611,6 @@
     // --- GESTION DU SCROLL INFINI ---
     function handleScroll() {
         const listElement = document.getElementById('scrollable-list');
-        // Vérifie le scroll sur mobile (window) et sur PC (div)
         const isBottomWindow = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
         const isBottomDiv = listElement && (listElement.scrollTop + listElement.clientHeight) >= listElement.scrollHeight - 50;
 

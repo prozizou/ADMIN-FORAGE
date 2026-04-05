@@ -1,8 +1,16 @@
+<script src="security.js"></script>
+<script>
+    // Accès autorisé pour la gestion et l'impression
+    checkAccess(['président', 'secrétaire']);
+</script>
 <!DOCTYPE html>
 <html lang="fr">
     <link rel="manifest" href="Manifest.json">
     
 <head>
+<link rel="manifest" href="manifest.json">
+<script src="pwa.js" defer></script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Ajouter un Agent - ASUFOR Glass</title>

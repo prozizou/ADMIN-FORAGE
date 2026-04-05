@@ -1,193 +1,138 @@
 <!DOCTYPE html>
-<html lang="fr">
-    <link rel="manifest" href="Manifest.json">
+<html lang="fr" data-theme="dark">
 <head>
+<link rel="manifest" href="manifest.json">
+<script src="pwa.js" defer></script>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asufor Admin | Connexion Google</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Accès ASUFOR</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
     <style>
-        :root {
-            --bg: #0f172a; --card: rgba(30, 41, 59, 0.9);
-            --primary: #ffffff; --primary-hover: #f1f5f9; --text-btn: #1e293b;
-            --success: #10b981; --danger: #ef4444; --text: #f8fafc;
-            --text-dim: #94a3b8; --border: rgba(255, 255, 255, 0.1);
-        }
-        body {
-            margin: 0; padding: 15px; background: var(--bg); color: var(--text);
-            font-family: -apple-system, system-ui, sans-serif;
-            display: flex; align-items: center; justify-content: center; height: 100vh;
-            overflow: hidden;
-        }
-        
-        .card {
-            background: var(--card); backdrop-filter: blur(15px);
-            border: 1px solid var(--border); border-radius: 28px;
-            padding: 40px 30px; width: 100%; max-width: 380px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            text-align: center;
-            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            z-index: 10;
-        }
-
-        .icon-lock {
-            width: 64px; height: 64px; background: rgba(59, 130, 246, 0.1);
-            border-radius: 50%; display: inline-flex; align-items: center;
-            justify-content: center; margin-bottom: 20px; color: #3b82f6;
-            transition: all 0.4s ease;
-        }
-
-        h1 { margin: 0 0 5px 0; font-size: 22px; font-weight: 800; }
-        p.subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 40px; }
-
-        button {
-            width: 100%; padding: 16px; background: var(--primary); color: var(--text-btn);
-            border: none; border-radius: 14px; font-size: 16px; font-weight: 700;
-            cursor: pointer; transition: all 0.3s ease; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-            display: flex; justify-content: center; align-items: center; gap: 12px;
-        }
-        button:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 15px 20px -3px rgba(0, 0, 0, 0.3); }
-        button:disabled { background: #94a3b8; color: #475569; transform: none; box-shadow: none; cursor: not-allowed; }
-
-        #error-msg { margin-top: 25px; font-size: 13px; font-weight: bold; color: var(--danger); min-height: 15px; opacity: 0; transition: opacity 0.3s; }
-
-        .page-transition-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg); z-index: 9999;
-            opacity: 0; pointer-events: none;
-            transition: opacity 0.8s ease-in-out;
-        }
-
-        .card.success { transform: scale(0.95); opacity: 0; pointer-events: none; }
-        .icon-lock.success { background: var(--success); color: white; transform: scale(1.2); }
-        .page-transition-overlay.active { opacity: 1; pointer-events: all; }
-
-        .spinner {
-            width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.1);
-            border-radius: 50%; border-top-color: var(--text-btn); animation: spin 1s ease-in-out infinite;
-            display: none;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        @media (max-width: 380px) {
-            .card { padding: 25px 15px; }
-            h1 { font-size: 1.2rem; }
-        }
-        @media (min-width: 1400px) { 
-            .card { max-width: 600px; padding: 60px; }
-            h1 { font-size: 2.5rem; }
-            p.subtitle { font-size: 1.2rem; }
-            button { font-size: 1.2rem; padding: 20px; }
-            .icon-lock { width: 90px; height: 90px; }
-            svg { width: 45px; height: 45px; }
-        }
+        :root { --bg: #1a1e21; --txt: #dfe6e9; --blue: #38bdf8; --glass: rgba(255,255,255,0.05); }
+        [data-theme="light"] { --bg: #f0f2f5; --txt: #2d3436; --glass: rgba(255,255,255,0.7); }
+        body { background: var(--bg); color: var(--txt); font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin:0; transition: 0.3s; }
+        .card { background: var(--glass); backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1); border-radius: 32px; padding: 30px; width: 90%; max-width: 400px; text-align: center; }
+        .role-selector { display: flex; gap: 5px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 50px; margin-bottom: 25px; }
+        .role-btn { flex: 1; padding: 10px; border-radius: 50px; border: none; background: transparent; color: var(--txt); cursor: pointer; font-size: 12px; transition: 0.2s; }
+        .role-btn.active { background: var(--txt); color: var(--bg); font-weight: bold; }
+        .dots { display: flex; justify-content: center; gap: 12px; margin-bottom: 30px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.1); transition: 0.3s; }
+        .dot.active { background: var(--blue); box-shadow: 0 0 10px var(--blue); transform: scale(1.2); }
+        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .key { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 20px; border-radius: 18px; color: var(--txt); font-size: 22px; cursor: pointer; }
+        .key:active { transform: scale(0.95); background: rgba(255,255,255,0.1); }
     </style>
 </head>
 <body>
 
-    <div class="page-transition-overlay" id="overlay"></div>
+<div class="card">
+    <h2 style="font-weight: 300;">🔐 ASUFOR Admin</h2>
+    <p style="opacity: 0.5; font-size: 12px; margin-bottom: 20px;">Identification requise</p>
 
-    <div class="card" id="login-card">
-        <div class="icon-lock" id="status-icon">
-            <svg id="svg-lock" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-            <svg id="svg-check" style="display:none;" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        </div>
-        
-        <h1>Portail Administrateur</h1>
-        <p class="subtitle">Réseau Asufor Diandioly</p>
-
-        <button type="button" id="btn-login-google">
-            <svg id="google-icon" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-            </svg>
-            <span id="btn-text">Continuer avec Google</span>
-            <div class="spinner" id="btn-spinner"></div>
-        </button>
-
-        <div id="error-msg">Une erreur est survenue</div>
+    <div class="role-selector">
+        <button class="role-btn active" onclick="setRole('secrétaire', this)">Secrétaire</button>
+        <button class="role-btn" onclick="setRole('président', this)">Président</button>
+        <button class="role-btn" onclick="setRole('trésorier', this)">Trésorier</button>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithRedirect, GoogleAuthProvider, setPersistence, browserLocalPersistence, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <div class="dots" id="dots">
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-            authDomain: "asufor-67a06.firebaseapp.com",
-            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-            projectId: "asufor-67a06"
-        };
+    <div class="keypad">
+        <button class="key" onclick="press('1')">1</button>
+        <button class="key" onclick="press('2')">2</button>
+        <button class="key" onclick="press('3')">3</button>
+        <button class="key" onclick="press('4')">4</button>
+        <button class="key" onclick="press('5')">5</button>
+        <button class="key" onclick="press('6')">6</button>
+        <button class="key" onclick="press('7')">7</button>
+        <button class="key" onclick="press('8')">8</button>
+        <button class="key" onclick="press('9')">9</button>
+        <div style="visibility:hidden"></div>
+        <button class="key" onclick="press('0')">0</button>
+        <button class="key" onclick="del()">⌫</button>
+    </div>
+    <p id="status" style="margin-top: 20px; font-size: 14px; min-height: 20px;"></p>
+</div>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app); 
-        const provider = new GoogleAuthProvider();
+<script>
+    // Initialisation Firebase classique
+    const firebaseConfig = {
+        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+        authDomain: "asufor-67a06.firebaseapp.com",
+        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+        projectId: "asufor-67a06"
+    };
 
-        const btnGoogle = document.getElementById('btn-login-google');
-        const btnText = document.getElementById('btn-text');
-        const spinner = document.getElementById('btn-spinner');
-        const googleIcon = document.getElementById('google-icon');
-        const errorMsg = document.getElementById('error-msg');
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let code = "";
+    let role = "secrétaire";
+
+    function setRole(newRole, btn) {
+        role = newRole;
+        document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        code = "";
+        updateDots();
+    }
+
+    function press(n) {
+        if(code.length < 6) {
+            code += n;
+            updateDots();
+            if(code.length === 6) verify();
+        }
+    }
+
+    function del() {
+        code = code.slice(0, -1);
+        updateDots();
+    }
+
+    function updateDots() {
+        const dots = document.querySelectorAll('.dot');
+        dots.forEach((d, i) => d.classList.toggle('active', i < code.length));
+    }
+
+    function verify() {
+        const status = document.getElementById('status');
+        status.textContent = "🔍 Vérification...";
         
-        const card = document.getElementById('login-card');
-        const iconContainer = document.getElementById('status-icon');
-        const svgLock = document.getElementById('svg-lock');
-        const svgCheck = document.getElementById('svg-check');
-        const overlay = document.getElementById('overlay');
+        const mapping = { "secrétaire": "Secrétaire", "président": "president", "trésorier": "trésorier" };
+        
+        // Requête Firebase classique
+        db.ref(`admins/${mapping[role]}`).once('value')
+        .then((snap) => {
+            const data = snap.val();
+            const correct = data ? (data.passcode || data.Passcode) : null;
 
-        // Écouteur d'état d'authentification (gère la réussite de la redirection)
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // L'utilisateur est connecté, on met à jour l'interface pour montrer le succès
-                svgLock.style.display = 'none';
-                svgCheck.style.display = 'block';
-                iconContainer.classList.add('success');
-                card.classList.add('success');
-                overlay.classList.add('active');
-
-                try {
-                    // --- GESTION DE LA SESSION UNIQUE ---
-                    const currentSessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
-                    localStorage.setItem('asufor_session_id', currentSessionId);
-                    await set(ref(db, 'sessions_actives/' + user.uid), currentSessionId);
-                    // ------------------------------------
-                    
-                    // Redirection vers l'accueil après l'animation
-                    setTimeout(() => { window.location.replace('accueil.html'); }, 800);
-                } catch (error) {
-                    console.error("Erreur lors de la sauvegarde de la session:", error);
-                    // On redirige quand même vers l'accueil en cas de petite erreur réseau sur la DB
-                    setTimeout(() => { window.location.replace('accueil.html'); }, 800);
-                }
+            if(correct && code === correct.toString()) {
+                // Création d'une session propre
+                localStorage.setItem('asufor_session', JSON.stringify({
+                    role: role,
+                    time: Date.now()
+                }));
+                status.textContent = "✅ Accès autorisé";
+                setTimeout(() => window.location.replace('accueil.html'), 500);
+            } else {
+                status.textContent = "❌ Code incorrect";
+                code = ""; 
+                setTimeout(updateDots, 500);
             }
+        })
+        .catch((e) => {
+            status.textContent = "⚠️ Erreur réseau";
+            console.error(e);
         });
-
-        // Action lors du clic sur le bouton Google
-        btnGoogle.addEventListener('click', async () => {
-            errorMsg.style.opacity = '0';
-            btnGoogle.disabled = true;
-            btnText.style.display = 'none';
-            googleIcon.style.display = 'none';
-            spinner.style.display = 'block';
-
-            try {
-                await setPersistence(auth, browserLocalPersistence);
-                // Utilisation de Redirect au lieu de Popup pour éviter le blocage sur mobile
-                await signInWithRedirect(auth, provider);
-            } catch (error) {
-                console.error(error.code);
-                errorMsg.innerText = "L'authentification Google a échoué.";
-                errorMsg.style.opacity = '1';
-                btnGoogle.disabled = false;
-                btnText.style.display = 'block';
-                googleIcon.style.display = 'block';
-                spinner.style.display = 'none';
-            }
-        });
-    </script>
+    }
+</script>
 </body>
 </html>
