@@ -1,138 +1,157 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+    <link rel="manifest" href="Manifest.json">
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Diandioly - Analyse Pro</title>
+    <title>ASUFOR Diandioly - Gestion Pro</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* Variables CSS pour gérer facilement le Thème Clair / Sombre */
         :root {
-            --bg: #f8fafc; 
-            --primary: #0052fe; 
-            --card-bg: #ffffff;
-            --text-main: #1e293b; 
-            --text-sub: #64748b; 
-            --success: #22c55e;
-            --danger: #ef4444;
-            --border-color: rgba(0, 0, 0, 0.05);
-            --item-bg: transparent;
-            --chart-grid: #f1f5f9;
+            --bg: #f8fafc; --primary: #0052fe; --card-bg: #ffffff;
+            --text-main: #1e293b; --text-sub: #64748b; --success: #22c55e;
+            --danger: #ef4444; --border-color: rgba(0, 0, 0, 0.05);
         }
 
-        /* Variables du Mode Sombre */
-        body.dark-mode {
+        /* --- THEME SOMBRE (DARK MODE) --- */
+        body.dark-theme {
             --bg: #0f172a; 
-            --primary: #3b82f6; 
             --card-bg: #1e293b;
-            --text-main: #f8fafc; 
-            --text-sub: #94a3b8; 
-            --border-color: rgba(255, 255, 255, 0.08);
-            --item-bg: #1e293b;
-            --chart-grid: rgba(255, 255, 255, 0.05);
+            --text-main: #f1f5f9; 
+            --text-sub: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.1);
         }
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; transition: background-color 0.3s, color 0.3s; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             background: var(--bg); color: var(--text-main);
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            margin: 0; padding: 0;
+            margin: 0; padding: 0; transition: background-color 0.3s, color 0.3s;
         }
 
         .main-layout { display: flex; flex-direction: column; width: 100%; }
         .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 15px; }
-
-        /* En-tête et Bouton Mode Sombre */
-        .header { padding: 10px 0 20px 0; display: flex; justify-content: space-between; align-items: center; }
-        .header-actions { display: flex; align-items: center; gap: 15px; }
         
-        .theme-toggle {
-            background: var(--card-bg); border: 1px solid var(--border-color);
-            color: var(--text-main); padding: 8px 12px; border-radius: 50px;
-            cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
+        .header { padding: 10px 0 15px 0; display: flex; justify-content: space-between; align-items: center; }
+        .header-actions { display: flex; gap: 10px; align-items: center; }
 
-        .select-wrapper { position: relative; margin-bottom: 20px; }
+        .btn-export {
+            background: var(--success); color: white; border: none; padding: 8px 15px;
+            border-radius: 12px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2); transition: all 0.2s;
+        }
+        .btn-export:active { transform: scale(0.95); }
+        .btn-theme { background: none; border: none; color: var(--text-sub); font-size: 1.3rem; cursor: pointer; }
+
+        .select-wrapper { position: relative; margin-bottom: 15px; }
         #agent-spinner {
             appearance: none; -webkit-appearance: none; width: 100%;
             padding: 15px 20px; font-size: 0.95rem; font-weight: 600;
             color: var(--text-main); background-color: var(--card-bg);
             border: 1px solid var(--border-color); border-radius: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); cursor: pointer; outline: none; transition: background-color 0.3s;
         }
         .select-wrapper::after {
             content: '\f0d7'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
-            position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
-            color: var(--text-sub); pointer-events: none;
+            position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: var(--text-sub); pointer-events: none;
         }
 
-        .finance-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
-        @media (max-width: 650px) { .finance-grid { grid-template-columns: 1fr; } }
-
-        .wallet-card { padding: 15px; border-radius: 20px; color: white; text-align: center; }
-        .wallet-card h1 { margin: 5px 0; font-size: 1.4rem; font-weight: 800; }
-        .wallet-card small { opacity: 0.9; font-size: 0.65rem; text-transform: uppercase; font-weight: bold; }
-
-        .bg-total { background: #3b82f6; }
-        .bg-paid { background: #10b981; }
-        .bg-unpaid { background: var(--danger); }
-
-        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .stat-card { background: var(--card-bg); padding: 18px; border-radius: 24px; border: 1px solid var(--border-color); }
-        .stat-val { font-size: 1.2rem; font-weight: 800; display: block; color: var(--text-main); }
-        .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; font-weight: 700; margin-top: 4px; display: block; }
-
-        .chart-container { background: var(--card-bg); padding: 20px; border-radius: 28px; margin-bottom: 25px; border: 1px solid var(--border-color); }
-
-        .list-section { background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px; }
-        
-        .item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid var(--border-color); background: var(--item-bg);}
-        body:not(.dark-mode) .item.paid-bg { background-color: #dcfce7; border-color: #bbf7d0; }
-        body:not(.dark-mode) .item.unpaid-bg { background-color: #fee2e2; border-color: #fecaca; }
-        
-        /* Ajustement des couleurs de liste pour le mode sombre */
-        body.dark-mode .item.paid-bg { border-left: 5px solid var(--success); }
-        body.dark-mode .item.unpaid-bg { border-left: 5px solid var(--danger); }
-
-        .amt { font-weight: 800; font-size: 1rem; }
-        .item b { font-size: 0.95rem; color: var(--text-main); }
-
-        .btn-toggle { padding: 6px 12px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; }
-        .btn-pay { background: var(--success); color: white; }
-        .btn-revoke { background: var(--text-sub); color: white; }
-
-        .loader { position: fixed; top: 15px; left: 15px; font-size: 0.65rem; background: var(--success); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; z-index: 1000; }
-
-        /* Notification Toast */
-        .toast {
-            visibility: hidden; min-width: 250px; background-color: #333; color: #fff;
-            text-align: center; border-radius: 12px; padding: 16px; position: fixed;
-            z-index: 9999; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
-            font-size: 0.9rem; font-weight: 600; opacity: 0; transition: all 0.3s ease;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        /* CARTES FINANCIERES */
+        .wallet-card {
+            background: var(--primary); color: white; padding: 25px; border-radius: 24px;
+            margin-bottom: 15px; box-shadow: 0 12px 24px rgba(0, 82, 254, 0.2);
         }
-        .toast.show { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
-        .toast.error { background-color: var(--danger); }
-        .toast.success { background-color: var(--success); }
+        .wallet-card h1 { margin: 8px 0; font-size: 2rem; font-weight: 800; }
+        
+        .debt-card {
+            background: #fef2f2; border: 1px solid #fecaca; color: var(--danger);
+            padding: 15px 25px; border-radius: 20px; margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+        }
+        body.dark-theme .debt-card { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+        .debt-card h2 { margin: 5px 0 0 0; font-size: 1.5rem; font-weight: 800; }
+
+        /* ONGLETS (TABS) */
+        .tabs { display: flex; gap: 10px; margin-bottom: 15px; background: var(--card-bg); padding: 5px; border-radius: 15px; border: 1px solid var(--border-color); }
+        .tab-btn {
+            flex: 1; padding: 10px; border: none; background: transparent; border-radius: 10px;
+            font-size: 0.85rem; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.3s;
+        }
+        .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0, 82, 254, 0.2); }
+
+        /* FILTRES */
+        .filter-row { display: flex; gap: 10px; margin-bottom: 15px; }
+        .filter-row input, .filter-row select {
+            flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px;
+            font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main);
+        }
+
+        .list-section { 
+            background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.02); transition: background-color 0.3s;
+        }
+
+        /* ITEMS DE LA LISTE */
+        .item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 16px; margin-bottom: 12px; }
+        .bg-paye { background-color: #dcfce7; border: 1px solid #bbf7d0; }
+        .bg-impaye { background-color: #fee2e2; border: 1px solid #fecaca; }
+        
+        body.dark-theme .bg-paye { background-color: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
+        body.dark-theme .bg-impaye { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+
+        /* --- STYLES DES ANOMALIES & WHATSAPP --- */
+        .bg-alerte-index { background-color: #fef9c3 !important; border: 2px solid #eab308 !important; }
+        .bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
+        
+        body.dark-theme .bg-alerte-index { background-color: rgba(234, 179, 8, 0.1) !important; border-color: rgba(234, 179, 8, 0.4) !important; }
+        body.dark-theme .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
+
+        .btn-wa {
+            background: #25D366; color: white; border: none; padding: 6px 10px;
+            border-radius: 8px; font-size: 0.7rem; cursor: pointer; font-weight: bold;
+            text-decoration: none; display: inline-flex; align-items: center; gap: 5px; 
+            margin-top: 8px; box-shadow: 0 2px 5px rgba(37, 211, 102, 0.3);
+        }
+        .btn-wa:hover { background: #1ebd5a; }
+
+        .amt { font-weight: 800; font-size: 1.1rem; }
+        .action-btns button { border: none; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; margin-top: 8px; }
+        .btn-paye { background: var(--success); color: white; box-shadow: 0 2px 5px rgba(34, 197, 94, 0.3); }
+        .btn-revoquer { background: var(--danger); color: white; box-shadow: 0 2px 5px rgba(239, 68, 68, 0.3); }
+
+        /* BOUTON CHARGER PLUS */
+        .load-more {
+            width: 100%; padding: 15px; background: var(--bg); border: 1px dashed var(--text-sub);
+            color: var(--text-main); border-radius: 15px; font-weight: bold; cursor: pointer; margin-top: 10px;
+        }
+
+        /* TOAST NOTIFICATION */
+        #toast {
+            visibility: hidden; min-width: 250px; background-color: var(--success); color: #fff;
+            text-align: center; border-radius: 10px; padding: 16px; position: fixed;
+            z-index: 9999; left: 50%; transform: translateX(-50%); bottom: 30px; font-size: 0.9rem; font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: visibility 0s, bottom 0.5s, opacity 0.5s; opacity: 0;
+        }
+        #toast.show { visibility: visible; bottom: 50px; opacity: 1; }
+
+        .loader { position: fixed; top: 15px; right: 15px; font-size: 0.65rem; background: var(--success); color: white; padding: 5px 12px; border-radius: 20px; font-weight: bold; z-index: 1000; }
 
         @media (min-width: 850px) {
             body { padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-            .main-layout { flex-direction: row; max-width: 1100px; margin: 0 auto; gap: 40px; align-items: flex-start; }
-            .container { max-width: 450px; margin: 0; padding: 0; }
-            .list-section { flex: 1; border-radius: 35px; height: calc(100vh - 40px); max-height: 800px; overflow-y: auto; }
+            .main-layout { flex-direction: row; max-width: 1200px; margin: 0 auto; gap: 40px; align-items: flex-start; }
+            .container { max-width: 450px; margin: 0; padding: 0; position: sticky; top: 20px; }
+            .list-section { flex: 1; border-radius: 35px; height: calc(100vh - 40px); overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
         }
     </style>
 </head>
 <body>
 
-<div id="sync-status" class="loader">SYNCHRONISATION...</div>
-
-<div id="toast" class="toast">Message</div>
+<div id="sync-status" class="loader">SYNC...</div>
+<div id="toast">Message</div>
 
 <div class="main-layout">
     <div class="container">
@@ -142,10 +161,8 @@
                 <h2 style="margin:0; font-size: 1.2rem;">ASUFOR Diandioly</h2>
             </div>
             <div class="header-actions">
-                <button class="theme-toggle" onclick="toggleDarkMode()" id="theme-btn" title="Basculer le thème">
-                    <i class="fa-solid fa-moon"></i>
-                </button>
-                <i class="fa-solid fa-circle-user" style="font-size: 2rem; color: var(--text-sub);"></i>
+                <button class="btn-theme" onclick="toggleTheme()"><i id="theme-icon" class="fa-solid fa-moon"></i></button>
+                <button class="btn-export" onclick="exportCSV()"><i class="fa-solid fa-file-excel"></i> Exporter</button>
             </div>
         </div>
 
@@ -153,51 +170,50 @@
             <select id="agent-spinner" onchange="applyFilter()"></select>
         </div>
 
-        <div class="finance-grid">
-            <div class="wallet-card bg-total">
-                <small>Total Encaissé</small>
-                <h1 id="total-all">0 F</h1>
-            </div>
-            <div class="wallet-card bg-paid">
-                <small>Réel Argent Payé</small>
-                <h1 id="total-paid">0 F</h1>
-            </div>
-            <div class="wallet-card bg-unpaid">
-                <small>Argent Non Payé</small>
-                <h1 id="total-unpaid">0 F</h1>
-            </div>
+        <div class="wallet-card">
+            <small>✅ Total Recettes Encaissées</small>
+            <h1 id="total-money">0 CFA</h1>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-val" id="stat-vol">0 m³</span>
-                <span class="stat-label">Volume Total</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-val" id="stat-ratio">0 F/m³</span>
-                <span class="stat-label">Ratio Moyen</span>
-            </div>
+        <div class="debt-card">
+            <small style="font-weight:bold; font-size: 0.75rem; text-transform:uppercase;">🚨 Reste à recouvrer (Impayés)</small>
+            <h2 id="total-debt">0 CFA</h2>
         </div>
 
-        <div class="chart-container">
-            <p style="font-size: 0.75rem; font-weight: 800; color: var(--text-sub); margin-bottom: 15px; text-align: center; text-transform: uppercase;">
-                Dispersion : Volume vs Prix (Analyse des tarifs)
-            </p>
-            <canvas id="ratioChart" style="max-height: 200px;"></canvas>
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-all" onclick="setTab('all')">Tous</button>
+            <button class="tab-btn" id="tab-paye" onclick="setTab('paye')">Payés</button>
+            <button class="tab-btn" id="tab-impaye" onclick="setTab('impaye')">Impayés</button>
         </div>
     </div>
 
-    <div class="list-section">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: sticky; top: 0; background: var(--card-bg); padding-bottom: 10px; border-bottom: 1px solid var(--border-color); z-index: 10;">
-            <h3 style="margin:0; font-size: 0.9rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;">Détails paiements (100 derniers)</h3>
-            <span id="stat-count" style="background: var(--bg); padding: 4px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 800;">0 Relevés</span>
+    <div class="list-section" id="scrollable-list">
+        <div class="filter-row">
+            <input type="text" id="search-client" placeholder="🔍 Rechercher client..." oninput="applyFilter()">
         </div>
+        <div class="filter-row" style="margin-bottom: 20px;">
+            <select id="sort-spinner" onchange="applyFilter()">
+                <option value="recent">⏱️ Plus récent</option>
+                <option value="max_amount">💰 Plus grand montant</option>
+                <option value="min_amount">🪙 Plus petit montant</option>
+                <option value="zone">📍 Par Zone (A-Z)</option>
+                <option value="name">🔤 Par Nom (A-Z)</option>
+                <option value="compteur">🔢 Par N° Compteur</option>
+            </select>
+        </div>
+
+        <div id="item-count" style="font-size: 0.85rem; font-weight: bold; color: var(--text-sub); margin-bottom: 10px; text-align: right;">
+            0 élément(s)
+        </div>
+
         <div id="releves-list"></div>
+        <button id="btn-load-more" class="load-more" onclick="loadMore()" style="display:none;">⬇️ Charger plus (100)</button>
     </div>
 </div>
+
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, update, query, limitToLast } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -211,215 +227,267 @@
 
     let storeReleves = {};
     let storeAgents = {};
-    let myChart = null;
+    
+    // Variables globales
+    let currentTab = 'all'; 
+    let displayLimit = 100; // Augmenté pour correspondre à votre logique de défilement
+    let currentFilteredData = []; 
 
-    // --- VARIABLES POUR LE DÉFILEMENT INFINI ---
-    let currentLimit = 100; // On commence à 100
-    let relevesUnsubscribe = null; // Pour stocker et annuler l'ancienne écoute Firebase
-    let isLoadingMore = false; // Sécurité pour éviter de charger 10 fois en scrollant vite
-
-    // --- GESTION DU MODE SOMBRE ---
-    window.toggleDarkMode = function() {
-        const body = document.body;
-        const icon = document.querySelector('#theme-btn i');
-        body.classList.toggle('dark-mode');
-        
-        if (body.classList.contains('dark-mode')) {
-            icon.classList.remove('fa-moon');
-            icon.classList.add('fa-sun');
-            localStorage.setItem('theme', 'dark');
+    // --- FONCTIONS UTILITAIRES & THEME ---
+    window.toggleTheme = function() {
+        document.body.classList.toggle('dark-theme');
+        const icon = document.getElementById('theme-icon');
+        if(document.body.classList.contains('dark-theme')) {
+            icon.classList.replace('fa-moon', 'fa-sun');
         } else {
-            icon.classList.remove('fa-sun');
-            icon.classList.add('fa-moon');
-            localStorage.setItem('theme', 'light');
+            icon.classList.replace('fa-sun', 'fa-moon');
         }
-        if(myChart) applyFilter();
     };
 
-    if (localStorage.getItem('theme') === 'dark') {
-        document.body.classList.add('dark-mode');
-        document.querySelector('#theme-btn i').classList.replace('fa-moon', 'fa-sun');
-    }
-
-    // --- GESTION DES NOTIFICATIONS TOAST ---
-    function showToast(message, type = 'success') {
+    function showToast(msg, isError = false) {
         const toast = document.getElementById("toast");
-        toast.textContent = message;
-        toast.className = `toast show ${type}`;
-        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        toast.innerText = msg;
+        toast.style.backgroundColor = isError ? "var(--danger)" : "var(--success)";
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 3000);
     }
 
-    // --- FONCTION DE MISE À JOUR FIREBASE AVEC CONFIRMATION ---
-    window.toggleFacture = async function(key, currentStatus) {
-        const action = currentStatus ? "révoquer" : "valider";
-        if (!confirm(`Êtes-vous sûr de vouloir ${action} ce paiement ?`)) return;
+    window.setTab = function(tabName) {
+        currentTab = tabName;
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('tab-' + tabName).classList.add('active');
+        displayLimit = 100; 
+        applyFilter();
+    };
 
-        const newStatus = !currentStatus;
-        const dbRef = ref(db, `asufor_db_diandioly/${key}`);
-        
-        try {
-            await update(dbRef, { facture: newStatus });
-            showToast(currentStatus ? "Paiement révoqué" : "Paiement validé avec succès", "success");
-        } catch (e) {
-            console.error("Erreur Firebase:", e);
-            showToast("Erreur lors de la mise à jour.", "error");
+    window.loadMore = function() {
+        displayLimit += 100;
+        renderList();
+    };
+
+    window.confirmRevoke = function(key) {
+        if (confirm("🚨 ATTENTION !\nÊtes-vous sûr de vouloir marquer cette facture comme NON PAYÉE ?")) {
+            window.updateStatus(key, 'impaye');
         }
     };
 
-    // --- NOUVEAU : FONCTION POUR CHARGER LES DONNÉES ---
-    function loadRelevesData(limit) {
-        isLoadingMore = true;
-        document.getElementById('sync-status').innerText = "CHARGEMENT...";
+    window.updateStatus = function(key, newStatus) {
+        update(ref(db, 'asufor_db_diandioly/' + key), { status: newStatus })
+            .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée !" : "⚠️ Facture révoquée !"))
+            .catch(err => showToast("Erreur réseau : " + err, true));
+    };
 
-        const recentRelevesQuery = query(ref(db, 'asufor_db_diandioly'), limitToLast(limit));
-
-        // Si une connexion en temps réel existe déjà, on la coupe avant d'en relancer une plus grande
-        if (relevesUnsubscribe) {
-            relevesUnsubscribe(); 
+    // --- EXPORT CSV ---
+    window.exportCSV = function() {
+        if (currentFilteredData.length === 0) {
+            showToast("La liste est vide, rien à exporter.", true);
+            return;
         }
-
-        // onValue retourne une fonction permettant de couper l'écoute plus tard
-        relevesUnsubscribe = onValue(recentRelevesQuery, (snap) => {
-            storeReleves = snap.val() || {};
-            applyFilter();
-            document.getElementById('sync-status').innerText = "LIVE ✅";
-            isLoadingMore = false; // On débloque le chargement
+        let csvContent = "\uFEFF"; 
+        csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Montant (CFA);Statut\n";
+        
+        currentFilteredData.forEach(item => {
+            const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
+            const nIdx = parseFloat(item.new_index || 0);
+            const lIdx = parseFloat(item.last_index || 0);
+            const conso = nIdx - lIdx; 
+            const isPaid = item.status !== 'impaye' ? 'Paye' : 'Impaye';
+            const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
+            const clientName = (item.name || "Client Inconnu").replace(/;/g, ' '); 
+            const numCompteur = (item.numero_compteur || "").replace(/;/g, ' ');
+            
+            csvContent += `${clientName};${numCompteur};${zoneName};${lIdx};${nIdx};${conso};${apaid};${isPaid}\n`;
         });
-    }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `ASUFOR_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        showToast("✅ Fichier Excel téléchargé !");
+    };
 
     function startSync() {
-        // 1. Chargement des agents (inchangé)
         onValue(ref(db, 'db_agents'), (snap) => {
             storeAgents = snap.val() || {};
             const spinner = document.getElementById('agent-spinner');
             const active = spinner.value || "all";
-            
             let html = '<option value="all">🟢 Tous les agents (Global)</option>';
             Object.entries(storeAgents).forEach(([key, a]) => {
-                let name = (a.agent || "Inconnu").trim().toLowerCase();
-                let formatted = name.split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
+                let name = (a.agent || "Inconnu").trim();
                 let zone = a.zone ? ` [${a.zone}]` : "";
-                html += `<option value="${key}">👤 ${formatted}${zone}</option>`;
+                html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>`;
             });
             spinner.innerHTML = html;
             spinner.value = active;
         });
 
-        // 2. Premier chargement des factures (les 100 dernières)
-        loadRelevesData(currentLimit);
-
-        // 3. Écoute du défilement de la liste pour charger la suite
-        const listSection = document.querySelector('.list-section');
-        listSection.addEventListener('scroll', () => {
-            // Détection : si on est à moins de 50 pixels du bas de la zone défilable
-            if (listSection.scrollTop + listSection.clientHeight >= listSection.scrollHeight - 50) {
-                if (!isLoadingMore) {
-                    currentLimit += 100; // On demande 100 factures de plus
-                    showToast(`Chargement de l'historique (${currentLimit})...`, 'success');
-                    loadRelevesData(currentLimit);
-                }
-            }
+        onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
+            storeReleves = snap.val() || {};
+            applyFilter();
+            document.getElementById('sync-status').style.display = "none";
         });
     }
 
-    function initChart(plotData) {
-        const ctx = document.getElementById('ratioChart').getContext('2d');
-        if (myChart) myChart.destroy();
-
-        const gridColor = getComputedStyle(document.body).getPropertyValue('--chart-grid').trim();
-        const textColor = getComputedStyle(document.body).getPropertyValue('--text-sub').trim();
-
-        myChart = new Chart(ctx, {
-            type: 'scatter',
-            data: {
-                datasets: [{
-                    label: 'Facture (Volume vs Prix)',
-                    data: plotData,
-                    backgroundColor: '#0052fe',
-                    pointRadius: 5,
-                    pointHoverRadius: 8,
-                    pointBorderColor: '#ffffff',
-                    pointBorderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: {
-                    x: { type: 'linear', position: 'bottom', title: { display: true, text: 'Volume (m³)', color: textColor, font: { size: 10, weight: 'bold' } }, grid: { color: gridColor }, ticks: { color: textColor } },
-                    y: { title: { display: true, text: 'Prix (F)', color: textColor, font: { size: 10, weight: 'bold' } }, grid: { color: gridColor }, ticks: { color: textColor } }
-                },
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(context) { return `Vol: ${context.parsed.x} m³ - Prix: ${context.parsed.y} F`; } } } }
-            }
-        });
-    }
-
+    // --- MOTEUR DE FILTRAGE & TRI ---
     window.applyFilter = function() {
         const selectedId = document.getElementById('agent-spinner').value;
-        const listDiv = document.getElementById('releves-list');
+        const searchQuery = document.getElementById('search-client').value.toLowerCase().trim();
+        const sortOption = document.getElementById('sort-spinner').value;
         
-        let tTotal = 0, tPaid = 0, tUnpaid = 0, tM3 = 0, count = 0;
-        let plotData = [];
-
-        listDiv.innerHTML = "";
+        let entries = Object.entries(storeReleves).map(([key, item]) => ({ key, ...item })).reverse();
         
-        const entries = Object.entries(storeReleves).reverse();
+        let tCFA_Paye = 0;
+        let tCFA_Impaye = 0;
 
-        entries.forEach(([key, item]) => {
+        // 1. Filtrer les données
+        currentFilteredData = entries.filter(item => {
             const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
-            if (isNaN(apaid) || apaid < 0) return;
+            
+            // ✅ NOUVELLE LIGNE : On n'exclut plus les factures à 0 CFA
+            if (isNaN(apaid)) return false; 
 
-            const match = (selectedId === "all") || (item.agent_id === selectedId);
+            const isPaid = item.status !== 'impaye';
+            
+            if (isPaid) tCFA_Paye += apaid; else tCFA_Impaye += apaid;
 
-            if (match) {
-                const nIdx = parseFloat(item.new_index || 0);
-                const lIdx = parseFloat(item.last_index || 0);
-                const conso = Math.max(0, nIdx - lIdx);
-                
-                const isPaid = item.facture === true;
-                
-                tTotal += apaid; 
-                if (isPaid) tPaid += apaid; else tUnpaid += apaid; 
-                tM3 += conso; 
-                count++;
-                
-                if (conso > 0 && apaid > 0) plotData.push({ x: conso, y: apaid });
-
-                const bgClass = isPaid ? 'paid-bg' : 'unpaid-bg';
-                const btnClass = isPaid ? 'btn-revoke' : 'btn-pay';
-                const btnText = isPaid ? 'Révoquer' : 'Payé';
-                const isDark = document.body.classList.contains('dark-mode');
-                const textColor = isPaid ? (isDark ? '#4ade80' : '#15803d') : (isDark ? '#f87171' : '#b91c1c');
-
-                const div = document.createElement('div');
-                div.className = `item ${bgClass}`;
-                div.innerHTML = `
-                    <div style="flex:1;">
-                        <b>${item.name || 'Client'}</b><br>
-                        <small style="color:var(--text-sub)">${lIdx} → ${nIdx} (${conso.toFixed(1)} m³)</small>
-                    </div>
-                    <div style="text-align:right; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
-                        <span class="amt" style="color: ${textColor}">${apaid.toLocaleString()} F</span>
-                        <button class="btn-toggle ${btnClass}" onclick="toggleFacture('${key}', ${isPaid})">${btnText}</button>
-                    </div>
-                `;
-                listDiv.appendChild(div);
-            }
+            if (currentTab === 'paye' && !isPaid) return false;
+            if (currentTab === 'impaye' && isPaid) return false;
+            if (selectedId !== "all" && item.agent_id !== selectedId) return false;
+            
+            const clientName = (item.name || "").toLowerCase();
+            return clientName.includes(searchQuery);
         });
 
-        document.getElementById('total-all').innerText = tTotal.toLocaleString() + " CFA";
-        document.getElementById('total-paid').innerText = tPaid.toLocaleString() + " CFA";
-        document.getElementById('total-unpaid').innerText = tUnpaid.toLocaleString() + " CFA";
-        
-        document.getElementById('stat-vol').innerText = tM3.toFixed(1) + " m³";
-        
-        // Mise à jour du titre pour refléter le nombre réel affiché
-        document.querySelector('.list-section h3').innerText = `Détails paiements (${count} affichés)`;
-        document.getElementById('stat-count').innerText = count + " Relevés";
-        
-        document.getElementById('stat-ratio').innerText = tM3 > 0 ? Math.round(tTotal / tM3) + " F/m³" : "0 F/m³";
-        
-        initChart(plotData);
+        // 2. Trier
+        if (sortOption === "max_amount") {
+            currentFilteredData.sort((a, b) => parseFloat(String(b.apaid||0).replace(',','.')) - parseFloat(String(a.apaid||0).replace(',','.')));
+        } else if (sortOption === "min_amount") {
+            currentFilteredData.sort((a, b) => parseFloat(String(a.apaid||0).replace(',','.')) - parseFloat(String(b.apaid||0).replace(',','.')));
+        } else if (sortOption === "zone") {
+            currentFilteredData.sort((a, b) => {
+                const zA = (storeAgents[a.agent_id]?.zone || "Z").toLowerCase();
+                const zB = (storeAgents[b.agent_id]?.zone || "Z").toLowerCase();
+                return zA.localeCompare(zB);
+            });
+        } else if (sortOption === "name") {
+            currentFilteredData.sort((a, b) => {
+                const nA = (a.name || "Z").toLowerCase();
+                const nB = (b.name || "Z").toLowerCase();
+                return nA.localeCompare(nB);
+            });
+        } else if (sortOption === "compteur") {
+            currentFilteredData.sort((a, b) => {
+                const numA = String(a.numero_compteur || "");
+                const numB = String(b.numero_compteur || "");
+                return numA.localeCompare(numB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+        }
+
+        // 3. Afficher les Totaux
+        document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
+        document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
+
+        renderList();
     }
+
+    // --- MOTEUR D'AFFICHAGE HTML ---
+    function renderList() {
+        const listDiv = document.getElementById('releves-list');
+        listDiv.innerHTML = "";
+
+        // Mise à jour du compteur
+        document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
+
+        const dataToShow = currentFilteredData.slice(0, displayLimit);
+
+        dataToShow.forEach(item => {
+            const apaid = parseFloat(String(item.apaid || 0).replace(',', '.'));
+            const nIdx = parseFloat(item.new_index || 0);
+            const lIdx = parseFloat(item.last_index || 0);
+            
+            const realConso = nIdx - lIdx; 
+            const isPaid = item.status !== 'impaye';
+            const zoneName = storeAgents[item.agent_id]?.zone || "Sans Zone";
+
+            // --- DÉTECTION D'ANOMALIES ---
+            let extraClass = '';
+            let anomalyHtml = '';
+            let whatsappTel = item.agent_tel ? String(item.agent_tel).replace(/\D/g, '') : null;
+            let waMessage = '';
+
+            if (realConso < 0) {
+                waMessage = encodeURIComponent(`⚠️ Bonjour, j'ai détecté une erreur de saisie pour le client *${item.name || 'Inconnu'}* [${zoneName}]. L'ancien index était de ${lIdx} et le nouveau est ${nIdx} (ce qui est impossible). Peux-tu vérifier stp ?`);
+                
+                extraClass = 'bg-alerte-index';
+                anomalyHtml = `
+                    <div style="margin-top: 8px; font-size: 0.75rem; color: #d97706; font-weight: bold;">
+                        ⚠️ Erreur d'index (Nouveau < Ancien)
+                        ${whatsappTel ? `<br><a href="https://wa.me/${whatsappTel}?text=${waMessage}" target="_blank" class="btn-wa"><i class="fa-brands fa-whatsapp"></i> Contacter l'agent</a>` : ''}
+                    </div>`;
+            } else if (realConso > 80) {
+                waMessage = encodeURIComponent(`🚨 Bonjour, alerte de forte consommation pour le client *${item.name || 'Inconnu'}* [${zoneName}]. Le compteur est passé de ${lIdx} à ${nIdx}, soit une conso de *${realConso.toFixed(1)} m³*. Y a-t-il une fuite chez le client ou une erreur de saisie ?`);
+                
+                extraClass = 'bg-alerte-fuite';
+                anomalyHtml = `
+                    <div style="margin-top: 8px; font-size: 0.75rem; color: var(--danger); font-weight: bold;">
+                        ⚠️ Alerte Fuite possible (> 80 m³)
+                        ${whatsappTel ? `<br><a href="https://wa.me/${whatsappTel}?text=${waMessage}" target="_blank" class="btn-wa"><i class="fa-brands fa-whatsapp"></i> Contacter l'agent</a>` : ''}
+                    </div>`;
+            }
+
+            const div = document.createElement('div');
+            div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${extraClass}`;
+            
+            div.innerHTML = `
+                <div style="flex: 1;">
+                    <b style="color:var(--text-main);">${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
+                    <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${item.numero_compteur || 'N/A'}</small><br>
+                    <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
+                        ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
+                    </small>
+                    ${anomalyHtml}
+                </div>
+                <div style="text-align:right; align-self: flex-start; margin-left: 10px;">
+                    <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${apaid.toLocaleString()} F</span>
+                    <div class="action-btns">
+                        ${!isPaid 
+                            ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>` 
+                            : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`
+                        }
+                    </div>
+                </div>
+            `;
+            listDiv.appendChild(div);
+        });
+
+        // Gérer le bouton "Charger plus"
+        const btnLoadMore = document.getElementById('btn-load-more');
+        if (currentFilteredData.length > displayLimit) {
+            btnLoadMore.style.display = "block";
+            btnLoadMore.innerText = `⬇️ Charger plus (${currentFilteredData.length - displayLimit} restants)`;
+        } else {
+            btnLoadMore.style.display = "none";
+        }
+    }
+
+    // --- GESTION DU SCROLL INFINI ---
+    function handleScroll() {
+        const listElement = document.getElementById('scrollable-list');
+        // Vérifie le scroll sur mobile (window) et sur PC (div)
+        const isBottomWindow = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
+        const isBottomDiv = listElement && (listElement.scrollTop + listElement.clientHeight) >= listElement.scrollHeight - 50;
+
+        if ((isBottomWindow || isBottomDiv) && currentFilteredData.length > displayLimit) {
+            loadMore();
+        }
+    }
+
+    window.addEventListener('scroll', handleScroll);
+    document.addEventListener("DOMContentLoaded", () => {
+        const listSection = document.getElementById('scrollable-list');
+        if (listSection) listSection.addEventListener('scroll', handleScroll);
+    });
 
     window.onload = startSync;
 </script>

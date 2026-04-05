@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="fr">
+    <link rel="manifest" href="Manifest.json">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asufor Admin | Connexion</title>
+    <title>Asufor Admin | Connexion Google</title>
     <style>
         :root {
             --bg: #0f172a; --card: rgba(30, 41, 59, 0.9);
-            --primary: #3b82f6; --success: #10b981;
-            --danger: #ef4444; --text: #f8fafc;
+            --primary: #ffffff; --primary-hover: #f1f5f9; --text-btn: #1e293b;
+            --success: #10b981; --danger: #ef4444; --text: #f8fafc;
             --text-dim: #94a3b8; --border: rgba(255, 255, 255, 0.1);
         }
         body {
@@ -32,46 +33,23 @@
         .icon-lock {
             width: 64px; height: 64px; background: rgba(59, 130, 246, 0.1);
             border-radius: 50%; display: inline-flex; align-items: center;
-            justify-content: center; margin-bottom: 20px; color: var(--primary);
+            justify-content: center; margin-bottom: 20px; color: #3b82f6;
             transition: all 0.4s ease;
         }
 
         h1 { margin: 0 0 5px 0; font-size: 22px; font-weight: 800; }
-        p.subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 30px; }
-
-        .input-group { margin-bottom: 20px; text-align: left; }
-        .input-group label { display: block; font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px; }
-        input {
-            width: 100%; background: rgba(15, 23, 42, 0.6); border: 2px solid var(--border);
-            border-radius: 12px; padding: 14px; color: white; font-size: 15px;
-            outline: none; box-sizing: border-box; transition: border-color 0.3s;
-        }
-        input:focus { border-color: var(--primary); }
-
-        /* NOUVEAU : Style pour la case à cocher */
-        .checkbox-group {
-            display: flex; align-items: center; gap: 10px;
-            margin-bottom: 25px; text-align: left;
-        }
-        .checkbox-group input[type="checkbox"] {
-            width: 18px; height: 18px; margin: 0; cursor: pointer;
-            accent-color: var(--primary);
-        }
-        .checkbox-group label {
-            font-size: 13px; color: var(--text-dim); cursor: pointer;
-        }
+        p.subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 40px; }
 
         button {
-            width: 100%; padding: 16px; background: var(--primary); color: white;
+            width: 100%; padding: 16px; background: var(--primary); color: var(--text-btn);
             border: none; border-radius: 14px; font-size: 16px; font-weight: 700;
-            cursor: pointer; transition: all 0.3s ease; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
-            display: flex; justify-content: center; align-items: center; gap: 10px;
-            margin-top: 10px;
+            cursor: pointer; transition: all 0.3s ease; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            display: flex; justify-content: center; align-items: center; gap: 12px;
         }
-        button:hover { transform: translateY(-2px); box-shadow: 0 15px 20px -3px rgba(59, 130, 246, 0.4); }
-        button:disabled { background: #475569; transform: none; box-shadow: none; cursor: not-allowed; }
+        button:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 15px 20px -3px rgba(0, 0, 0, 0.3); }
+        button:disabled { background: #94a3b8; color: #475569; transform: none; box-shadow: none; cursor: not-allowed; }
 
-        #error-msg { margin-top: 15px; font-size: 12px; font-weight: bold; color: var(--danger); min-height: 15px; opacity: 0; transition: opacity 0.3s; }
+        #error-msg { margin-top: 25px; font-size: 13px; font-weight: bold; color: var(--danger); min-height: 15px; opacity: 0; transition: opacity 0.3s; }
 
         .page-transition-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -85,13 +63,12 @@
         .page-transition-overlay.active { opacity: 1; pointer-events: all; }
 
         .spinner {
-            width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3);
-            border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite;
+            width: 20px; height: 20px; border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%; border-top-color: var(--text-btn); animation: spin 1s ease-in-out infinite;
             display: none;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* --- ADAPTATION POUR TRÈS PETITS ÉCRANS ET TV/4K --- */
         @media (max-width: 380px) {
             .card { padding: 25px 15px; }
             h1 { font-size: 1.2rem; }
@@ -100,7 +77,7 @@
             .card { max-width: 600px; padding: 60px; }
             h1 { font-size: 2.5rem; }
             p.subtitle { font-size: 1.2rem; }
-            input, button, .input-group label { font-size: 1.2rem; padding: 20px; }
+            button { font-size: 1.2rem; padding: 20px; }
             .icon-lock { width: 90px; height: 90px; }
             svg { width: 45px; height: 45px; }
         }
@@ -119,35 +96,24 @@
         <h1>Portail Administrateur</h1>
         <p class="subtitle">Réseau Asufor Diandioly</p>
 
-        <form id="login-form">
-            <div class="input-group">
-                <label>Adresse Email</label>
-                <input type="email" id="email" required placeholder="admin@diandioly.com">
-            </div>
-            
-            <div class="input-group">
-                <label>Mot de passe</label>
-                <input type="password" id="password" required placeholder="••••••••">
-            </div>
+        <button type="button" id="btn-login-google">
+            <svg id="google-icon" viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            <span id="btn-text">Continuer avec Google</span>
+            <div class="spinner" id="btn-spinner"></div>
+        </button>
 
-            <div class="checkbox-group">
-                <input type="checkbox" id="remember-me" checked>
-                <label for="remember-me">Se souvenir de moi</label>
-            </div>
-
-            <button type="submit" id="btn-login">
-                <span id="btn-text">Se connecter</span>
-                <div class="spinner" id="btn-spinner"></div>
-            </button>
-        </form>
-
-        <div id="error-msg">Identifiants incorrects</div>
+        <div id="error-msg">Une erreur est survenue</div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        // Ajout de setPersistence, browserLocalPersistence et onAuthStateChanged
-        import { getAuth, signInWithEmailAndPassword, setPersistence, browserLocalPersistence, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, signInWithRedirect, GoogleAuthProvider, setPersistence, browserLocalPersistence, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -158,11 +124,13 @@
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getDatabase(app); 
+        const provider = new GoogleAuthProvider();
 
-        const form = document.getElementById('login-form');
-        const btn = document.getElementById('btn-login');
+        const btnGoogle = document.getElementById('btn-login-google');
         const btnText = document.getElementById('btn-text');
         const spinner = document.getElementById('btn-spinner');
+        const googleIcon = document.getElementById('google-icon');
         const errorMsg = document.getElementById('error-msg');
         
         const card = document.getElementById('login-card');
@@ -171,69 +139,52 @@
         const svgCheck = document.getElementById('svg-check');
         const overlay = document.getElementById('overlay');
 
-        // Redirection automatique si déjà connecté
-        onAuthStateChanged(auth, (user) => {
+        // Écouteur d'état d'authentification (gère la réussite de la redirection)
+        onAuthStateChanged(auth, async (user) => {
             if (user) {
-                window.location.href = 'accueil.html'; 
-            }
-        });
-
-        // Pré-remplissage avec le stockage local
-        window.onload = () => {
-            if(localStorage.getItem('adminEmail')) {
-                document.getElementById('email').value = localStorage.getItem('adminEmail');
-                document.getElementById('password').value = localStorage.getItem('adminPwd') || "";
-                document.getElementById('remember-me').checked = true;
-            }
-        };
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault(); 
-            
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const rememberMe = document.getElementById('remember-me').checked;
-
-            // Sauvegarde dans le navigateur si coché
-            if (rememberMe) {
-                localStorage.setItem('adminEmail', email);
-                localStorage.setItem('adminPwd', password); 
-            } else {
-                localStorage.removeItem('adminEmail');
-                localStorage.removeItem('adminPwd');
-            }
-
-            errorMsg.style.opacity = '0';
-            btn.disabled = true;
-            btnText.style.display = 'none';
-            spinner.style.display = 'block';
-
-            try {
-                // Application de la persistance locale
-                await setPersistence(auth, browserLocalPersistence);
-                await signInWithEmailAndPassword(auth, email, password);
-                
+                // L'utilisateur est connecté, on met à jour l'interface pour montrer le succès
                 svgLock.style.display = 'none';
                 svgCheck.style.display = 'block';
                 iconContainer.classList.add('success');
-                
-                setTimeout(() => { card.classList.add('success'); }, 600);
-                setTimeout(() => { overlay.classList.add('active'); }, 900);
-                setTimeout(() => { window.location.href = 'accueil.html'; }, 1700);
+                card.classList.add('success');
+                overlay.classList.add('active');
 
+                try {
+                    // --- GESTION DE LA SESSION UNIQUE ---
+                    const currentSessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                    localStorage.setItem('asufor_session_id', currentSessionId);
+                    await set(ref(db, 'sessions_actives/' + user.uid), currentSessionId);
+                    // ------------------------------------
+                    
+                    // Redirection vers l'accueil après l'animation
+                    setTimeout(() => { window.location.replace('accueil.html'); }, 800);
+                } catch (error) {
+                    console.error("Erreur lors de la sauvegarde de la session:", error);
+                    // On redirige quand même vers l'accueil en cas de petite erreur réseau sur la DB
+                    setTimeout(() => { window.location.replace('accueil.html'); }, 800);
+                }
+            }
+        });
+
+        // Action lors du clic sur le bouton Google
+        btnGoogle.addEventListener('click', async () => {
+            errorMsg.style.opacity = '0';
+            btnGoogle.disabled = true;
+            btnText.style.display = 'none';
+            googleIcon.style.display = 'none';
+            spinner.style.display = 'block';
+
+            try {
+                await setPersistence(auth, browserLocalPersistence);
+                // Utilisation de Redirect au lieu de Popup pour éviter le blocage sur mobile
+                await signInWithRedirect(auth, provider);
             } catch (error) {
                 console.error(error.code);
-                if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                    errorMsg.innerText = "Email ou mot de passe incorrect.";
-                } else if (error.code === 'auth/network-request-failed') {
-                    errorMsg.innerText = "Erreur réseau. Vérifiez votre connexion.";
-                } else {
-                    errorMsg.innerText = "Une erreur est survenue.";
-                }
-                
+                errorMsg.innerText = "L'authentification Google a échoué.";
                 errorMsg.style.opacity = '1';
-                btn.disabled = false;
+                btnGoogle.disabled = false;
                 btnText.style.display = 'block';
+                googleIcon.style.display = 'block';
                 spinner.style.display = 'none';
             }
         });

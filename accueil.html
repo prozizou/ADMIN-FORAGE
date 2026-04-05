@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr" data-theme="dark">
+    <link rel="manifest" href="Manifest.json">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -45,7 +46,6 @@
         h1 { font-weight: 300; letter-spacing: 2px; margin-bottom: 5px; }
         .subtitle { opacity: 0.6; font-size: 0.9rem; }
 
-        /* --- GRILLE DYNAMIQUE ET RESPONSIVE --- */
         .grid {
             display: grid; 
             grid-template-columns: repeat(2, 1fr);
@@ -76,10 +76,6 @@
         .grid a:nth-child(even) { --base-translate: 35px; transform: translateY(var(--base-translate)); }
         .grid a:nth-child(odd) { --base-translate: 0px; }
 
-        .grid a:last-child:nth-child(odd) {
-            grid-column: span 2; margin-top: 50px; width: 60%; justify-self: center;
-        }
-
         @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(calc(var(--base-translate) + 20px)); }
             to { opacity: 1; transform: translateY(var(--base-translate)); }
@@ -95,6 +91,7 @@
         .grid a:nth-child(3) { animation-delay: 0.3s; }
         .grid a:nth-child(4) { animation-delay: 0.4s; }
         .grid a:nth-child(5) { animation-delay: 0.5s; }
+        .grid a:nth-child(6) { animation-delay: 0.6s; }
 
         .glass-btn:hover { border-color: var(--accent-blue); box-shadow: 0 15px 35px var(--glow); }
         .grid a:nth-child(odd):hover { transform: translateY(-5px) scale(1.02); }
@@ -116,17 +113,14 @@
             backdrop-filter: blur(10px);
         }
 
-        /* --- MEDIA QUERIES --- */
         @media (max-width: 360px) {
             .grid { grid-template-columns: 1fr; }
             .grid a:nth-child(even), .grid a:nth-child(odd) { transform: none !important; animation-name: fadeInSimple; }
-            .grid a:last-child:nth-child(odd) { width: 100%; grid-column: 1; margin-top: 0; }
         }
 
         @media (min-width: 768px) {
             .grid { grid-template-columns: repeat(3, 1fr); gap: 30px; }
             .grid a:nth-child(even), .grid a:nth-child(odd) { transform: none; animation-name: fadeInSimple; }
-            .grid a:last-child:nth-child(odd) { grid-column: span 1; width: 100%; margin-top: 0; }
             .glass-btn:hover { transform: translateY(-10px) scale(1.02) !important; }
         }
 
@@ -188,20 +182,45 @@
             </div>
             <span>Impression</span>
         </a>
+
+        <a href="#" class="glass-btn" onclick="deconnexion(event)" style="border-color: rgba(255, 99, 132, 0.3);">
+            <div class="icon-box" style="fill: #ff6b81; filter: drop-shadow(0 0 8px rgba(255, 107, 129, 0.3));">
+                <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+            </div>
+            <span style="color: #ff6b81;">Déconnexion</span>
+        </a>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+            authDomain: "asufor-67a06.firebaseapp.com",
+            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+            projectId: "asufor-67a06"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // --- GESTION DU THÈME ---
         const doc = document.documentElement;
         const savedTheme = localStorage.getItem('asufor-theme') || 'dark';
         doc.setAttribute('data-theme', savedTheme);
 
-        function toggleTheme() {
+        // Permet d'appeler la fonction depuis le bouton HTML en la rattachant à l'objet 'window'
+        window.toggleTheme = function() {
             const currentTheme = doc.getAttribute('data-theme');
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             doc.setAttribute('data-theme', newTheme);
             localStorage.setItem('asufor-theme', newTheme);
-        }
+        };
 
+        // --- EFFET 3D BOUTONS ---
         document.querySelectorAll('.glass-btn').forEach(btn => {
             btn.addEventListener('mousemove', e => {
                 if(window.innerWidth < 768) return; 
@@ -222,6 +241,45 @@
                 if(window.innerWidth >= 768) btn.style.transform = "";
             });
         });
+
+        // --- GARDIEN D'AUTHENTIFICATION ET SÉCURITÉ MULTI-APPAREILS ---
+        onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                // L'utilisateur n'est pas connecté, retour forcé à l'accueil
+                window.location.replace("index.html");
+            } else {
+                // Vérification de la session pour s'assurer qu'il n'est pas connecté ailleurs
+                const localSessionId = localStorage.getItem('asufor_session_id');
+                const sessionRef = ref(db, 'sessions_actives/' + user.uid);
+                
+                onValue(sessionRef, (snapshot) => {
+                    const activeSessionId = snapshot.val();
+                    
+                    // Si l'identifiant dans la base de données ne correspond pas à cet appareil
+                    if (activeSessionId && activeSessionId !== localSessionId) {
+                        alert("Votre compte a été connecté sur un autre appareil. Votre session va être fermée.");
+                        signOut(auth).then(() => {
+                            window.location.replace("index.html");
+                        });
+                    }
+                });
+            }
+        });
+
+        // --- FONCTION DE DECONNEXION ---
+        // Rattachée à 'window' pour que le HTML puisse la déclencher
+        window.deconnexion = function(event) {
+            event.preventDefault(); 
+            
+            if(confirm("Êtes-vous sûr de vouloir vous déconnecter ?")) {
+                signOut(auth).then(() => {
+                    window.location.replace("index.html"); 
+                }).catch((error) => {
+                    console.error("Erreur de déconnexion:", error);
+                    alert("Une erreur est survenue lors de la déconnexion.");
+                });
+            }
+        };
     </script>
 </body>
 </html>
