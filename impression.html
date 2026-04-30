@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-<link rel="manifest" href="manifest.json">
-<script src="pwa.js" defer></script>
+    <link rel="manifest" href="manifest.json">
+    <script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Diandioly - Système Pro v3</title>
+    <title>ASUFOR Diandioly - Impression v4</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -15,36 +15,28 @@
         body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
 
         .top-bar { 
-            display: flex; gap: 15px; justify-content: space-between; align-items: center; 
+            display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
             background: #1a2235; padding: 15px 25px; border-radius: 40px; 
-            margin: 0 auto 30px auto; max-width: 900px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            margin: 0 auto 30px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             position: sticky; top: 10px; z-index: 1000;
         }
 
-        .search-box { flex: 1; position: relative; max-width: 300px; }
+        .search-box { flex: 1; position: relative; min-width: 200px; max-width: 300px; }
         .search-box input { 
             width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
-            border: none; background: #242c40; color: white; outline: none; font-size: 1rem;
+            border: none; background: #242c40; color: white; outline: none; font-size: 1rem; box-sizing: border-box;
         }
         .search-box i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-gray); }
 
         .releveur-select {
-            padding: 12px 18px;
-            border-radius: 20px;
-            border: none;
-            background: #242c40;
-            color: white;
-            outline: none;
-            font-size: 1rem;
-            cursor: pointer;
-            max-width: 200px;
+            padding: 12px 18px; border-radius: 20px; border: none; background: #242c40; color: white; outline: none; font-size: 1rem; cursor: pointer; flex: 1; min-width: 150px; max-width: 200px;
         }
         .releveur-select option { background: var(--card-dark); }
 
         .btn-print { 
             background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
             border-radius: 20px; cursor: pointer; font-weight: bold; 
-            display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.3s;
+            display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.3s; min-width: 90px;
         }
         .btn-print:hover { transform: scale(1.05); background: #16a34a; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
 
@@ -81,32 +73,36 @@
             .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
         }
 
-        /* --- ADAPTATION MOBILE ET TV --- */
-        @media (max-width: 650px) {
+        @media (max-width: 768px) {
             .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
-            .search-box { max-width: 100%; margin-bottom: 10px; }
-            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 10px; box-sizing: border-box; }
-            .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 10px; }
+            .search-box { max-width: 100%; margin-bottom: 5px; }
+            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
+            .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 5px; padding: 15px; font-size: 1.1rem; }
             .master-selection { justify-content: center; }
             .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
             .facture-item > div:last-child { width: 100%; justify-content: space-between; }
         }
-
-        @media (min-width: 1400px) {
-            .list-container, .top-bar { max-width: 1400px; }
-            .search-box { max-width: 500px; }
-            .search-box input { font-size: 1.3rem; padding: 18px 18px 18px 50px; }
-            .facture-item { font-size: 1.2rem; padding: 25px; }
-        }
     </style>
 </head>
 <body>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) { registration.update(); }
+        });
+    }
+</script>
 
 <div class="top-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="filterList()">
     </div>
+
+    <select id="monthFilter" onchange="changeMonth()" class="releveur-select" style="border-left: 3px solid var(--accent-blue);">
+        <option value="actuel">📂 Chargement des périodes...</option>
+    </select>
 
     <select id="releveurFilter" onchange="filterList()" class="releveur-select">
         <option value="">Tous les agents</option>
@@ -123,13 +119,15 @@
     </div>
 </div>
 
-<div class="list-container" id="list-container">Chargement des données Firebase...</div>
+<div class="list-container" id="list-container">
+    <p style="text-align:center; padding: 20px;">Analyse de l'historique et calcul des factures en cours...</p>
+</div>
 
 <div id="print-zone"></div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -140,7 +138,11 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    
     let dataCache = {};
+    let allBackups = {}; 
+    let unsubCurrentMonth = null;
+    let currentSelectedMonth = "actuel";
 
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
 
@@ -149,86 +151,107 @@
         const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
         const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
         const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
-        
         const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        
-        return { 
-            debut: f(dDebut), 
-            fin: f(dFin), 
-            echeance: f(dEcheance),
-            date_edition: f(new Date())
-        };
+        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance), date_edition: f(new Date()) };
+    }
+        async function initMonthFilter() {
+        const monthSelect = document.getElementById('monthFilter');
+        try {
+            const snapshot = await get(ref(db, 'asufor_backup'));
+            let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
+            if (snapshot.exists()) {
+                allBackups = snapshot.val(); 
+                const sortedMonths = Object.keys(allBackups).sort().reverse();
+                sortedMonths.forEach(month => { optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`; });
+            }
+            monthSelect.innerHTML = optionsHtml;
+            window.changeMonth(); 
+        } catch (error) {
+            monthSelect.innerHTML = '<option value="actuel">🌟 Mois Actuel</option>';
+            window.changeMonth();
+        }
     }
 
-    onValue(ref(db, 'asufor_db_diandioly'), (snap) => {
+    window.changeMonth = async function() {
+        currentSelectedMonth = document.getElementById('monthFilter').value;
+        document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
+        if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
+        let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
+        unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
+    }
+
+    function renderData(snap) {
         const list = document.getElementById('list-container');
         const selectReleveur = document.getElementById('releveurFilter');
+        const currentReleveur = selectReleveur.value;
+        let html = ""; dataCache = {}; let releveursSet = new Set(); 
+        if (!snap.exists()) { list.innerHTML = "<p style='text-align:center'>Aucune donnée.</p>"; return; }
         
-        let html = ""; 
-        dataCache = {};
-        let releveursSet = new Set(); 
-        const currentReleveur = selectReleveur.value; 
-        
+        const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
+        const sortedMonths = Object.keys(allBackups).sort().reverse();
+        let prevMonthKey = null;
+        for (let m of sortedMonths) { if (m < selectedMonthStr) { prevMonthKey = m; break; } }
+
         snap.forEach(child => {
             const d = child.val();
-            const vol = (parseInt(d.new_index) - parseInt(d.last_index)) || 0;
-            const montantMois = parseInt(d.apaid) || 0;
-            const arrieres = parseInt(d.arrieres) || 0;
-            const total = montantMois + arrieres;
-            const agentName = d.agent_name || "Non assigné";
+            if (!d || typeof d !== 'object') return; 
+            const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
+            const nIdx = parseFloat(d.new_index || 0);
+            const lIdx = parseFloat(d.last_index || 0);
+            const vol = Math.max(0, nIdx - lIdx);
+            const facteur = parseFloat(d.facteur || 250);
+            const montantMois = vol * facteur;
+            let arrieres = 0;
 
-            // On affiche si le client a consommé OU s'il a une dette
+            if (prevMonthKey && allBackups[prevMonthKey] && allBackups[prevMonthKey].donnees) {
+                const historicalRecords = Object.values(allBackups[prevMonthKey].donnees);
+                const oldRecord = historicalRecords.find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr);
+                if (oldRecord && String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
+                    let pApaid = parseFloat(oldRecord.apaid) || (Math.max(0, parseFloat(oldRecord.new_index||0)-parseFloat(oldRecord.last_index||0)) * parseFloat(oldRecord.facteur||250));
+                    let pArrieres = parseFloat(oldRecord.arrieres || oldRecord._impaye_anterieur || 0);
+                    arrieres = pApaid + pArrieres;
+                }
+            } else { arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); }
+
+            d.arrieres = arrieres; d.vol = vol; d.montantMois = montantMois; d.total = montantMois + arrieres;
             if (vol > 0 || arrieres > 0) {
-                releveursSet.add(agentName);
-                dataCache[child.key] = { ...d, vol, montantMois, arrieres, total, agent_name: agentName };
+                releveursSet.add(d.agent_name || "Non assigné");
+                dataCache[child.key] = { ...d, agent_name: d.agent_name || "Non assigné" };
                 html += `
-                <div class="facture-item" data-search="${d.name.toLowerCase()} ${d.numero_compteur}" data-releveur="${agentName}">
+                <div class="facture-item" data-search="${(d.name || '').toLowerCase()} ${d.numero_compteur || ''}" data-releveur="${d.agent_name || 'Non assigné'}">
                     <div>
-                        <strong style="font-size:1.1rem">${d.name}</strong><br>
-                        <small style="color:var(--text-gray)">N°${d.numero_compteur} | Dette: ${fPrice(arrieres)} | Agent: ${agentName}</small>
+                        <strong>${d.name || 'Inconnu'}</strong><br>
+                        <small>N°${d.numero_compteur} | Dette: ${fPrice(arrieres)}</small>
                     </div>
                     <div style="display:flex; align-items:center; gap:20px">
-                        <div style="text-align:right"><span style="color:#fbbf24; font-weight:bold; font-size:1.1rem;">${fPrice(total)}</span></div>
-                        <input type="checkbox" class="bill-cb" data-id="${child.key}" onchange="renderPrint()" style="width:25px; height:25px; cursor:pointer;">
+                        <div style="text-align:right"><span style="color:#fbbf24; font-weight:bold;">${fPrice(d.total)}</span></div>
+                        <input type="checkbox" class="bill-cb" data-id="${child.key}" onchange="renderPrint()" style="width:25px; height:25px;">
                     </div>
                 </div>`;
             }
         });
-        
-        list.innerHTML = html || "<p style='text-align:center'>Aucun abonné à facturer pour le moment.</p>";
-
+        list.innerHTML = html || "<p style='text-align:center'>Aucune facture.</p>";
         let optionsHtml = `<option value="">Tous les agents</option>`;
-        Array.from(releveursSet).sort().forEach(agent => {
-            optionsHtml += `<option value="${agent}">${agent}</option>`;
-        });
-        selectReleveur.innerHTML = optionsHtml;
-        selectReleveur.value = currentReleveur; 
-    });
+        Array.from(releveursSet).sort().forEach(agent => { optionsHtml += `<option value="${agent}">${agent}</option>`; });
+        selectReleveur.innerHTML = optionsHtml; selectReleveur.value = currentReleveur; 
+        window.filterList(); 
+    }
+
+    initMonthFilter();
 
     window.filterList = function() {
         const q = document.getElementById('searchInput').value.toLowerCase();
-        const selectedReleveur = document.getElementById('releveurFilter').value;
-
+        const sel = document.getElementById('releveurFilter').value;
         document.querySelectorAll('.facture-item').forEach(it => {
-            const matchText = it.getAttribute('data-search').includes(q);
-            const matchReleveur = selectedReleveur === "" || it.getAttribute('data-releveur') === selectedReleveur;
-            
-            if (matchText && matchReleveur) {
-                it.style.display = 'flex';
-            } else {
-                it.style.display = 'none';
-                it.querySelector('.bill-cb').checked = false; 
-            }
+            const mText = it.getAttribute('data-search').includes(q);
+            const mRel = sel === "" || it.getAttribute('data-releveur') === sel;
+            it.style.display = (mText && mRel) ? 'flex' : 'none';
         });
-        
-        document.getElementById('master-cb').checked = false;
         window.renderPrint();
     }
 
     window.toggleAll = function(src) {
-        document.querySelectorAll('.facture-item').forEach(it => {
-            if(it.style.display !== 'none') it.querySelector('.bill-cb').checked = src.checked;
-        });
+        document.querySelectorAll('.facture-item').forEach(it => { if(it.style.display !== 'none') it.querySelector('.bill-cb').checked = src.checked; });
         window.renderPrint();
     }
 
@@ -236,11 +259,11 @@
         const selected = document.querySelectorAll('.bill-cb:checked');
         const printZone = document.getElementById('print-zone');
         let html = "";
-
         selected.forEach(box => {
             const d = dataCache[box.getAttribute('data-id')];
             const dates = formatSmartDates(d.date);
-
+            
+            // LA STRUCTURE HTML EXACTE DU BEAU DESIGN D'ORIGINE :
             html += `
             <div class="invoice-page">
                 <div class="p-header">Forage DIANDIOLY 🚰<br>77 624 70 30</div>
