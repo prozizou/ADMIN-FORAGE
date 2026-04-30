@@ -15,7 +15,7 @@
         :root {
             --bg: #0f172a; --card: rgba(30, 41, 59, 0.9);
             --primary: #3b82f6; --success: #10b981;
-            --danger: #ef4444; --text: #f8fafc;
+            --danger: #ef4444; --warning: #f59e0b; --text: #f8fafc;
             --text-dim: #94a3b8; --border: rgba(255, 255, 255, 0.1);
         }
         body {
@@ -37,6 +37,12 @@
         h1 { margin: 0; font-size: 20px; font-weight: 800; }
         .badge { color: var(--primary); font-family: monospace; font-size: 12px; background: rgba(59, 130, 246, 0.1); padding: 4px 12px; border-radius: 20px; text-transform: uppercase; }
         
+        #offline-banner {
+            display: none; background: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger);
+            color: var(--danger); padding: 10px; border-radius: 12px; font-size: 13px;
+            font-weight: bold; margin-top: 15px;
+        }
+
         .status-panel { background: rgba(15, 23, 42, 0.5); border-radius: 16px; padding: 15px; margin: 25px 0; text-align: left; font-size: 13px; border: 1px solid var(--border); }
         .status-line { display: flex; justify-content: space-between; margin-bottom: 8px; }
         
@@ -53,24 +59,23 @@
             width: 100%; padding: 18px; background: var(--primary); color: white;
             border: none; border-radius: 16px; font-size: 16px; font-weight: 700;
             cursor: pointer; transition: 0.2s; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+            display: flex; align-items: center; justify-content: center; gap: 10px;
         }
         button:disabled { background: #475569; opacity: 0.6; cursor: not-allowed; box-shadow: none; }
         
         #log-msg { margin-top: 15px; font-size: 11px; font-weight: bold; color: var(--text-dim); }
 
-        /* --- ADAPTATION POUR TRÈS PETITS ÉCRANS ET TV/4K --- */
-        @media (max-width: 380px) {
-            .card { padding: 25px 15px; }
-            h1 { font-size: 1.2rem; }
-        }
+        /* Animation du spinner */
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        @media (max-width: 380px) { .card { padding: 25px 15px; } h1 { font-size: 1.2rem; } }
         @media (min-width: 1400px) { 
-            .card { max-width: 600px; padding: 60px; }
-            h1 { font-size: 2.5rem; }
+            .card { max-width: 600px; padding: 60px; } h1 { font-size: 2.5rem; }
             .badge, .status-panel { font-size: 1.2rem; }
             input[type="password"] { font-size: 30px; padding: 25px; }
             button { font-size: 1.5rem; padding: 25px; }
-            .icon-db { width: 90px; height: 90px; }
-            svg { width: 45px; height: 45px; }
+            .icon-db { width: 90px; height: 90px; } svg { width: 45px; height: 45px; }
         }
     </style>
 </head>
@@ -84,6 +89,8 @@
         <h1>Maintenance Diandioly</h1>
         <div style="margin: 12px 0;"><span class="badge">asufor_db_diandioly</span></div>
 
+        <div id="offline-banner">⚠️ Connexion Internet perdue</div>
+
         <div class="status-panel">
             <div class="status-line"><span>Cycle actuel :</span><span id="cycle-display" style="color:var(--primary)">--/----</span></div>
             <div class="status-line"><span>État :</span><span id="state-display">Vérification...</span></div>
@@ -95,7 +102,7 @@
         </div>
 
         <button id="btn-action" onclick="runMaintenance()" disabled>Chargement...</button>
-        <div id="log-msg">Initialisation Firebase</div>
+        <div id="log-msg">Initialisation du système...</div>
     </div>
 
     <script type="module">
@@ -121,9 +128,32 @@
         const btn = document.getElementById('btn-action');
         const log = document.getElementById('log-msg');
         const stateDisp = document.getElementById('state-display');
+        const offlineBanner = document.getElementById('offline-banner');
+        
         document.getElementById('cycle-display').innerText = cycleKey;
 
+        // Code SVG pour le spinner de chargement
+        const spinnerIcon = `<svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`;
+
+        // --- GESTION DE LA CONNEXION ---
+        window.addEventListener('offline', () => {
+            offlineBanner.style.display = 'block';
+            btn.disabled = true;
+            btn.innerText = "Action bloquée (Hors ligne)";
+        });
+
+        window.addEventListener('online', () => {
+            offlineBanner.style.display = 'none';
+            btn.innerText = "Vérification...";
+            checkStatus(); 
+        });
+
         async function checkStatus() {
+            if (!navigator.onLine) {
+                log.innerText = "En attente de connexion réseau.";
+                return;
+            }
+
             try {
                 const backupRef = ref(db, `asufor_backup/${cycleKey}`);
                 const snap = await get(backupRef);
@@ -146,9 +176,19 @@
             }
         }
 
-        checkStatus();
+        if (navigator.onLine) {
+            checkStatus();
+        } else {
+            window.dispatchEvent(new Event('offline'));
+        }
 
+        // --- FONCTION DE MAINTENANCE PRINCIPALE ---
         window.runMaintenance = async function() {
+            if (!navigator.onLine) {
+                alert("Vous êtes hors ligne. Action impossible.");
+                return;
+            }
+
             const inputPass = document.getElementById('passcode').value;
 
             if (inputPass !== expectedPasscode) {
@@ -159,7 +199,8 @@
             if (!confirm(`Attention : Voulez-vous clôturer le cycle ${cycleKey} et réinitialiser la branche Diandioly ? L'opération est irréversible.`)) return;
 
             btn.disabled = true;
-            log.innerText = "Traitement en cours, ne fermez pas la page...";
+            btn.innerHTML = `${spinnerIcon} Traitement en cours...`;
+            log.innerText = "Ne fermez pas la page, communication avec le serveur...";
 
             try {
                 const sourceRef = ref(db, 'asufor_db_diandioly');
@@ -168,7 +209,6 @@
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     const updates = {}; 
-                    const isoDate = now.toISOString();
                     const count = Object.keys(data).length;
 
                     updates[`asufor_backup/${cycleKey}`] = {
@@ -184,28 +224,37 @@
                         const key = child.key;
                         const val = child.val();
                         
+                        // 1. Décalage des index
                         updates[`asufor_db_diandioly/${key}/last_index`] = String(val.new_index || "0");
                         updates[`asufor_db_diandioly/${key}/new_index`] = 0;
-                        updates[`asufor_db_diandioly/${key}/diff`] = "0";
-                        updates[`asufor_db_diandioly/${key}/apaid`] = 0;
-                        updates[`asufor_db_diandioly/${key}/facture`] = "false";
-                        updates[`asufor_db_diandioly/${key}/print`] = "false";
-                        updates[`asufor_db_diandioly/${key}/date_paiement`] = isoDate;
+                        
+                        // 2. Remise à zéro des paiements (Finance)
+                        updates[`asufor_db_diandioly/${key}/status`] = "impaye"; 
+                        updates[`asufor_db_diandioly/${key}/apaid`] = 0; 
+                        
+                        // 3. Déverrouillage des compteurs pour permettre un nouveau relevé (Agent)
+                        updates[`asufor_db_diandioly/${key}/statut`] = "false"; 
+
+                        // 4. Nettoyage de l'historique de modification
+                        updates[`asufor_db_diandioly/${key}/last_modified_by`] = null;
+                        updates[`asufor_db_diandioly/${key}/last_modified_at`] = null;
                     });
 
                     await update(ref(db), updates);
 
                     log.innerText = "MAINTENANCE RÉUSSIE AVEC SUCCÈS";
                     log.style.color = "var(--success)";
-                    btn.innerText = "Cycle Clôturé";
+                    
+                    btn.innerHTML = `Cycle Clôturé`;
                     btn.style.background = "var(--success)";
                     stateDisp.innerText = "ARCHIVÉ";
                 } else {
-                    throw new Error("La branche asufor_db_diandioly est vide.");
+                    throw new Error("La base de données est vide.");
                 }
             } catch (e) {
                 log.innerText = "Erreur : " + e.message;
                 log.style.color = "var(--danger)";
+                btn.innerHTML = "Réessayer";
                 btn.disabled = false;
             }
         };
