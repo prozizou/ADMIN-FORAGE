@@ -1,3 +1,5 @@
+<!-- stats.html – complet avec ajout du modal d'édition -->
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -110,6 +112,32 @@
 </div>
 
 <button id="back-to-top" onclick="scrollToTop()"><i class="fa-solid fa-arrow-up"></i></button>
+
+<!-- ---------- MODAL D'ÉDITION (réservé au président) ---------- -->
+<div id="edit-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeEditModal()">&times;</span>
+        <h3><i class="fa-solid fa-pen-to-square"></i> Modifier le relevé</h3>
+        <form id="edit-form">
+            <input type="hidden" id="edit-key">
+            <label>Nom du client</label>
+            <input type="text" id="edit-name" required>
+            <label>Numéro de compteur</label>
+            <input type="text" id="edit-compteur">
+            <label>Ancien index</label>
+            <input type="number" id="edit-last-index" step="any" required>
+            <label>Nouvel index</label>
+            <input type="number" id="edit-new-index" step="any" required>
+            <label>Facteur</label>
+            <input type="number" id="edit-facteur" step="any" required>
+            <div class="modal-actions">
+                <button type="button" onclick="closeEditModal()">Annuler</button>
+                <button type="submit">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- ------------------------------------------------- -->
 
 <script type="module" src="stats.js"></script>
 </body>
