@@ -23,7 +23,20 @@ let chartPieInstance = null;
 let chartBarInstance = null;
 let currentActivePath = ""; 
 
-const currentUser = localStorage.getItem('role') || 'Trésorier/Admin';
+let currentUser = 'Trésorier/Admin';
+const sessionRaw = localStorage.getItem('asufor_session');
+
+if (sessionRaw) {
+    try {
+        const sessionData = JSON.parse(sessionRaw);
+        if (sessionData && sessionData.role) {
+            currentUser = sessionData.role;
+        }
+    } catch (e) {
+        console.error("Erreur de lecture de la session:", e);
+    }
+}
+
 
 // --- FONCTIONS UTILITAIRES & THEME ---
 window.toggleTheme = function() {
@@ -127,6 +140,7 @@ window.exportCSV = function() {
     link.click();
     showToast("✅ Fichier Excel téléchargé !");
 };
+
 // --- INITIALISATION DU MENU DÉROULANT DES MOIS ---
 async function initMonthFilter() {
     const monthSelect = document.getElementById('month-filter');
@@ -137,7 +151,6 @@ async function initMonthFilter() {
         
         if (snapshot.exists()) {
             const backups = snapshot.val();
-            // On trie les mois du plus récent au plus ancien
             const sortedMonths = Object.keys(backups).sort().reverse();
             
             sortedMonths.forEach(month => {
@@ -146,7 +159,7 @@ async function initMonthFilter() {
         }
         
         monthSelect.innerHTML = optionsHtml;
-        monthSelect.value = "actuel"; // Par défaut sur actuel
+        monthSelect.value = "actuel";
         loadDataForMonth("actuel");
         
     } catch (error) {
@@ -233,7 +246,6 @@ function startSync() {
 
     initMonthFilter();
 }
-
 // --- RECHERCHE VOCALE ET TEXTUELLE ---
 function normalizeText(text) { return text ? text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['"_-]/g, " ").toLowerCase().trim() : ""; }
 function getEditDistance(a, b) {
@@ -278,6 +290,7 @@ window.startVoiceSearch = function() {
     recognition.onend = function() { micBtn.classList.remove('mic-active'); searchInput.placeholder = "🔍 Rechercher..."; };
     recognition.start();
 };
+
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
 window.applyFilter = function() {
     const selectedId = document.getElementById('agent-spinner').value;
@@ -338,7 +351,8 @@ window.applyFilter = function() {
         
         return true; 
     });
-if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.calculatedAmount || 0) - (a.calculatedAmount || 0));
+
+    if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.calculatedAmount || 0) - (a.calculatedAmount || 0));
     else if (sortOption === "min_amount") currentFilteredData.sort((a, b) => (a.calculatedAmount || 0) - (b.calculatedAmount || 0));
     else if (sortOption === "zone") currentFilteredData.sort((a, b) => (storeAgents[a.agent_id]?.zone || "Z").localeCompare(storeAgents[b.agent_id]?.zone || "Z"));
     else if (sortOption === "name") currentFilteredData.sort((a, b) => (a.name || "Z").localeCompare(b.name || "Z"));
@@ -416,7 +430,6 @@ function updateCharts(paye, impaye) {
         }
     });
 }
-
 function renderList() {
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
@@ -446,6 +459,15 @@ function renderList() {
             ? `<span class="audit-trail">Modifié par ${item.last_modified_by} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
             : '';
 
+        // Boutons d'action : édition (si président, insensible à la casse) + statut
+        const editBtn = (currentUser.toLowerCase() === 'président')
+            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
+            : '';
+
+        const statusBtn = !isPaid
+            ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
+            : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`;
+
         const div = document.createElement('div');
         div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${extraClass}`;
         
@@ -462,10 +484,8 @@ function renderList() {
             <div style="text-align:right; align-self: flex-start; margin-left: 10px;">
                 <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${calculatedAmount.toLocaleString()} F</span>
                 <div class="action-btns">
-                    ${!isPaid 
-                        ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>` 
-                        : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`
-                    }
+                    ${editBtn}
+                    ${statusBtn}
                 </div>
             </div>
         `;
@@ -480,6 +500,72 @@ function renderList() {
         btnLoadMore.style.display = "none";
     }
 }
+
+// ---------- NOUVELLES FONCTIONS : ÉDITION DES DONNÉES (PRÉSIDENT) ----------
+window.openEditModal = function(key) {
+    const item = storeReleves[key];
+    if (!item) {
+        showToast("Relevé introuvable.", true);
+        return;
+    }
+    document.getElementById('edit-key').value = key;
+    document.getElementById('edit-name').value = item.name || '';
+    document.getElementById('edit-compteur').value = item.numero_compteur || '';
+    document.getElementById('edit-last-index').value = item.last_index || '';
+    document.getElementById('edit-new-index').value = item.new_index || '';
+    document.getElementById('edit-facteur').value = item.facteur || '';
+    document.getElementById('edit-modal').style.display = 'flex';
+};
+
+window.closeEditModal = function() {
+    document.getElementById('edit-modal').style.display = 'none';
+};
+
+// Sauvegarde des modifications
+document.getElementById('edit-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Blocage de sécurité si le rôle n'est pas président
+    if (currentUser.toLowerCase() !== 'président') {
+        showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
+        closeEditModal();
+        return;
+    }
+    
+    const key = document.getElementById('edit-key').value;
+    if (!key) return;
+    
+    const updatedData = {
+        name: document.getElementById('edit-name').value.trim(),
+        numero_compteur: document.getElementById('edit-compteur').value.trim(),
+        last_index: parseFloat(document.getElementById('edit-last-index').value) || 0,
+        new_index: parseFloat(document.getElementById('edit-new-index').value) || 0,
+        facteur: parseFloat(document.getElementById('edit-facteur').value) || 0,
+        last_modified_by: currentUser,
+        last_modified_at: new Date().toISOString()
+    };
+    
+    if (!currentActivePath) {
+        showToast("Erreur : Chemin de base de données inconnu.", true);
+        return;
+    }
+    
+    const dbPath = `${currentActivePath}/${key}`;
+    update(ref(db, dbPath), updatedData)
+        .then(() => {
+            showToast("✅ Données du compteur mises à jour !");
+            closeEditModal();
+            // Pas besoin de recharger, l'écouteur onValue déclenchera applyFilter
+        })
+        .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
+});
+
+// Fermeture du modal en cliquant à l'extérieur
+document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditModal();
+});
+
+// ---------------------------------------------------------------------
 
 function handleScroll() {
     const listElement = document.getElementById('scrollable-list');
