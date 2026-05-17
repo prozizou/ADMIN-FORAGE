@@ -63,6 +63,7 @@
         button:disabled { background: #475569; opacity: 0.6; cursor: not-allowed; box-shadow: none; }
         
         #log-msg { margin-top: 15px; font-size: 11px; font-weight: bold; color: var(--text-dim); }
+
         .spinner { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
@@ -105,6 +106,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        // 1. IMPORT DE L'AUTH
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         const firebaseConfig = {
@@ -116,6 +118,7 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        // 2. INITIALISATION DE L'AUTH
         const auth = getAuth(app);
 
         const now = new Date();
@@ -242,7 +245,7 @@
             }
         };
 
-        // Lancement du diagnostic système uniquement après validation du token Auth
+        // 3. ATTENDRE LA VALIDATION AVANT DE LIRE LA BASE DE DONNÉES
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 if (navigator.onLine) {

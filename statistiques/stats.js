@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, onValue, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -10,6 +11,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
 
 let storeReleves = {};
 let storeAgents = {};
@@ -36,7 +38,6 @@ if (sessionRaw) {
         console.error("Erreur de lecture de la session:", e);
     }
 }
-
 
 // --- FONCTIONS UTILITAIRES & THEME ---
 window.toggleTheme = function() {
@@ -142,7 +143,7 @@ window.exportCSV = function() {
 };
 
 // --- INITIALISATION DU MENU DÉROULANT DES MOIS ---
-async function initMonthFilter() {
+window.initMonthFilter = async function() {
     const monthSelect = document.getElementById('month-filter');
     
     try {
@@ -229,7 +230,7 @@ function fetchPreviousMonthStats(baseMonthStr) {
 }
 
 // --- SYNCHRONISATION INITIALE ---
-function startSync() {
+window.startSync = function() {
     onValue(ref(db, 'db_agents'), (snap) => {
         storeAgents = snap.val() || {};
         const spinner = document.getElementById('agent-spinner');
@@ -244,8 +245,9 @@ function startSync() {
         spinner.value = active;
     });
 
-    initMonthFilter();
+    window.initMonthFilter();
 }
+
 // --- RECHERCHE VOCALE ET TEXTUELLE ---
 function normalizeText(text) { return text ? text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/['"_-]/g, " ").toLowerCase().trim() : ""; }
 function getEditDistance(a, b) {
@@ -290,7 +292,6 @@ window.startVoiceSearch = function() {
     recognition.onend = function() { micBtn.classList.remove('mic-active'); searchInput.placeholder = "🔍 Rechercher..."; };
     recognition.start();
 };
-
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
 window.applyFilter = function() {
     const selectedId = document.getElementById('agent-spinner').value;
@@ -443,7 +444,6 @@ function renderList() {
         const realConso = nIdx - lIdx; 
         
         const calculatedAmount = item.calculatedAmount || 0;
-        
         const isPaid = item.status === 'paye';
         const zoneName = storeAgents[item.agent_id]?.zone || "Sans Zone";
 
@@ -460,7 +460,6 @@ function renderList() {
             ? `<span class="audit-trail">Modifié par ${item.last_modified_by} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
             : '';
 
-        // Boutons d'action : édition (si président, insensible à la casse) + statut
         const editBtn = (currentUser.toLowerCase() === 'président')
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
             : '';
@@ -490,8 +489,7 @@ function renderList() {
                 </div>
             </div>
         `;
-    
-listDiv.appendChild(div);
+        listDiv.appendChild(div);
     });
 
     const btnLoadMore = document.getElementById('btn-load-more');
@@ -503,7 +501,6 @@ listDiv.appendChild(div);
     }
 }
 
-// ---------- NOUVELLES FONCTIONS : ÉDITION DES DONNÉES (PRÉSIDENT) ----------
 window.openEditModal = function(key) {
     const item = storeReleves[key];
     if (!item) {
@@ -523,11 +520,9 @@ window.closeEditModal = function() {
     document.getElementById('edit-modal').style.display = 'none';
 };
 
-// Sauvegarde des modifications
 document.getElementById('edit-form').addEventListener('submit', function(e) {
     e.preventDefault();
     
-    // Blocage de sécurité si le rôle n'est pas président
     if (currentUser.toLowerCase() !== 'président') {
         showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
         closeEditModal();
@@ -557,17 +552,13 @@ document.getElementById('edit-form').addEventListener('submit', function(e) {
         .then(() => {
             showToast("✅ Données du compteur mises à jour !");
             closeEditModal();
-            // Pas besoin de recharger, l'écouteur onValue déclenchera applyFilter
         })
         .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
 });
 
-// Fermeture du modal en cliquant à l'extérieur
 document.getElementById('edit-modal').addEventListener('click', function(e) {
     if (e.target === this) closeEditModal();
 });
-
-// ---------------------------------------------------------------------
 
 function handleScroll() {
     const listElement = document.getElementById('scrollable-list');
@@ -585,4 +576,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (listSection) listSection.addEventListener('scroll', handleScroll);
 });
 
-window.onload = startSync;
+// Écouteur d'état d'authentification requis pour valider les droits de lecture Realtime Database
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        window.startSync();
+    } else {
+        console.error("Accès Firebase refusé : Session utilisateur non valide.");
+    }
+});

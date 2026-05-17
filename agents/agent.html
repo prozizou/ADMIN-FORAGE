@@ -42,6 +42,7 @@
         }
 
         h2 { text-align: center; margin-bottom: 30px; font-weight: 600; color: var(--accent-blue); font-size: 1.4rem; }
+
         .field { margin-bottom: 20px; }
         
         label {
@@ -72,6 +73,7 @@
         }
 
         .btn-submit:active { transform: scale(0.97); }
+
         .footer-link {
             display: block; text-align: center; margin-top: 25px;
             color: rgba(255, 255, 255, 0.4); text-decoration: none; font-size: 0.8rem;
@@ -122,6 +124,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        // 1. IMPORT DE L'AUTH
         import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         const firebaseConfig = {
@@ -133,7 +136,8 @@
         
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const auth = getAuth(app); // Initialise l'instance d'authentification pour signer la requête
+        // 2. INITIALISATION DE L'AUTH (Firebase attachera désormais l'identité du président à la requête)
+        const auth = getAuth(app);
 
         window.sendToFirebase = async function() {
             const name = document.getElementById('agent_name').value.trim();

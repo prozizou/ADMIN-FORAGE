@@ -1,3 +1,9 @@
+<script src="../security.js"></script>
+<script>
+    if (typeof checkAccess === 'function') {
+        checkAccess(['président', 'secrétaire']);
+    }
+</script>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -136,7 +142,7 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -147,24 +153,32 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const auth = getAuth(app); // Requis pour valider la lecture des agents et l'écriture du compteur
+    const auth = getAuth(app);
 
     const agentsRef = ref(db, 'db_agents');
-    onValue(agentsRef, (snapshot) => {
-        const select = document.getElementById('agentSelect');
-        select.innerHTML = '<option value="">Choisir un agent</option>';
-        snapshot.forEach((child) => {
-            const d = child.val();
-            const opt = document.createElement('option');
-            opt.value = JSON.stringify({
-                id: d['agent id'] || child.key,
-                name: d.agent,
-                tel: d.agent_tel,
-                siege: d.siege || "DIANDIOLY"
+    
+    // Attendre que l'utilisateur soit authentifié avant de lire les agents
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            onValue(agentsRef, (snapshot) => {
+                const select = document.getElementById('agentSelect');
+                select.innerHTML = '<option value="">Choisir un agent</option>';
+                snapshot.forEach((child) => {
+                    const d = child.val();
+                    const opt = document.createElement('option');
+                    opt.value = JSON.stringify({
+                        id: d['agent id'] || child.key,
+                        name: d.agent,
+                        tel: d.agent_tel,
+                        siege: d.siege || "DIANDIOLY"
+                    });
+                    opt.textContent = d.agent;
+                    select.appendChild(opt);
+                });
             });
-            opt.textContent = d.agent;
-            select.appendChild(opt);
-        });
+        } else {
+            console.error("Accès bloqué : vous devez être connecté.");
+        }
     });
 
     window.enregistrer = async function() {

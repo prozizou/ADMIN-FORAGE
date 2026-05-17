@@ -3,6 +3,14 @@
 <head>
     <link rel="manifest" href="../manifest.json">
     <script src="../pwa.js" defer></script>
+    
+    <script src="../security.js"></script>
+    <script>
+        if (typeof checkAccess === 'function') {
+            checkAccess(['trésorier', 'président', 'secrétaire']);
+        }
+    </script>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v4</title>
@@ -151,6 +159,7 @@
 
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
+        
         if (selectedMonthStr && selectedMonthStr !== "actuel") {
             const parts = selectedMonthStr.split('-');
             dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
@@ -198,6 +207,7 @@
         document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
         
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
+        
         let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
         
         unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
@@ -292,9 +302,10 @@
         });
         
         releveurSelect.value = currentSelection; 
+
         window.filterList();
     }
-
+    
     window.filterList = function() {
         const q = document.getElementById('searchInput').value.toLowerCase();
         const sel = document.getElementById('releveurFilter').value;
@@ -376,12 +387,10 @@
         printZone.innerHTML = html;
     }
 
-    // Attente impérative de l'état d'authentification pour contourner le "Permission denied"
+    // Le chargement attend que l'utilisateur soit validé par Firebase
     onAuthStateChanged(auth, (user) => {
         if (user) {
             initMonthFilter();
-        } else {
-            console.error("Accès Firebase refusé : Session invalide.");
         }
     });
 </script>

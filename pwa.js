@@ -2,10 +2,23 @@
  * Gestionnaire PWA - Installation de l'application ASUFOR
  */
 
-// 1. Enregistrement du Service Worker
+// 1. Enregistrement intelligent du Service Worker (Correction du 404)
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(err => console.log('Erreur SW:', err));
+        // Détection de l'environnement (Local vs GitHub Pages)
+        const isLocal = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        
+        // Si on est sur GitHub, le dossier racine est /asufor/ , sinon en local c'est /
+        const basePath = isLocal ? '/' : '/asufor/';
+
+        // On force le chemin vers la racine exacte du projet
+        navigator.serviceWorker.register(basePath + 'sw.js', { scope: basePath })
+            .then((registration) => {
+                console.log('[PWA] Service Worker enregistré avec succès. Scope:', registration.scope);
+            })
+            .catch((err) => {
+                console.error('[PWA] Erreur SW:', err);
+            });
     });
 }
 
@@ -80,4 +93,3 @@ if (!isInstalled) {
         deferredPrompt = null;
     });
 }
-
