@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="fr"> 
+<head>
+    <link rel="manifest" href="manifest.json">
+    <script src="pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASUFOR Diandioly - Impression v4</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* Variables de couleurs globales */
+        :root { --bg-dark: #0f172a; --card-dark: #1e293b; --accent-green: #22c55e; --accent-blue: #3b82f6; --text-gray: #94a3b8; }
+        
+        /* Style général de la page (Écran) */
+        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
+
+        /* Barre de navigation et filtres en haut */
+        .top-bar { 
+            display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
+            background: #1a2235; padding: 15px 25px; border-radius: 40px; 
+            margin: 0 auto 30px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            position: sticky; top: 10px; z-index: 1000;
+        }
+
+        /* Champs de recherche et listes déroulantes */
+        .search-box { flex: 1; position: relative; min-width: 200px; max-width: 300px; }
+        .search-box input { 
+            width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
+            border: none; background: #242c40; color: white; outline: none; font-size: 1rem; box-sizing: border-box;
+        }
+        .search-box i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-gray); }
+
+        .releveur-select {
+            padding: 12px 18px; border-radius: 20px; border: none; background: #242c40; color: white; outline: none; font-size: 1rem; cursor: pointer; flex: 1; min-width: 150px; max-width: 200px;
+        }
+        .releveur-select option { background: var(--card-dark); }
+
+        /* Boutons d'action */
+        .btn-print { 
+            background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
+            border-radius: 20px; cursor: pointer; font-weight: bold; 
+            display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.3s; min-width: 90px;
+        }
+        .btn-print:hover { transform: scale(1.05); background: #16a34a; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+
+        .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
+        .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
+
+        /* Conteneur de la liste des factures */
+        .list-container { max-width: 900px; margin: auto; }
+        .facture-item { 
+            background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
+            margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; 
+            border: 1px solid rgba(255,255,255,0.05); transition: 0.2s;
+        }
+        .facture-item:hover { border-color: var(--accent-blue); }
+
+        /* Masquer la zone d'impression sur l'écran normal */
+        #print-zone { display: none; }
+
+        /* --- STYLES SPÉCIFIQUES POUR L'IMPRESSION PAPIER --- */
+        @media print {
+            @page { size: A4; margin: 0; }
+            body * { visibility: hidden; } /* On cache l'interface d'administration */
+            #print-zone, #print-zone * { visibility: visible; } /* On affiche uniquement le ticket */
+            #print-zone { display: block !important; position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
+            
+            /* Design du ticket de facture */
+            .invoice-page { width: 210mm; height: 297mm; padding: 12mm 18mm; box-sizing: border-box; background: white; page-break-after: always; }
+            .p-header { text-align: center; margin-bottom: 5px; font-size: 19px; font-weight: bold; line-height: 1.4; }
+            .section-title { font-family: 'Dancing Script', cursive; font-size: 26px; text-align: center; margin: 12px 0 6px 0; }
+            .info-box { border: 2.5px solid #333; border-radius: 18px; padding: 15px 25px; margin-bottom: 18px; }
+            .p-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 18px; }
+            .bold { font-weight: 900; }
+            .deadline { margin-top: 15px; font-size: 18px; font-weight: bold; }
+            .tresorier { font-family: 'Dancing Script', cursive; font-size: 28px; text-align: right; margin-top: -30px; }
+            
+            /* Ligne à découper (Reçu) */
+            .p-dashed { border-top: 2px dashed #000; margin: 35px 0; position: relative; }
+            .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
+            .sc-left { left: 10%; } .sc-right { right: 10%; }
+            .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
+        }
+
+        /* --- ADAPTATION MOBILE (Responsive) --- */
+        @media (max-width: 768px) {
+            .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
+            .search-box { max-width: 100%; margin-bottom: 5px; }
+            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
+            .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 5px; padding: 15px; font-size: 1.1rem; }
+            .master-selection { justify-content: center; }
+            .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
+            .facture-item > div:last-child { width: 100%; justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+
+<script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for(let registration of registrations) { registration.update(); }
+        });
+    }
+</script>
+
+<div class="top-bar">
+    <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="window.filterList()">
+    </div>
+
+    <select id="monthFilter" onchange="window.changeMonth()" class="releveur-select" style="border-left: 3px solid var(--accent-blue);">
+        <option value="actuel">📂 Chargement des périodes...</option>
+    </select>
+
+    <select id="releveurFilter" onchange="window.filterList()" class="releveur-select">
+        <option value="">Tous les agents</option>
+    </select>
+
+    <button class="btn-print" onclick="window.print()">
+        <i class="fas fa-print"></i>
+        <span>Imprimer</span>
+    </button>
+
+    <div class="master-selection">
+        <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)">
+        <label for="master-cb">Tout</label>
+    </div>
+</div>
+
+<div class="list-container" id="list-container">
+    <p style="text-align:center; padding: 20px;">Analyse de l'historique et calcul des factures en cours...</p>
+</div>
+
+<div id="print-zone"></div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    // Tes identifiants Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+        authDomain: "asufor-67a06.firebaseapp.com",
+        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+        projectId: "asufor-67a06"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    
+        // Variables globales
+    let dataCache = {};
+    let allBackups = {}; 
+    let unsubCurrentMonth = null;
+    let currentSelectedMonth = "actuel";
+
+    // Formateur de prix (Ex: 1000 devient 1 000 FCFA)
+    const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
+
+        // Utilitaire pour créer les dates automatiquement
+    function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
+        let dRef;
+        
+        // 1. Gérer les archives : si on consulte un mois passé, on prend la date de ce mois
+        if (selectedMonthStr && selectedMonthStr !== "actuel") {
+            const parts = selectedMonthStr.split('-');
+            dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
+        } else {
+            // Sinon on utilise la date du jour
+            dRef = dateReleve ? new Date(dateReleve) : new Date();
+        }
+
+        // 2. Gérer les impayés purs : si 0 consommation ce mois-ci mais qu'il y a une dette, on recule d'un mois
+        if (isOnlyArrieres) {
+            dRef.setMonth(dRef.getMonth() - 1);
+        }
+
+        const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
+        const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
+        const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
+        const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        
+        return { 
+            debut: f(dDebut), 
+            fin: f(dFin), 
+            echeance: f(dEcheance), 
+            date_edition: f(new Date()) // La date d'impression reste toujours celle d'aujourd'hui en bas
+        };
+    }
+    
+
+    // --- CHARGEMENT DES MOIS (ARCHIVES) ---
+    async function initMonthFilter() {
+        const monthSelect = document.getElementById('monthFilter');
+        try {
+            const snapshot = await get(ref(db, 'asufor_backup'));
+            let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
+            if (snapshot.exists()) {
+                allBackups = snapshot.val(); 
+                // On trie les mois du plus récent au plus ancien
+                const sortedMonths = Object.keys(allBackups).sort().reverse();
+                sortedMonths.forEach(month => { optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`; });
+            }
+            monthSelect.innerHTML = optionsHtml;
+            window.changeMonth(); 
+        } catch (error) {
+            monthSelect.innerHTML = '<option value="actuel">🌟 Mois Actuel</option>';
+            window.changeMonth();
+        }
+    }
+
+    // --- CHANGEMENT DE MOIS DANS LE MENU ---
+    window.changeMonth = async function() {
+        currentSelectedMonth = document.getElementById('monthFilter').value;
+        document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
+        
+        // Arrête d'écouter l'ancien dossier
+        if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
+        
+        // Détermine le bon dossier à lire
+        let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
+        
+        // Écoute les données et lance l'affichage
+        unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
+    }
+
+       // ==========================================
+    // PARTIE 5 : CALCUL ET AFFICHAGE À L'ÉCRAN
+    // ==========================================
+    function renderData(snap) {
+        const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
+        const sortedMonths = Object.keys(allBackups).sort().reverse();
+        
+        const listContainer = document.getElementById('list-container');
+        listContainer.innerHTML = ""; 
+        dataCache = {}; 
+
+        // --- NOUVEAU : On utilise une Map pour lier l'ID de l'agent à son vrai Nom ---
+        const agentsMap = new Map();
+
+        snap.forEach(child => {
+            const d = child.val();
+            const key = child.key;
+            
+            const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
+            const nIdx = parseFloat(d.new_index || 0);
+            const lIdx = parseFloat(d.last_index || 0);
+            const vol = Math.max(0, nIdx - lIdx);
+            const montantMois = vol * parseFloat(d.facteur || 250);
+            
+            // --- RECHERCHE PROFONDE DES ARRIÉRÉS ---
+            let arrieres = 0;
+            let historiqueTrouve = false;
+
+            for (let m of sortedMonths) {
+                if (m < selectedMonthStr && allBackups[m] && allBackups[m].donnees) {
+                    const historicalRecords = Object.values(allBackups[m].donnees);
+                    const oldRecord = historicalRecords.find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr);
+                    
+                    if (oldRecord) {
+                        historiqueTrouve = true; 
+                        if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
+                            let pApaid = parseFloat(oldRecord.apaid) || (Math.max(0, parseFloat(oldRecord.new_index||0)-parseFloat(oldRecord.last_index||0)) * parseFloat(oldRecord.facteur||250));
+                            let pArrieres = parseFloat(oldRecord.arrieres || oldRecord._impaye_anterieur || 0);
+                            arrieres = pApaid + pArrieres;
+                        }
+                        break; 
+                    }
+                }
+            }
+
+            if (!historiqueTrouve) { 
+                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); 
+            }
+
+            d.vol = vol;
+            d.montantMois = montantMois;
+            d.arrieres = arrieres;
+            d.total = montantMois + arrieres;
+            dataCache[key] = d;
+
+            // --- NOUVEAU : Enregistrement de l'agent (ID + Nom) ---
+            if (d.agent_id) {
+                agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
+            }
+
+            // --- CRÉATION DE LA CARTE VISUELLE ---
+            const div = document.createElement('div');
+            div.className = 'facture-item';
+            div.setAttribute('data-id', key);
+            div.setAttribute('data-search', `${(d.name || '').toLowerCase()} ${currentNumCompteurStr}`);
+            div.setAttribute('data-releveur', d.agent_id || '');
+            
+            const checkboxHtml = d.total > 0 
+                ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.renderPrint()" style="width:20px; height:20px; accent-color:var(--accent-green); cursor:pointer;">`
+                : `<span style="font-size: 0.8rem; color: var(--text-gray); font-style: italic;">Rien à payer</span>`;
+
+            div.innerHTML = `
+                <div>
+                    <strong style="font-size:1.1rem">${d.name || 'Inconnu'}</strong><br>
+                    <span style="color:var(--text-gray); font-size:0.9rem">Cpt: ${d.numero_compteur || 'N/A'} | Zone: ${d.zone || 'N/A'}</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:20px;">
+                    <div style="text-align:right">
+                        <div style="color:var(--text-gray); font-size:0.8rem">Mois: ${fPrice(montantMois)} | Arr: ${fPrice(arrieres)}</div>
+                        <strong style="color:${d.total > 0 ? 'var(--accent-green)' : 'var(--text-gray)'}; font-size:1.1rem">${fPrice(d.total)}</strong>
+                    </div>
+                    ${checkboxHtml}
+                </div>
+            `;
+            listContainer.appendChild(div);
+        });
+
+        // --- NOUVEAU : Met à jour la liste des agents avec les vrais noms ---
+        const releveurSelect = document.getElementById('releveurFilter');
+        const currentSelection = releveurSelect.value;
+        releveurSelect.innerHTML = '<option value="">Tous les agents</option>';
+        
+        agentsMap.forEach((agentName, agentId) => {
+            releveurSelect.innerHTML += `<option value="${agentId}">👤 ${agentName.toUpperCase()}</option>`;
+        });
+        
+        releveurSelect.value = currentSelection; 
+
+        window.filterList();
+    }
+     // ==========================================
+    // PARTIE 6 : FILTRES ET GÉNÉRATION PAPIER
+    // ==========================================
+    
+    // Initialisation au lancement
+    initMonthFilter();
+
+    // Filtre la liste (Recherche texte & Agent)
+    window.filterList = function() {
+        // ... (ne change pas ton code ici)
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const sel = document.getElementById('releveurFilter').value;
+        document.querySelectorAll('.facture-item').forEach(it => {
+            const mText = it.getAttribute('data-search').includes(q);
+            const mRel = sel === "" || it.getAttribute('data-releveur') === sel;
+            it.style.display = (mText && mRel) ? 'flex' : 'none';
+        });
+        window.renderPrint(); // Met à jour le papier si on cache des éléments sélectionnés
+    }
+
+    // Coche ou décoche tout ce qui est visible (Ignore les factures à 0)
+    window.toggleAll = function(src) {
+        document.querySelectorAll('.facture-item').forEach(it => { 
+            if(it.style.display !== 'none') {
+                const checkbox = it.querySelector('.bill-cb');
+                if (checkbox) checkbox.checked = src.checked; 
+            }
+        });
+        window.renderPrint();
+    }
+
+           // Construit les pages HTML prêtes pour l'imprimante
+    window.renderPrint = function() {
+        const selected = document.querySelectorAll('.bill-cb:checked');
+        const printZone = document.getElementById('print-zone');
+        let html = "";
+        
+        selected.forEach(box => {
+            // --- LA NOUVELLE LIGNE EST ICI ---
+            // On ignore cette facture si elle est actuellement masquée par un filtre (Agent ou Recherche)
+            if (box.closest('.facture-item').style.display === 'none') return;
+            
+            const d = dataCache[box.getAttribute('data-id')];
+            
+            // --- NOUVEAU : On détecte si c'est une facture 100% arriérés ---
+            const isOnlyArrieres = (d.montantMois === 0 && d.arrieres > 0);
+            
+            // --- NOUVEAU : On passe les paramètres à notre formateur de dates ---
+            const dates = formatSmartDates(d.date, currentSelectedMonth, isOnlyArrieres);
+            
+            // ... (Le reste de ton code HTML pour l'impression avec html += `...`)
+            
+            html += `
+            <div class="invoice-page">
+                <div class="p-header">Forage DIANDIOLY 🚰<br>77 624 70 30</div>
+                <div class="section-title">Période de consommation</div>
+                <div class="info-box">
+                    <div class="p-row"><span>DU : <strong>${dates.debut}</strong></span><span>AU : <strong>${dates.fin}</strong></span></div>
+                </div>
+                
+                <div class="section-title">Détails du client</div>
+                <div class="info-box">
+                    <div class="p-row"><span>Numéro Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
+                    <div class="p-row"><span>Prénom/Nom</span><span>${d.name}</span></div>
+                    <div class="p-row"><span>Adresse</span><span>${d.zone || 'DIANDIOLY'}</span></div>
+                </div>
+                
+                <div class="section-title">Détails consommation</div>
+                <div class="info-box">
+                    <div class="p-row"><span>Dernier index</span><span>${d.last_index} m³</span></div>
+                    <div class="p-row"><span>Nouvel index</span><span>${d.new_index} m³</span></div>
+                    <div class="p-row bold"><span>m³ vendus</span><span>${d.vol} m³</span></div>
+                    <div class="p-row"><span>Prix Unitaire</span><span>250 FCFA</span></div>
+                    <div class="p-row"><span>Montant du mois</span><span>${fPrice(d.montantMois)}</span></div>
+                    <div class="p-row" style="color:#e53e3e"><span>Solde antérieur impayé</span><span>${fPrice(d.arrieres)}</span></div>
+                    <div class="p-row bold" style="font-size:22px; border-top:2px solid #000; padding-top:8px; margin-top:5px;">
+                        <span>Montant Total à Payer</span><span>${fPrice(d.total)}</span>
+                    </div>
+                </div>
+                
+                <div class="deadline">À payer avant le <strong>${dates.echeance}</strong></div>
+                <div class="tresorier">Le trésorier</div>
+                
+                <div class="p-dashed"><i class="fas fa-scissors scissors sc-left"></i><i class="fas fa-scissors scissors sc-right"></i></div>
+                
+                <div class="section-title" style="font-size:20px">Reçu de paiement</div>
+                <div class="p-row"><span>N° Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
+                <div class="p-row"><span>Prénom & Nom</span><span>${d.name}</span></div>
+                
+                <div class="footer-line">
+                    <div class="p-row"><span>Consommation (${d.vol} m³)</span><span>${fPrice(d.montantMois)}</span></div>
+                    <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}</span></div>
+                    <div class="p-row bold" style="font-size:22px"><span>Total Reçu</span><span>${fPrice(d.total)}</span></div>
+                    <div style="font-size:12px; margin-top:5px; opacity:0.7">Date du relevé : ${dates.date_edition}</div>
+                </div>
+            </div>`;
+        });
+        printZone.innerHTML = html;
+    }
+</script>
+</body>
+</html>
