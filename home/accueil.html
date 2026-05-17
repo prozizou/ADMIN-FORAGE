@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<link rel="manifest" href="../manifest.json">
+<script src="../pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASUFOR Admin Pro - Dashboard</title>
+    <style>
+        /* --- Thèmes et Variables --- */
+        :root {
+            --bg-color: #1a1e21;
+            --text-main: #dfe6e9;
+            --accent-blue: #38bdf8;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glow: rgba(56, 189, 248, 0.15);
+        }
+        [data-theme="light"] {
+            --bg-color: #f0f2f5;
+            --text-main: #2d3436;
+            --glass: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --glow: rgba(0, 0, 0, 0.05);
+        }
+
+        /* --- Global --- */
+        body {
+            background: radial-gradient(circle at top right, #2d3436, var(--bg-color));
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0; padding: 20px;
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+            overflow-x: hidden;
+            transition: background 0.3s ease;
+        }
+
+        .bg-blob {
+            position: fixed; width: 300px; height: 300px;
+            background: var(--accent-blue);
+            filter: blur(100px); opacity: 0.15; z-index: -1;
+            border-radius: 50%;
+        }
+
+        .header { text-align: center; margin-bottom: 40px; margin-top: 20px; }
+        h1 { font-weight: 300; letter-spacing: 2px; margin-bottom: 5px; }
+        .subtitle { opacity: 0.6; font-size: 0.9rem; text-transform: uppercase; }
+
+        /* --- Grille de Navigation --- */
+        .grid {
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px; 
+            width: 100%; 
+            max-width: 1200px;
+            padding-bottom: 60px;
+        }
+
+        .glass-btn {
+            background: var(--glass);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 30px 15px;
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none; color: inherit;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .glass-btn:hover { 
+            border-color: var(--accent-blue); 
+            box-shadow: 0 15px 35px var(--glow); 
+            transform: translateY(-5px); 
+        }
+
+        .icon-box { 
+            width: 45px; height: 45px; margin-bottom: 12px; 
+            fill: var(--accent-blue); 
+            filter: drop-shadow(0 0 8px var(--glow));
+        }
+
+        span { font-weight: 500; font-size: 0.95rem; text-align: center; }
+
+        /* --- Utilitaires --- */
+        .theme-switch {
+            position: fixed; top: 20px; right: 20px;
+            width: 45px; height: 45px; border-radius: 50%;
+            background: var(--glass); border: 1px solid var(--glass-border);
+            color: var(--text-main); cursor: pointer; z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .restricted { display: none !important; }
+
+        @media (min-width: 768px) {
+            .grid { grid-template-columns: repeat(3, 1fr); gap: 30px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-blob" style="top: -50px; left: -50px;"></div>
+    <div class="bg-blob" style="bottom: 50px; right: -50px; background: #60efff;"></div>
+
+    <button class="theme-switch" onclick="window.toggleTheme()" aria-label="Changer le thème">🌓</button>
+
+    <div class="header">
+        <h1 id="welcomeTitle">ASUFOR Admin</h1>
+        <div class="subtitle" id="userRoleDisplay">Chargement...</div>
+    </div>
+
+    <div class="grid">
+        <a href="../agents/agent.html" id="btn-agent" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+            <span>Ajouter Agent</span>
+        </a>
+
+        <a href="../counter/list.html" id="btn-list" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg></div>
+            <span>Compteur</span>
+        </a>
+
+        <a href="../statistiques/stats.html" id="btn-stats" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg></div>
+            <span>Statistiques</span>
+        </a>
+
+        <a href="../impression/impression.html" id="btn-impression" class="glass-btn">
+            <div class="icon-box"><svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg></div>
+            <span>Impression</span>
+        </a>
+
+        <a href="../reset/zero.html" id="btn-zero" class="glass-btn" style="border-color: rgba(255, 99, 132, 0.2);">
+            <div class="icon-box" style="fill: #ff6b81;"><svg viewBox="0 0 24 24"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6z"/></svg></div>
+            <span style="color: #ff6b81;">Réinitialiser</span>
+        </a>
+
+        <a href="#" class="glass-btn" onclick="confirmLogout(event)" style="border-color: rgba(255, 255, 255, 0.1);">
+            <div class="icon-box" style="fill: #ff6b81;"><svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg></div>
+            <span>Déconnexion</span>
+        </a>
+    </div>
+
+    <script src="../security.js"></script>
+
+    <script>
+        const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
+
+        if (session && session.role && typeof session.role === 'string') {
+            const role = session.role;
+            
+            document.getElementById('userRoleDisplay').textContent = `Session : ${role}`;
+            document.getElementById('welcomeTitle').textContent = `Bienvenue ${role.charAt(0).toUpperCase() + role.slice(1)}`;
+            
+            if (role === 'trésorier') {
+                document.getElementById('btn-agent').classList.add('restricted');
+                document.getElementById('btn-list').classList.add('restricted');
+                document.getElementById('btn-impression').classList.add('restricted');
+                document.getElementById('btn-zero').classList.add('restricted');
+            }
+
+            if (role === 'secrétaire') {
+                document.getElementById('btn-zero').classList.add('restricted');
+            }
+
+        } else if (session) {
+            if (typeof window.logout === 'function') {
+                window.logout();
+            } else {
+                localStorage.removeItem('asufor_session');
+                window.location.replace('../index.html');
+            }
+        }
+
+        window.toggleTheme = function() {
+            const doc = document.documentElement;
+            const current = doc.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            doc.setAttribute('data-theme', next);
+            localStorage.setItem('asufor-theme', next);
+        };
+        
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('asufor-theme') || 'dark');
+
+        function confirmLogout(e) {
+            e.preventDefault();
+            if (confirm("Voulez-vous vraiment vous déconnecter ?")) {
+                if (typeof window.logout === 'function') {
+                    window.logout();
+                } else {
+                    localStorage.removeItem('asufor_session');
+                    window.location.replace('../index.html');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
