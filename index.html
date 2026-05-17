@@ -9,6 +9,7 @@
     <title>Accès ASUFOR</title>
     
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <style>
@@ -23,13 +24,12 @@
             --glass-border: rgba(255, 255, 255, 0.1);
         }
         
-        /* Arrière-plan animé pour un effet verre profond */
         body { 
             background: linear-gradient(-45deg, var(--bg-dark), var(--bg-light), var(--bg-accent), #1a1e21);
             background-size: 400% 400%;
             animation: gradientBG 15s ease infinite;
             color: var(--txt); 
-            font-family: 'Inter', sans-serif; /* Police de repli pour la lisibilité des chiffres */
+            font-family: 'Inter', sans-serif;
             display: flex; 
             justify-content: center; 
             align-items: center; 
@@ -44,7 +44,6 @@
             100% { background-position: 0% 50%; }
         }
 
-        /* Amélioration de la carte Glassmorphism */
         .card { 
             background: var(--glass); 
             backdrop-filter: blur(20px); 
@@ -58,7 +57,6 @@
             text-align: center; 
         }
 
-        /* Animation d'erreur */
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             20%, 60% { transform: translateX(-8px); }
@@ -188,7 +186,7 @@
     </svg>
     
     <h2 class="header-title">ASUFOR ADMIN</h2>
-    <p class="header-subtitle">Réseau : Diandioly</p>
+    <p class="header-subtitle">Réseau : Forage Diandioly</p>
 
     <div class="role-selector">
         <button class="role-btn active" onclick="setRole('secrétaire', this)">Secrétaire</button>
@@ -228,7 +226,6 @@
 </div>
 
 <script>
-    // Configuration Firebase (NB: Pensez à sécuriser la validation côté serveur pour la production)
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
         authDomain: "asufor-67a06.firebaseapp.com",
@@ -237,12 +234,18 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const auth = firebase.auth();
 
     let code = "";
     let role = "secrétaire";
     const statusEl = document.getElementById('status');
     const cardEl = document.getElementById('loginCard');
+
+    auth.onAuthStateChanged((user) => {
+        if (user && !localStorage.getItem('asufor_session')) {
+            auth.signOut();
+        }
+    });
 
     function setRole(newRole, btn) {
         role = newRole;
@@ -285,29 +288,26 @@
         statusEl.textContent = "Vérification en cours...";
         statusEl.className = "";
         
-        const mapping = { "secrétaire": "Secrétaire", "président": "president", "trésorier": "trésorier" };
+        const mapping = { 
+            "secrétaire": "secretaire@diandioly.com", 
+            "président": "president@diandioly.com", 
+            "trésorier": "tresorier@diandioly.com" 
+        };
         
-        db.ref(`admins/${mapping[role]}`).once('value')
-        .then((snap) => {
-            const data = snap.val();
-            const correct = data ? (data.passcode || data.Passcode) : null;
+        const email = mapping[role];
 
-            if(correct && code === correct.toString()) {
-                localStorage.setItem('asufor_session', JSON.stringify({
-                    role: role,
-                    time: Date.now()
-                }));
-                statusEl.textContent = "Accès autorisé";
-                statusEl.className = "status-success";
-                setTimeout(() => window.location.replace('accueil.html'), 600);
-            } else {
-                triggerError();
-            }
+        auth.signInWithEmailAndPassword(email, code)
+        .then((userCredential) => {
+            localStorage.setItem('asufor_session', JSON.stringify({
+                role: role,
+                time: Date.now()
+            }));
+            statusEl.textContent = "Accès autorisé";
+            statusEl.className = "status-success";
+            setTimeout(() => window.location.replace('home/accueil.html'), 600);
         })
         .catch((e) => {
-            statusEl.textContent = "Erreur de connexion réseau";
-            statusEl.className = "status-error";
-            console.error(e);
+            console.error("Échec de l'authentification :", e.message);
             triggerError();
         });
     }
