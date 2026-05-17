@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-    <link rel="manifest" href="manifest.json">
-    <script src="pwa.js" defer></script>
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v4</title>
@@ -11,13 +11,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        /* Variables de couleurs globales */
         :root { --bg-dark: #0f172a; --card-dark: #1e293b; --accent-green: #22c55e; --accent-blue: #3b82f6; --text-gray: #94a3b8; }
-        
-        /* Style général de la page (Écran) */
         body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
 
-        /* Barre de navigation et filtres en haut */
         .top-bar { 
             display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
             background: #1a2235; padding: 15px 25px; border-radius: 40px; 
@@ -25,7 +21,6 @@
             position: sticky; top: 10px; z-index: 1000;
         }
 
-        /* Champs de recherche et listes déroulantes */
         .search-box { flex: 1; position: relative; min-width: 200px; max-width: 300px; }
         .search-box input { 
             width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
@@ -38,7 +33,6 @@
         }
         .releveur-select option { background: var(--card-dark); }
 
-        /* Boutons d'action */
         .btn-print { 
             background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
             border-radius: 20px; cursor: pointer; font-weight: bold; 
@@ -49,7 +43,6 @@
         .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
         .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
 
-        /* Conteneur de la liste des factures */
         .list-container { max-width: 900px; margin: auto; }
         .facture-item { 
             background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
@@ -58,17 +51,14 @@
         }
         .facture-item:hover { border-color: var(--accent-blue); }
 
-        /* Masquer la zone d'impression sur l'écran normal */
         #print-zone { display: none; }
 
-        /* --- STYLES SPÉCIFIQUES POUR L'IMPRESSION PAPIER --- */
         @media print {
             @page { size: A4; margin: 0; }
-            body * { visibility: hidden; } /* On cache l'interface d'administration */
-            #print-zone, #print-zone * { visibility: visible; } /* On affiche uniquement le ticket */
+            body * { visibility: hidden; } 
+            #print-zone, #print-zone * { visibility: visible; } 
             #print-zone { display: block !important; position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
             
-            /* Design du ticket de facture */
             .invoice-page { width: 210mm; height: 297mm; padding: 12mm 18mm; box-sizing: border-box; background: white; page-break-after: always; }
             .p-header { text-align: center; margin-bottom: 5px; font-size: 19px; font-weight: bold; line-height: 1.4; }
             .section-title { font-family: 'Dancing Script', cursive; font-size: 26px; text-align: center; margin: 12px 0 6px 0; }
@@ -78,14 +68,12 @@
             .deadline { margin-top: 15px; font-size: 18px; font-weight: bold; }
             .tresorier { font-family: 'Dancing Script', cursive; font-size: 28px; text-align: right; margin-top: -30px; }
             
-            /* Ligne à découper (Reçu) */
             .p-dashed { border-top: 2px dashed #000; margin: 35px 0; position: relative; }
             .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
             .sc-left { left: 10%; } .sc-right { right: 10%; }
             .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
         }
 
-        /* --- ADAPTATION MOBILE (Responsive) --- */
         @media (max-width: 768px) {
             .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
             .search-box { max-width: 100%; margin-bottom: 5px; }
@@ -141,8 +129,8 @@
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    // Tes identifiants Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
         authDomain: "asufor-67a06.firebaseapp.com",
@@ -152,30 +140,24 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const auth = getAuth(app);
     
-        // Variables globales
     let dataCache = {};
     let allBackups = {}; 
     let unsubCurrentMonth = null;
     let currentSelectedMonth = "actuel";
 
-    // Formateur de prix (Ex: 1000 devient 1 000 FCFA)
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
 
-        // Utilitaire pour créer les dates automatiquement
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
-        
-        // 1. Gérer les archives : si on consulte un mois passé, on prend la date de ce mois
         if (selectedMonthStr && selectedMonthStr !== "actuel") {
             const parts = selectedMonthStr.split('-');
             dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
         } else {
-            // Sinon on utilise la date du jour
             dRef = dateReleve ? new Date(dateReleve) : new Date();
         }
 
-        // 2. Gérer les impayés purs : si 0 consommation ce mois-ci mais qu'il y a une dette, on recule d'un mois
         if (isOnlyArrieres) {
             dRef.setMonth(dRef.getMonth() - 1);
         }
@@ -189,12 +171,10 @@
             debut: f(dDebut), 
             fin: f(dFin), 
             echeance: f(dEcheance), 
-            date_edition: f(new Date()) // La date d'impression reste toujours celle d'aujourd'hui en bas
+            date_edition: f(new Date()) 
         };
     }
     
-
-    // --- CHARGEMENT DES MOIS (ARCHIVES) ---
     async function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
         try {
@@ -202,7 +182,6 @@
             let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
             if (snapshot.exists()) {
                 allBackups = snapshot.val(); 
-                // On trie les mois du plus récent au plus ancien
                 const sortedMonths = Object.keys(allBackups).sort().reverse();
                 sortedMonths.forEach(month => { optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`; });
             }
@@ -214,24 +193,16 @@
         }
     }
 
-    // --- CHANGEMENT DE MOIS DANS LE MENU ---
     window.changeMonth = async function() {
         currentSelectedMonth = document.getElementById('monthFilter').value;
         document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
         
-        // Arrête d'écouter l'ancien dossier
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
-        
-        // Détermine le bon dossier à lire
         let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
         
-        // Écoute les données et lance l'affichage
         unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
     }
 
-       // ==========================================
-    // PARTIE 5 : CALCUL ET AFFICHAGE À L'ÉCRAN
-    // ==========================================
     function renderData(snap) {
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
         const sortedMonths = Object.keys(allBackups).sort().reverse();
@@ -240,7 +211,6 @@
         listContainer.innerHTML = ""; 
         dataCache = {}; 
 
-        // --- NOUVEAU : On utilise une Map pour lier l'ID de l'agent à son vrai Nom ---
         const agentsMap = new Map();
 
         snap.forEach(child => {
@@ -253,7 +223,6 @@
             const vol = Math.max(0, nIdx - lIdx);
             const montantMois = vol * parseFloat(d.facteur || 250);
             
-            // --- RECHERCHE PROFONDE DES ARRIÉRÉS ---
             let arrieres = 0;
             let historiqueTrouve = false;
 
@@ -284,12 +253,10 @@
             d.total = montantMois + arrieres;
             dataCache[key] = d;
 
-            // --- NOUVEAU : Enregistrement de l'agent (ID + Nom) ---
             if (d.agent_id) {
                 agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
             }
 
-            // --- CRÉATION DE LA CARTE VISUELLE ---
             const div = document.createElement('div');
             div.className = 'facture-item';
             div.setAttribute('data-id', key);
@@ -316,7 +283,6 @@
             listContainer.appendChild(div);
         });
 
-        // --- NOUVEAU : Met à jour la liste des agents avec les vrais noms ---
         const releveurSelect = document.getElementById('releveurFilter');
         const currentSelection = releveurSelect.value;
         releveurSelect.innerHTML = '<option value="">Tous les agents</option>';
@@ -326,19 +292,10 @@
         });
         
         releveurSelect.value = currentSelection; 
-
         window.filterList();
     }
-     // ==========================================
-    // PARTIE 6 : FILTRES ET GÉNÉRATION PAPIER
-    // ==========================================
-    
-    // Initialisation au lancement
-    initMonthFilter();
 
-    // Filtre la liste (Recherche texte & Agent)
     window.filterList = function() {
-        // ... (ne change pas ton code ici)
         const q = document.getElementById('searchInput').value.toLowerCase();
         const sel = document.getElementById('releveurFilter').value;
         document.querySelectorAll('.facture-item').forEach(it => {
@@ -346,10 +303,9 @@
             const mRel = sel === "" || it.getAttribute('data-releveur') === sel;
             it.style.display = (mText && mRel) ? 'flex' : 'none';
         });
-        window.renderPrint(); // Met à jour le papier si on cache des éléments sélectionnés
+        window.renderPrint(); 
     }
 
-    // Coche ou décoche tout ce qui est visible (Ignore les factures à 0)
     window.toggleAll = function(src) {
         document.querySelectorAll('.facture-item').forEach(it => { 
             if(it.style.display !== 'none') {
@@ -360,26 +316,17 @@
         window.renderPrint();
     }
 
-           // Construit les pages HTML prêtes pour l'imprimante
     window.renderPrint = function() {
         const selected = document.querySelectorAll('.bill-cb:checked');
         const printZone = document.getElementById('print-zone');
         let html = "";
         
         selected.forEach(box => {
-            // --- LA NOUVELLE LIGNE EST ICI ---
-            // On ignore cette facture si elle est actuellement masquée par un filtre (Agent ou Recherche)
             if (box.closest('.facture-item').style.display === 'none') return;
             
             const d = dataCache[box.getAttribute('data-id')];
-            
-            // --- NOUVEAU : On détecte si c'est une facture 100% arriérés ---
             const isOnlyArrieres = (d.montantMois === 0 && d.arrieres > 0);
-            
-            // --- NOUVEAU : On passe les paramètres à notre formateur de dates ---
             const dates = formatSmartDates(d.date, currentSelectedMonth, isOnlyArrieres);
-            
-            // ... (Le reste de ton code HTML pour l'impression avec html += `...`)
             
             html += `
             <div class="invoice-page">
@@ -428,6 +375,15 @@
         });
         printZone.innerHTML = html;
     }
+
+    // Attente impérative de l'état d'authentification pour contourner le "Permission denied"
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            initMonthFilter();
+        } else {
+            console.error("Accès Firebase refusé : Session invalide.");
+        }
+    });
 </script>
 </body>
 </html>
