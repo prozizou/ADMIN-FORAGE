@@ -491,3 +491,98 @@ function renderList() {
             </div>
         `;
     
+listDiv.appendChild(div);
+    });
+
+    const btnLoadMore = document.getElementById('btn-load-more');
+    if (currentFilteredData.length > displayLimit) {
+        btnLoadMore.style.display = "block";
+        btnLoadMore.innerText = `⬇️ Charger plus (${currentFilteredData.length - displayLimit} restants)`;
+    } else {
+        btnLoadMore.style.display = "none";
+    }
+}
+
+// ---------- NOUVELLES FONCTIONS : ÉDITION DES DONNÉES (PRÉSIDENT) ----------
+window.openEditModal = function(key) {
+    const item = storeReleves[key];
+    if (!item) {
+        showToast("Relevé introuvable.", true);
+        return;
+    }
+    document.getElementById('edit-key').value = key;
+    document.getElementById('edit-name').value = item.name || '';
+    document.getElementById('edit-compteur').value = item.numero_compteur || '';
+    document.getElementById('edit-last-index').value = item.last_index || '';
+    document.getElementById('edit-new-index').value = item.new_index || '';
+    document.getElementById('edit-facteur').value = item.facteur || '';
+    document.getElementById('edit-modal').style.display = 'flex';
+};
+
+window.closeEditModal = function() {
+    document.getElementById('edit-modal').style.display = 'none';
+};
+
+// Sauvegarde des modifications
+document.getElementById('edit-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Blocage de sécurité si le rôle n'est pas président
+    if (currentUser.toLowerCase() !== 'président') {
+        showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
+        closeEditModal();
+        return;
+    }
+    
+    const key = document.getElementById('edit-key').value;
+    if (!key) return;
+    
+    const updatedData = {
+        name: document.getElementById('edit-name').value.trim(),
+        numero_compteur: document.getElementById('edit-compteur').value.trim(),
+        last_index: parseFloat(document.getElementById('edit-last-index').value) || 0,
+        new_index: parseFloat(document.getElementById('edit-new-index').value) || 0,
+        facteur: parseFloat(document.getElementById('edit-facteur').value) || 0,
+        last_modified_by: currentUser,
+        last_modified_at: new Date().toISOString()
+    };
+    
+    if (!currentActivePath) {
+        showToast("Erreur : Chemin de base de données inconnu.", true);
+        return;
+    }
+    
+    const dbPath = `${currentActivePath}/${key}`;
+    update(ref(db, dbPath), updatedData)
+        .then(() => {
+            showToast("✅ Données du compteur mises à jour !");
+            closeEditModal();
+            // Pas besoin de recharger, l'écouteur onValue déclenchera applyFilter
+        })
+        .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
+});
+
+// Fermeture du modal en cliquant à l'extérieur
+document.getElementById('edit-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeEditModal();
+});
+
+// ---------------------------------------------------------------------
+
+function handleScroll() {
+    const listElement = document.getElementById('scrollable-list');
+    const isBottomWindow = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
+    const isBottomDiv = listElement && (listElement.scrollTop + listElement.clientHeight) >= listElement.scrollHeight - 50;
+    const topBtn = document.getElementById('back-to-top');
+    if (window.scrollY > 300 || (listElement && listElement.scrollTop > 300)) topBtn.style.display = "block";
+    else topBtn.style.display = "none";
+    if ((isBottomWindow || isBottomDiv) && currentFilteredData.length > displayLimit) window.loadMore();
+}
+
+window.addEventListener('scroll', handleScroll);
+document.addEventListener("DOMContentLoaded", () => {
+    const listSection = document.getElementById('scrollable-list');
+    if (listSection) listSection.addEventListener('scroll', handleScroll);
+});
+
+window.onload = startSync;
