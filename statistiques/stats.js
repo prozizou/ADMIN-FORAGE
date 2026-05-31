@@ -596,8 +596,11 @@ window.exportPDFImpayes = function() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Formatage du montant : 10 500 FCFA
-    const formatMontant = (amount) => new Intl.NumberFormat('fr-FR').format(amount) + ' FCFA';
+    // Formatage du montant : 10 500 FCFA (espace ordinaire, compatible jsPDF)
+    const formatMontant = (amount) => {
+        const n = Math.round(amount || 0);
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
+    };
 
     // Période affichée dans l'entête
     const selectedPeriod = document.getElementById('month-filter').value;
