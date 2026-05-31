@@ -239,7 +239,7 @@ window.startSync = function() {
         Object.entries(storeAgents).forEach(([key, a]) => {
             let name = (a.agent || "Inconnu").trim();
             let zone = a.zone ? ` [${a.zone}]` : "";
-            html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>';
+            html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>`;
         });
         spinner.innerHTML = html;
         spinner.value = active;
@@ -369,7 +369,7 @@ window.applyFilter = function() {
         const sign = diff >= 0 ? '+' : '';
         const arrow = diff >= 0 ? '📈' : '📉';
         const colorClass = diff >= 0 ? 'trend-up' : 'trend-down';
-        el.innerHTML = `<span class="${colorClass}">${arrow} ${sign}${diff.toFixed(1)}% vs mois préc.</span>`;
+        el.innerHTML = `<span class="\${colorClass}">\${arrow} \${sign}\${diff.toFixed(1)}% vs mois préc.</span>`;
     };
     
     calcTrend(tCFA_Paye, tCFA_Paye_Prev, 'trend-money');
@@ -436,7 +436,7 @@ function updateCharts(paye, impaye) {
 function renderList() {
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
-    document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
+    document.getElementById('item-count').innerText = `\${currentFilteredData.length} élément(s) trouvé(s)`;
     const dataToShow = currentFilteredData.slice(0, displayLimit);
 
     dataToShow.forEach(item => {
@@ -458,35 +458,35 @@ function renderList() {
         }
 
         let auditHtml = item.last_modified_by 
-            ? `<span class="audit-trail">Modifié par ${item.last_modified_by} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
+            ? `<span class="audit-trail">Modifié par \${item.last_modified_by} le \${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
             : '';
 
         const editBtn = (currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
+            ? `<button class="btn-edit" onclick="openEditModal('\${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
             : '';
 
         const statusBtn = !isPaid
-            ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
-            : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`;
+            ? `<button class="btn-paye" onclick="updateStatus('\${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
+            : `<button class="btn-revoquer" onclick="confirmRevoke('\${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`;
 
         const div = document.createElement('div');
-        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${extraClass}`;
+        div.className = `item \${isPaid ? 'bg-paye' : 'bg-impaye'} \${extraClass}`;
         
         div.innerHTML = `
             <div style="flex: 1;">
-                <b style="color:var(--text-main);">${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
-                <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${item.numero_compteur || 'N/A'}</small><br>
-                <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
-                    ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
+                <b style="color:var(--text-main);">\${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[\${zoneName}]</span><br>
+                <small style="color:var(--text-main)">\${lIdx} → \${nIdx} (\${realConso.toFixed(1)} m³) | Cpt: \${item.numero_compteur || 'N/A'}</small><br>
+                <small style="font-size: 0.65rem; font-weight:bold; color:\${isPaid ? 'var(--success)' : 'var(--danger)'}">
+                    \${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
                 </small>
-                ${auditHtml}
-                ${anomalyHtml}
+                \${auditHtml}
+                \${anomalyHtml}
             </div>
             <div style="text-align:right; align-self: flex-start; margin-left: 10px;">
-                <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${calculatedAmount.toLocaleString()} F</span>
+                <span class="amt" style="color: \${isPaid ? 'var(--success)' : 'var(--danger)'}">\${calculatedAmount.toLocaleString()} F</span>
                 <div class="action-btns">
-                    ${editBtn}
-                    ${statusBtn}
+                    \${editBtn}
+                    \${statusBtn}
                 </div>
             </div>
         `;
@@ -496,7 +496,7 @@ function renderList() {
     const btnLoadMore = document.getElementById('btn-load-more');
     if (currentFilteredData.length > displayLimit) {
         btnLoadMore.style.display = "block";
-        btnLoadMore.innerText = `⬇️ Charger plus (${currentFilteredData.length - displayLimit} restants)`;
+        btnLoadMore.innerText = `⬇️ Charger plus (\${currentFilteredData.length - displayLimit} restants)`;
     } else {
         btnLoadMore.style.display = "none";
     }
@@ -596,7 +596,6 @@ window.exportPDFImpayes = function() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Récupérer les impayés de la liste filtrée
     const impayes = currentFilteredData.filter(item => item.status !== 'paye');
 
     if (impayes.length === 0) {
@@ -604,15 +603,14 @@ window.exportPDFImpayes = function() {
         return;
     }
 
-    // En-tête
     doc.setFontSize(16);
     doc.setTextColor(239, 68, 68);
     doc.text("Liste des Impayés - ASUFOR Diandioly", 14, 15);
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Date d'export : ${new Date().toLocaleDateString()}`, 14, 22);
-    doc.text(`Nombre de compteurs : ${impayes.length}`, 14, 27);
+    doc.text(`Date d'export : \${new Date().toLocaleDateString()}`, 14, 22);
+    doc.text(`Nombre de compteurs : \${impayes.length}`, 14, 27);
 
     const tableColumn = ["Client", "N° Compteur", "Zone", "Montant"];
     const tableRows = [];
@@ -650,6 +648,6 @@ window.exportPDFImpayes = function() {
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    doc.save(`ASUFOR_Impayes_${dateStr}.pdf`);
+    doc.save(`ASUFOR_Impayes_\${dateStr}.pdf`);
     showToast("✅ Fichier PDF des impayés généré avec succès !");
 };
