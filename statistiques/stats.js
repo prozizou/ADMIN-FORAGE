@@ -596,7 +596,23 @@ window.exportPDFImpayes = function() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    const impayes = currentFilteredData.filter(item => item.status !== 'paye');
+    // Formatage du montant : 10 500 FCFA
+    const formatMontant = (amount) => new Intl.NumberFormat('fr-FR').format(amount) + ' FCFA';
+
+    // Période affichée dans l'entête
+    const selectedPeriod = document.getElementById('month-filter').value;
+    let periodLabel = '';
+    if (selectedPeriod === 'actuel') {
+        const now = new Date();
+        periodLabel = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    } else {
+        const [year, month] = selectedPeriod.split('-');
+        const d = new Date(parseInt(year), parseInt(month) - 1, 1);
+        periodLabel = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    }
+
+    // Exclure les payés ET les montants à 0
+    const impayes = currentFilteredData.filter(item => item.status !== 'paye' && (item.calculatedAmount || 0) > 0);
 
     if (impayes.length === 0) {
         showToast("Aucun impayé trouvé pour cette sélection.", true);
@@ -606,11 +622,15 @@ window.exportPDFImpayes = function() {
     doc.setFontSize(16);
     doc.setTextColor(239, 68, 68);
     doc.text("Liste des Impayés - ASUFOR Diandioly", 14, 15);
-    
+
+    doc.setFontSize(11);
+    doc.setTextColor(60, 60, 60);
+    doc.text(`Période : ${periodLabel}`, 14, 23);
+
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Date d'export : ${new Date().toLocaleDateString()}`, 14, 22);
-    doc.text(`Nombre de compteurs : ${impayes.length}`, 14, 27);
+    doc.text(`Date d'export : ${new Date().toLocaleDateString('fr-FR')}`, 14, 30);
+    doc.text(`Nombre de compteurs : ${impayes.length}`, 14, 36);
 
     const tableColumn = ["Client", "N° Compteur", "Zone", "Montant"];
     const tableRows = [];
@@ -628,19 +648,19 @@ window.exportPDFImpayes = function() {
             clientName,
             numCompteur,
             zoneName,
-            montant.toLocaleString() + " CFA"
+            formatMontant(montant)
         ]);
     });
 
     tableRows.push([
         { content: 'TOTAL À RECOUVRER', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', textColor: [239, 68, 68] } },
-        { content: totalImpaye.toLocaleString() + " CFA", styles: { fontStyle: 'bold', textColor: [239, 68, 68] } }
+        { content: formatMontant(totalImpaye), styles: { fontStyle: 'bold', textColor: [239, 68, 68] } }
     ]);
 
     doc.autoTable({
         head: [tableColumn],
         body: tableRows,
-        startY: 32,
+        startY: 41,
         theme: 'striped',
         headStyles: { fillColor: [239, 68, 68] },
         styles: { fontSize: 9 },
