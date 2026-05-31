@@ -239,7 +239,7 @@ window.startSync = function() {
         Object.entries(storeAgents).forEach(([key, a]) => {
             let name = (a.agent || "Inconnu").trim();
             let zone = a.zone ? ` [${a.zone}]` : "";
-            html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>`;
+            html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>';
         });
         spinner.innerHTML = html;
         spinner.value = active;
@@ -292,6 +292,7 @@ window.startVoiceSearch = function() {
     recognition.onend = function() { micBtn.classList.remove('mic-active'); searchInput.placeholder = "🔍 Rechercher..."; };
     recognition.start();
 };
+
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
 window.applyFilter = function() {
     const selectedId = document.getElementById('agent-spinner').value;
@@ -584,3 +585,71 @@ onAuthStateChanged(auth, (user) => {
         console.error("Accès Firebase refusé : Session utilisateur non valide.");
     }
 });
+
+// --- EXPORT PDF DES IMPAYÉS ---
+window.exportPDFImpayes = function() {
+    if (typeof window.jspdf === 'undefined') {
+        showToast("Erreur : La bibliothèque PDF n'est pas chargée.", true);
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Récupérer les impayés de la liste filtrée
+    const impayes = currentFilteredData.filter(item => item.status !== 'paye');
+
+    if (impayes.length === 0) {
+        showToast("Aucun impayé trouvé pour cette sélection.", true);
+        return;
+    }
+
+    // En-tête
+    doc.setFontSize(16);
+    doc.setTextColor(239, 68, 68);
+    doc.text("Liste des Impayés - ASUFOR Diandioly", 14, 15);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Date d'export : ${new Date().toLocaleDateString()}`, 14, 22);
+    doc.text(`Nombre de compteurs : ${impayes.length}`, 14, 27);
+
+    const tableColumn = ["Client", "N° Compteur", "Zone", "Montant"];
+    const tableRows = [];
+    let totalImpaye = 0;
+
+    impayes.forEach(item => {
+        const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
+        const clientName = item.name || "Inconnu";
+        const numCompteur = item.numero_compteur || "N/A";
+        const montant = item.calculatedAmount || 0;
+        
+        totalImpaye += montant;
+
+        tableRows.push([
+            clientName,
+            numCompteur,
+            zoneName,
+            montant.toLocaleString() + " CFA"
+        ]);
+    });
+
+    tableRows.push([
+        { content: 'TOTAL À RECOUVRER', colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', textColor: [239, 68, 68] } },
+        { content: totalImpaye.toLocaleString() + " CFA", styles: { fontStyle: 'bold', textColor: [239, 68, 68] } }
+    ]);
+
+    doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: 32,
+        theme: 'striped',
+        headStyles: { fillColor: [239, 68, 68] },
+        styles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [254, 242, 242] }
+    });
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    doc.save(`ASUFOR_Impayes_${dateStr}.pdf`);
+    showToast("✅ Fichier PDF des impayés généré avec succès !");
+};
