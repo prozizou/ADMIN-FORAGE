@@ -7,74 +7,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Accès ASUFOR</title>
-    
+
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <style>
-        :root { 
-            --bg-dark: #0f172a; 
-            --bg-light: #1e293b; 
+        :root {
+            --bg-dark: #0f172a;
+            --bg-light: #1e293b;
             --bg-accent: #0c4a6e;
-            --txt: #f8fafc; 
-            --blue: #38bdf8; 
+            --txt: #f8fafc;
+            --blue: #38bdf8;
             --error: #ef4444;
-            --glass: rgba(255, 255, 255, 0.05); 
+            --glass: rgba(255, 255, 255, 0.05);
             --glass-border: rgba(255, 255, 255, 0.1);
         }
-        
-        body { 
+
+        body {
             background: linear-gradient(-45deg, var(--bg-dark), var(--bg-light), var(--bg-accent), #1a1e21);
             background-size: 400% 400%;
             animation: gradientBG 15s ease infinite;
-            color: var(--txt); 
+            color: var(--txt);
             font-family: 'Inter', sans-serif;
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            margin: 0; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
             overflow: hidden;
         }
 
         @keyframes gradientBG {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
+            0%   { background-position: 0% 50%; }
+            50%  { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
 
-        .card { 
-            background: var(--glass); 
-            backdrop-filter: blur(20px); 
+        .card {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border); 
+            border: 1px solid var(--glass-border);
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            border-radius: 32px; 
-            padding: 35px 30px; 
-            width: 90%; 
-            max-width: 380px; 
-            text-align: center; 
+            border-radius: 32px;
+            padding: 35px 30px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
         }
 
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-8px); }
-            40%, 80% { transform: translateX(8px); }
+            20%, 60%  { transform: translateX(-8px); }
+            40%, 80%  { transform: translateX(8px); }
         }
         .shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
 
         .header-title {
-            font-family: 'Hudhudh Bold', sans-serif;
             font-size: 24px;
-            font-weight: normal;
+            font-weight: 700;
             margin: 10px 0 5px 0;
             letter-spacing: 1px;
         }
 
         .header-subtitle {
-            opacity: 0.6; 
-            font-size: 11px; 
+            opacity: 0.6;
+            font-size: 11px;
             margin-bottom: 25px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -87,83 +86,100 @@
             margin-bottom: 5px;
         }
 
-        .role-selector { 
-            display: flex; 
-            gap: 5px; 
-            background: rgba(0,0,0,0.25); 
-            padding: 6px; 
-            border-radius: 50px; 
-            margin-bottom: 30px; 
+        .role-selector {
+            display: flex;
+            gap: 5px;
+            background: rgba(0,0,0,0.25);
+            padding: 6px;
+            border-radius: 50px;
+            margin-bottom: 30px;
             border: 1px solid rgba(255,255,255,0.05);
         }
-        
-        .role-btn { 
-            flex: 1; 
-            padding: 10px; 
-            border-radius: 50px; 
-            border: none; 
-            background: transparent; 
-            color: var(--txt); 
-            cursor: pointer; 
-            font-family: 'Hudhudh Bold', sans-serif;
-            font-size: 12px; 
-            transition: all 0.3s ease; 
+
+        .role-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 50px;
+            border: none;
+            background: transparent;
+            color: var(--txt);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.3s ease;
             opacity: 0.7;
         }
-        
-        .role-btn.active { 
-            background: var(--blue); 
-            color: #000; 
+
+        .role-btn.active {
+            background: var(--blue);
+            color: #000;
             opacity: 1;
             box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
         }
 
-        .dots { display: flex; justify-content: center; gap: 15px; margin-bottom: 35px; height: 14px; align-items: center; }
-        .dot { 
-            width: 12px; 
-            height: 12px; 
-            border-radius: 50%; 
-            background: rgba(255,255,255,0.15); 
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+        .dots {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 35px;
+            height: 14px;
+            align-items: center;
         }
-        .dot.active { 
-            background: var(--blue); 
-            box-shadow: 0 0 12px var(--blue); 
-            transform: scale(1.3); 
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.15);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .dot.active {
+            background: var(--blue);
+            box-shadow: 0 0 12px var(--blue);
+            transform: scale(1.3);
         }
 
-        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .key { 
-            background: rgba(255,255,255,0.03); 
-            border: 1px solid rgba(255,255,255,0.08); 
-            padding: 18px; 
-            border-radius: 20px; 
-            color: var(--txt); 
-            font-size: 24px; 
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .key {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 18px;
+            border-radius: 20px;
+            color: var(--txt);
+            font-size: 24px;
             font-weight: 300;
-            cursor: pointer; 
+            cursor: pointer;
             transition: all 0.15s ease;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        .key:active { 
-            transform: scale(0.92); 
-            background: rgba(255,255,255,0.15); 
+        .key:active {
+            transform: scale(0.92);
+            background: rgba(255,255,255,0.15);
             border-color: rgba(255,255,255,0.3);
+        }
+        .key:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
 
         .key-icon { width: 24px; height: 24px; stroke: currentColor; }
-        
-        #status { 
-            margin-top: 25px; 
-            font-size: 13px; 
-            min-height: 20px; 
+
+        #status {
+            margin-top: 25px;
+            font-size: 13px;
+            min-height: 20px;
             transition: color 0.3s;
         }
-        
-        .status-error { color: var(--error); }
+
+        .status-error   { color: var(--error); }
         .status-success { color: var(--blue); }
+        .status-info    { color: #94a3b8; }
 
         .forgot-link {
             display: inline-block;
@@ -180,11 +196,11 @@
 <body>
 
 <div class="card" id="loginCard">
-    <svg class="icon-lock" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg class="icon-lock" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
         <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
     </svg>
-    
+
     <h2 class="header-title">ASUFOR ADMIN</h2>
     <p class="header-subtitle">Réseau : Forage Diandioly</p>
 
@@ -195,11 +211,15 @@
     </div>
 
     <div class="dots" id="dots">
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-        <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
     </div>
 
-    <div class="keypad">
+    <div class="keypad" id="keypad">
         <button class="key" onclick="press('1')">1</button>
         <button class="key" onclick="press('2')">2</button>
         <button class="key" onclick="press('3')">3</button>
@@ -212,17 +232,16 @@
         <div style="visibility:hidden"></div>
         <button class="key" onclick="press('0')">0</button>
         <button class="key" onclick="del()" aria-label="Effacer">
-            <svg class="key-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="key-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
                 <line x1="18" y1="9" x2="12" y2="15"></line>
                 <line x1="12" y1="9" x2="18" y2="15"></line>
             </svg>
         </button>
     </div>
-    
+
     <p id="status">&nbsp;</p>
-    
-    <a href="#" class="forgot-link">Assistance administrateur</a>
+    <a href="#" class="forgot-link" onclick="return false;">Assistance administrateur</a>
 </div>
 
 <script>
@@ -238,14 +257,52 @@
 
     let code = "";
     let role = "secrétaire";
-    const statusEl = document.getElementById('status');
-    const cardEl = document.getElementById('loginCard');
+    let isVerifying = false;
 
+    // ✅ CORRECTION : Protection contre brute-force
+    let failCount = 0;
+    let lockUntil = 0;
+    const MAX_FAILS = 5;
+    const LOCK_DURATION_MS = 30000; // 30 secondes
+
+    const statusEl = document.getElementById('status');
+    const cardEl   = document.getElementById('loginCard');
+    const keypadEl = document.getElementById('keypad');
+
+    const emailMap = {
+        "secrétaire": "secretaire@diandioly.com",
+        "président":  "president@diandioly.com",
+        "trésorier":  "tresorier@diandioly.com"
+    };
+
+    // ✅ CORRECTION : On ne force pas signOut si l'utilisateur a une session valide
     auth.onAuthStateChanged((user) => {
-        if (user && !localStorage.getItem('asufor_session')) {
-            auth.signOut();
+        if (user) {
+            const session = localStorage.getItem('asufor_session');
+            if (!session) {
+                // Connecté Firebase mais pas de session locale => déconnexion propre
+                auth.signOut();
+            }
+            // Si session locale existe, on le laisse tranquille (il est déjà authentifié)
         }
     });
+
+    function setLockState(locked) {
+        const keys = keypadEl.querySelectorAll('.key');
+        keys.forEach(k => k.disabled = locked);
+    }
+
+    function checkLock() {
+        if (Date.now() < lockUntil) {
+            const remaining = Math.ceil((lockUntil - Date.now()) / 1000);
+            statusEl.textContent = `Trop de tentatives. Attendez ${remaining}s.`;
+            statusEl.className = 'status-error';
+            setLockState(true);
+            return true;
+        }
+        setLockState(false);
+        return false;
+    }
 
     function setRole(newRole, btn) {
         role = newRole;
@@ -258,69 +315,89 @@
     }
 
     function press(n) {
-        if(code.length < 6) {
+        if (checkLock() || isVerifying) return;
+        if (code.length < 6) {
             code += n;
             updateDots();
-            if(code.length === 6) verify();
+            if (code.length === 6) verify();
         }
     }
 
     function del() {
-        if(code.length > 0) {
+        if (isVerifying) return;
+        if (code.length > 0) {
             code = code.slice(0, -1);
             updateDots();
-            statusEl.innerHTML = "&nbsp;";
+            if (!checkLock()) {
+                statusEl.innerHTML = "&nbsp;";
+                statusEl.className = "";
+            }
         }
     }
 
     function updateDots() {
         const dots = document.querySelectorAll('.dot');
         dots.forEach((d, i) => {
-            if (i < code.length) {
-                d.classList.add('active');
-            } else {
-                d.classList.remove('active');
-            }
+            d.classList.toggle('active', i < code.length);
         });
     }
 
     function verify() {
+        if (isVerifying) return;
+        isVerifying = true;
+
         statusEl.textContent = "Vérification en cours...";
-        statusEl.className = "";
-        
-        const mapping = { 
-            "secrétaire": "secretaire@diandioly.com", 
-            "président": "president@diandioly.com", 
-            "trésorier": "tresorier@diandioly.com" 
-        };
-        
-        const email = mapping[role];
+        statusEl.className = "status-info";
+        setLockState(true);
+
+        const email = emailMap[role];
+        if (!email) {
+            triggerError("Rôle inconnu.");
+            return;
+        }
 
         auth.signInWithEmailAndPassword(email, code)
-        .then((userCredential) => {
-            localStorage.setItem('asufor_session', JSON.stringify({
-                role: role,
-                time: Date.now()
-            }));
-            statusEl.textContent = "Accès autorisé";
-            statusEl.className = "status-success";
-            setTimeout(() => window.location.replace('home/accueil.html'), 600);
-        })
-        .catch((e) => {
-            console.error("Échec de l'authentification :", e.message);
-            triggerError();
-        });
+            .then(() => {
+                failCount = 0;
+                localStorage.setItem('asufor_session', JSON.stringify({
+                    role: role,
+                    time: Date.now()
+                }));
+                statusEl.textContent = "Accès autorisé ✓";
+                statusEl.className = "status-success";
+                setTimeout(() => window.location.replace('home/accueil.html'), 600);
+            })
+            .catch((e) => {
+                console.error("Authentification échouée :", e.code);
+                failCount++;
+
+                if (failCount >= MAX_FAILS) {
+                    lockUntil = Date.now() + LOCK_DURATION_MS;
+                    failCount = 0;
+                    statusEl.textContent = "Trop de tentatives. Attendez 30s.";
+                    statusEl.className = "status-error";
+                    setTimeout(() => {
+                        checkLock();
+                        code = "";
+                        updateDots();
+                        isVerifying = false;
+                    }, LOCK_DURATION_MS);
+                } else {
+                    triggerError(`Code incorrect (${failCount}/${MAX_FAILS})`);
+                }
+            });
     }
 
-    function triggerError() {
-        statusEl.textContent = "Code d'accès incorrect";
+    function triggerError(message) {
+        statusEl.textContent = message || "Code d'accès incorrect";
         statusEl.className = "status-error";
         cardEl.classList.add('shake');
-        
         setTimeout(() => {
             cardEl.classList.remove('shake');
-            code = ""; 
+            code = "";
             updateDots();
+            isVerifying = false;
+            if (!checkLock()) setLockState(false);
         }, 500);
     }
 </script>
