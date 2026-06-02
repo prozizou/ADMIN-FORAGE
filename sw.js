@@ -5,7 +5,7 @@
 // 2. Gestion propre des erreurs de cache
 // 3. Mise à jour forcée fiable avec skipWaiting + clients.claim
 
-const CACHE_NAME = 'asufor-cache-v6.1';
+const CACHE_NAME = 'asufor-cache-v6';
 
 // Ressources à ne JAMAIS mettre en cache localement
 const NEVER_CACHE = [
