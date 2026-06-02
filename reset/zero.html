@@ -42,9 +42,12 @@
             border-radius: 28px;
             padding: 30px;
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
+            max-height: 95vh;
+            display: flex;
+            flex-direction: column;
         }
 
         .icon-db {
@@ -56,6 +59,9 @@
             justify-content: center;
             margin-bottom: 20px;
             color: var(--primary);
+            margin-left: auto;
+            margin-right: auto;
+            flex-shrink: 0;
         }
 
         h1 { margin: 0; font-size: 20px; font-weight: 800; }
@@ -86,10 +92,11 @@
             background: rgba(15, 23, 42, 0.5);
             border-radius: 16px;
             padding: 15px;
-            margin: 25px 0;
+            margin: 20px 0;
             text-align: left;
             font-size: 13px;
             border: 1px solid var(--border);
+            flex-shrink: 0;
         }
 
         .status-line {
@@ -99,7 +106,72 @@
         }
         .status-line:last-child { margin-bottom: 0; }
 
-        .input-group { margin-bottom: 25px; }
+        button#btn-verify {
+            width: 100%;
+            padding: 12px;
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+            border: 1px solid var(--warning);
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            display: none;
+            transition: all 0.2s;
+        }
+        button#btn-verify:hover { background: rgba(245, 158, 11, 0.3); }
+
+        .unpaid-container {
+            display: none;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 20px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+
+        .unpaid-item {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            border-left: 3px solid var(--warning);
+        }
+        .unpaid-item:last-child { margin-bottom: 0; }
+        
+        .unpaid-header { font-weight: bold; margin-bottom: 8px; color: var(--text); }
+        .unpaid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+        
+        .unpaid-item input, .unpaid-item select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 12px;
+            box-sizing: border-box;
+        }
+        
+        .btn-save-item {
+            width: 100%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-save-item:hover { opacity: 0.9; }
+
+        .input-group { margin-bottom: 20px; flex-shrink: 0; }
 
         .input-group label {
             display: block;
@@ -143,6 +215,7 @@
             align-items: center;
             justify-content: center;
             gap: 10px;
+            flex-shrink: 0;
         }
 
         button#btn-action:disabled {
@@ -158,6 +231,7 @@
             font-weight: bold;
             color: var(--text-dim);
             min-height: 18px;
+            flex-shrink: 0;
         }
 
         .spinner { animation: spin 1s linear infinite; }
@@ -166,12 +240,18 @@
         .footer-link {
             display: block;
             text-align: center;
-            margin-top: 20px;
+            margin-top: 15px;
             color: rgba(255,255,255,0.3);
             text-decoration: none;
             font-size: 0.75rem;
+            flex-shrink: 0;
         }
         .footer-link:hover { color: var(--text-dim); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
 
         @media (max-width: 380px) {
             .card { padding: 25px 15px; }
@@ -180,7 +260,6 @@
     </style>
 </head>
 <body>
-
     <div class="card">
         <div class="icon-db">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -191,7 +270,7 @@
         </div>
 
         <h1>Maintenance Diandioly</h1>
-        <div style="margin: 12px 0;"><span class="badge">asufor_db_diandioly</span></div>
+        <div style="margin: 8px 0;"><span class="badge">asufor_db_diandioly</span></div>
 
         <div id="offline-banner">⚠️ Connexion Internet perdue</div>
 
@@ -210,6 +289,11 @@
             </div>
         </div>
 
+        <button id="btn-verify" onclick="toggleUnpaidList()">🔍 Vérifier & Éditer les Impayés avant Clôture</button>
+        <div id="unpaid-container" class="unpaid-container">
+            <div id="unpaid-content">Chargement des données...</div>
+        </div>
+
         <div class="input-group">
             <label>Passcode Dynamique (AnnéeMois)</label>
             <input type="password" id="passcode" maxlength="6" placeholder="AAAAMM" inputmode="numeric">
@@ -219,8 +303,7 @@
         <div id="log-msg">Initialisation du système...</div>
         <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
     </div>
-
-    <script type="module">
+        <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -249,6 +332,7 @@
         const expectedPasscode = `${year}${month}`;
 
         const btn          = document.getElementById('btn-action');
+        const btnVerify    = document.getElementById('btn-verify');
         const log          = document.getElementById('log-msg');
         const stateDisp    = document.getElementById('state-display');
         const countDisp    = document.getElementById('count-display');
@@ -261,6 +345,7 @@
         window.addEventListener('offline', () => {
             offlineBanner.style.display = 'block';
             btn.disabled = true;
+            btnVerify.style.display = 'none';
             btn.textContent = "Action bloquée (Hors ligne)";
         });
 
@@ -283,9 +368,9 @@
                     stateDisp.style.color = "var(--danger)";
                     btn.textContent = "Action verrouillée";
                     btn.disabled = true;
+                    btnVerify.style.display = 'none';
                     log.textContent = "Le backup du cycle en cours existe déjà.";
                 } else {
-                    // Compter les entrées
                     const srcSnap = await get(ref(db, 'asufor_db_diandioly'));
                     const count = srcSnap.exists() ? Object.keys(srcSnap.val()).length : 0;
                     countDisp.textContent = count + ' entrée(s)';
@@ -294,14 +379,118 @@
                     stateDisp.style.color = "var(--success)";
                     btn.textContent = "Lancer Maintenance";
                     btn.disabled = false;
-                    log.textContent = "Saisissez le passcode du mois (" + cycleKey.replace('-', '') + ").";
+                    btnVerify.style.display = 'block'; 
+                    log.textContent = "Saisissez le passcode du mois (" + expectedPasscode + ").";
                 }
             } catch (e) {
                 log.textContent = "Erreur de connexion Firebase : " + e.message;
             }
         }
 
-        // Lancer une fois que Firebase Auth est prêt
+        window.toggleUnpaidList = async function() {
+            const container = document.getElementById('unpaid-container');
+            if (container.style.display === 'none' || container.style.display === '') {
+                container.style.display = 'block';
+                await loadUnpaidMeters();
+            } else {
+                container.style.display = 'none';
+            }
+        };
+
+        window.loadUnpaidMeters = async function() {
+            const contentDiv = document.getElementById('unpaid-content');
+            contentDiv.innerHTML = `${spinnerIcon} Chargement des impayés...`;
+            
+            try {
+                const snap = await get(ref(db, 'asufor_db_diandioly'));
+                if (!snap.exists()) {
+                    contentDiv.innerHTML = 'Aucune donnée trouvée dans la base.';
+                    return;
+                }
+
+                const data = snap.val();
+                let html = '';
+                let count = 0;
+
+                for (const key in data) {
+                    const val = data[key];
+                    const estPaye = String(val.status || "").trim().toLowerCase() === "paye" || 
+                                    String(val.statut || "").trim().toLowerCase() === "true";
+
+                    if (!estPaye) {
+                        count++;
+                        const nomAffiche = val.nom ? `${val.prenom || ''} ${val.nom}`.trim() : key;
+                        const ancienIdx = val.last_index || 0;
+                        const nouvelIdx = val.new_index || ancienIdx;
+
+                        html += `
+                        <div class="unpaid-item" id="item_${key}">
+                            <div class="unpaid-header">👤 ${nomAffiche} (ID: ${key})</div>
+                            <div class="unpaid-details">
+                                <div><small style="color:var(--text-dim)">Ancien Index</small><br>${ancienIdx}</div>
+                                <div>
+                                    <small style="color:var(--text-dim)">Nouvel Index</small><br>
+                                    <input type="number" id="idx_${key}" value="${nouvelIdx}">
+                                </div>
+                                <div style="grid-column: span 2;">
+                                    <small style="color:var(--text-dim)">Statut du paiement</small><br>
+                                    <select id="stat_${key}">
+                                        <option value="impaye" selected>🔴 Impayé</option>
+                                        <option value="paye">🟢 Payé</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button class="btn-save-item" onclick="saveMeterEdit('${key}')">💾 Enregistrer modif.</button>
+                        </div>`;
+                    }
+                }
+
+                if (count === 0) {
+                    contentDiv.innerHTML = '<div style="color:var(--success); font-weight:bold; text-align:center; padding:10px;">✅ Tous les compteurs sont à jour et payés !</div>';
+                } else {
+                    contentDiv.innerHTML = `<div style="margin-bottom:12px; font-weight:bold; color:var(--warning)">⚠️ ${count} compteurs actuellement impayés</div>` + html;
+                }
+
+            } catch (e) {
+                contentDiv.innerHTML = `<div style="color:var(--danger)">Erreur de chargement : ${e.message}</div>`;
+            }
+        };
+
+        window.saveMeterEdit = async function(key) {
+            const btnSave = document.querySelector(`#item_${key} .btn-save-item`);
+            const originalText = btnSave.innerHTML;
+            btnSave.innerHTML = "Sauvegarde...";
+            btnSave.disabled = true;
+
+            const newIdx = document.getElementById(`idx_${key}`).value;
+            const newStat = document.getElementById(`stat_${key}`).value;
+
+            try {
+                const updates = {};
+                updates[`asufor_db_diandioly/${key}/new_index`] = Number(newIdx);
+                updates[`asufor_db_diandioly/${key}/status`] = newStat;
+                updates[`asufor_db_diandioly/${key}/statut`] = newStat === 'paye' ? "true" : "false";
+
+                await update(ref(db), updates);
+                
+                if(newStat === 'paye') {
+                    document.getElementById(`item_${key}`).remove();
+                } else {
+                    btnSave.innerHTML = "✅ Sauvegardé";
+                    btnSave.style.background = "var(--success)";
+                    setTimeout(() => {
+                        btnSave.innerHTML = originalText;
+                        btnSave.style.background = "var(--primary)";
+                        btnSave.disabled = false;
+                    }, 2000);
+                }
+            } catch(e) {
+                alert("Erreur lors de la mise à jour : " + e.message);
+                btnSave.innerHTML = "❌ Erreur";
+                btnSave.disabled = false;
+            }
+        };
+
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 if (navigator.onLine) checkStatus();
@@ -326,6 +515,9 @@
 
             if (!confirm(`⚠️ ATTENTION\n\nVoulez-vous clôturer le cycle ${cycleKey} et réinitialiser la base Diandioly ?\n\nCette opération est irréversible.`)) return;
 
+            document.getElementById('unpaid-container').style.display = 'none';
+            btnVerify.style.display = 'none';
+
             btn.disabled = true;
             btn.innerHTML = `${spinnerIcon} Traitement en cours...`;
             log.textContent = "Ne fermez pas la page, communication avec Firebase...";
@@ -341,7 +533,6 @@
                 const keys    = Object.keys(data);
                 const updates = {};
 
-                // --- Sauvegarde complète du cycle ---
                 updates[`asufor_backup/${cycleKey}`] = {
                     info: {
                         date_sauvegarde: now.toLocaleString('fr-FR'),
@@ -351,7 +542,6 @@
                     donnees: data
                 };
 
-                // ✅ CORRECTION FINALE : Calcul rigoureux de apaid (dette réelle du cycle)
                 keys.forEach(key => {
                     const val = data[key];
                     const nIdx    = parseFloat(val.new_index   || 0);
@@ -360,27 +550,23 @@
                     const conso   = Math.max(0, nIdx - lIdx);
                     const montantMois = conso * facteur;
 
-                    // ── Calcul de la dette à reporter (apaid) ──────────────────────────
-                    // Si le compteur a été payé ce mois-ci → aucune dette à reporter
-                    // Sinon → dette = montant du mois clôturé + arriérés déjà existants
                     const estPaye = String(val.status || "").trim().toLowerCase() === "paye"
                                  || String(val.statut || "").trim().toLowerCase() === "true";
 
                     const arrieresCourants = parseFloat(val.arrieres || val._impaye_anterieur || 0);
                     const nouvelApaid = estPaye ? 0 : (montantMois + arrieresCourants);
-                    // ──────────────────────────────────────────────────────────────────
 
                     updates[`asufor_db_diandioly/${key}/last_index`]       = String(nIdx);
                     updates[`asufor_db_diandioly/${key}/new_index`]        = nIdx;
                     updates[`asufor_db_diandioly/${key}/status`]           = "impaye";
                     updates[`asufor_db_diandioly/${key}/statut`]           = "false";
-                    updates[`asufor_db_diandioly/${key}/apaid`]            = nouvelApaid;  // ✅ Dette réelle calculée
-                    updates[`asufor_db_diandioly/${key}/arrieres`]         = 0;            // ✅ Remis à zéro (porté dans apaid)
+                    updates[`asufor_db_diandioly/${key}/apaid`]            = nouvelApaid;
+                    updates[`asufor_db_diandioly/${key}/arrieres`]         = 0;
                     updates[`asufor_db_diandioly/${key}/facture`]          = "false";
                     updates[`asufor_db_diandioly/${key}/print`]            = "false";
                     updates[`asufor_db_diandioly/${key}/last_modified_by`] = null;
                     updates[`asufor_db_diandioly/${key}/last_modified_at`] = null;
-                    updates[`asufor_db_diandioly/${key}/date_paiement`]    = null;  // ✅ Réinitialisé pour le nouveau cycle
+                    updates[`asufor_db_diandioly/${key}/date_paiement`]    = null;
                 });
 
                 await update(ref(db), updates);
