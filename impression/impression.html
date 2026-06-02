@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-    <link rel="manifest" href="manifest.json">
-    <script src="pwa.js" defer></script>
+    <!-- Les fichiers sont dans le dossier parent (../) -->
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
+    <script src="../security.js"></script>
+    <!-- Ignore la recherche de favicon.ico pour éviter l'erreur 404 -->
+    <link rel="icon" href="data:,">
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v4</title>
