@@ -1,25 +1,23 @@
-<script src="../security.js"></script>
-<script>
-    if (typeof checkAccess === 'function') {
-        checkAccess(['président', 'secrétaire']);
-    }
-</script>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
-<link rel="manifest" href="../manifest.json">
-<script src="../pwa.js" defer></script>
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Asufor Admin - Installation Compteur</title>
-    
+    <title>ASUFOR Admin – Installation Compteur</title>
+
+    <script src="../security.js"></script>
+
     <style>
         :root {
-            --primary: #2563eb; 
-            --bg-dark: #0f172a; 
-            --glass: rgba(255, 255, 255, 0.05);
-            --border: rgba(255, 255, 255, 0.1);
+            --primary:    #2563eb;
+            --bg-dark:    #0f172a;
+            --glass:      rgba(255, 255, 255, 0.05);
+            --border:     rgba(255, 255, 255, 0.1);
             --text-muted: #94a3b8;
+            --error:      #ef4444;
+            --success:    #22c55e;
         }
 
         body {
@@ -33,6 +31,7 @@
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             color: white;
             padding: 20px;
+            box-sizing: border-box;
         }
 
         .card {
@@ -47,102 +46,170 @@
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
-        h2 { text-align: center; margin: 0 0 30px 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; }
+        h2 {
+            text-align: center;
+            margin: 0 0 30px 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+        }
 
         .input-layout {
-            position: relative; border: 1px solid var(--border); border-radius: 8px;
-            padding: 14px 16px; margin-bottom: 20px; transition: all 0.2s ease;
+            position: relative;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            transition: all 0.2s ease;
             background: rgba(0, 0, 0, 0.2);
         }
 
-        .input-layout:focus-within { border-color: var(--primary); background: rgba(37, 99, 235, 0.05); }
+        .input-layout:focus-within {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.05);
+        }
+
+        .input-layout.error { border-color: var(--error); }
 
         .input-layout label {
-            position: absolute; top: -9px; left: 12px; background: #151f32; 
-            padding: 0 6px; font-size: 11px; text-transform: uppercase;
-            letter-spacing: 0.05em; color: var(--primary); font-weight: 700;
+            position: absolute;
+            top: -9px;
+            left: 12px;
+            background: #151f32;
+            padding: 0 6px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--primary);
+            font-weight: 700;
         }
 
         select, input {
-            width: 100%; background: transparent; border: none;
-            color: #f8fafc; font-size: 15px; outline: none;
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: #f8fafc;
+            font-size: 15px;
+            outline: none;
         }
 
         option { background: #1e293b; color: white; }
 
         #btnSubmit {
-            width: 100%; padding: 16px; background: var(--primary); border: none;
-            border-radius: 8px; color: white; font-weight: 600; font-size: 15px;
-            cursor: pointer; display: flex; justify-content: center; align-items: center;
-            margin-top: 10px; transition: opacity 0.2s;
+            width: 100%;
+            padding: 16px;
+            background: var(--primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+            transition: opacity 0.2s;
+            gap: 10px;
         }
 
-        #btnSubmit:hover { opacity: 0.9; }
+        #btnSubmit:hover:not(:disabled) { opacity: 0.9; }
         #btnSubmit:disabled { background: #334155; cursor: not-allowed; }
 
         .spinner {
-            width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2);
-            border-top: 2px solid white; border-radius: 50%;
-            animation: spin 0.8s linear infinite; margin-right: 12px; display: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            display: none;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
 
+        #msg {
+            text-align: center;
+            font-size: 0.85rem;
+            margin-top: 12px;
+            min-height: 20px;
+            font-weight: 600;
+        }
+        .msg-error   { color: var(--error); }
+        .msg-success { color: var(--success); }
+
+        .footer-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: rgba(255,255,255,0.4);
+            text-decoration: none;
+            font-size: 0.8rem;
+        }
+        .footer-link:hover { color: #38bdf8; }
+
         @media (max-width: 380px) {
             .card { padding: 25px 15px; }
             h2 { font-size: 1.2rem; }
-        }
-        @media (min-width: 1400px) { 
-            .card { max-width: 600px; padding: 60px; }
-            h2 { font-size: 2.5rem; }
-            input, select, #btnSubmit { font-size: 1.2rem; padding: 10px; }
-            .input-layout { padding: 20px; }
-            .input-layout label { font-size: 0.9rem; top: -12px; }
         }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>Installation Compteur</h2>
+    <h2>📟 Installation Compteur</h2>
 
-    <div class="input-layout">
+    <div class="input-layout" id="wrap-agent">
         <label>Agent Responsable</label>
         <select id="agentSelect">
-            <option value="">Chargement...</option>
+            <option value="">Chargement des agents...</option>
         </select>
     </div>
 
-    <div class="input-layout">
+    <div class="input-layout" id="wrap-owner">
         <label>Nom du propriétaire</label>
-        <input type="text" id="ownerName" placeholder="ex: Amadou Bâ">
+        <input type="text" id="ownerName" placeholder="ex: Amadou Bâ" autocomplete="off">
     </div>
 
-    <div class="input-layout">
+    <div class="input-layout" id="wrap-phone">
         <label>Numéro téléphone</label>
-        <input type="tel" id="ownerPhone" placeholder="ex: 77#######">
+        <input type="tel" id="ownerPhone" placeholder="ex: 77#######" inputmode="tel">
     </div>
 
-    <div class="input-layout">
+    <div class="input-layout" id="wrap-compteur">
+        <label>Numéro de compteur</label>
+        <input type="text" id="numCompteur" placeholder="ex: 00123" autocomplete="off">
+    </div>
+
+    <div class="input-layout" id="wrap-index">
         <label>Index de départ</label>
-        <input type="number" id="startIndex" placeholder="0">
+        <input type="number" id="startIndex" placeholder="0" min="0">
     </div>
 
     <div class="input-layout">
         <label>Prix du m³ (CFA)</label>
-        <input type="number" id="pricePerCube" value="250">
+        <input type="number" id="pricePerCube" value="250" min="1">
     </div>
 
     <button id="btnSubmit" onclick="enregistrer()">
         <div class="spinner" id="loader"></div>
         <span id="btnText">ENREGISTRER</span>
     </button>
+
+    <div id="msg"></div>
+    <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    // ✅ Vérification d'accès
+    if (typeof window.checkAccess === 'function') {
+        const s = window.checkAccess(['président', 'secrétaire']);
+        if (!s) throw new Error('Accès refusé');
+    }
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -151,82 +218,122 @@
         projectId: "asufor-67a06"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
     const auth = getAuth(app);
 
-    const agentsRef = ref(db, 'db_agents');
-    
-    // Attendre que l'utilisateur soit authentifié avant de lire les agents
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            onValue(agentsRef, (snapshot) => {
-                const select = document.getElementById('agentSelect');
-                select.innerHTML = '<option value="">Choisir un agent</option>';
-                snapshot.forEach((child) => {
-                    const d = child.val();
-                    const opt = document.createElement('option');
-                    opt.value = JSON.stringify({
-                        id: d['agent id'] || child.key,
-                        name: d.agent,
-                        tel: d.agent_tel,
-                        siege: d.siege || "DIANDIOLY"
-                    });
-                    opt.textContent = d.agent;
-                    select.appendChild(opt);
-                });
-            });
-        } else {
-            console.error("Accès bloqué : vous devez être connecté.");
+    const msgEl  = document.getElementById('msg');
+    const btn    = document.getElementById('btnSubmit');
+    const loader = document.getElementById('loader');
+    const btnTxt = document.getElementById('btnText');
+
+    function showMsg(text, isError = false) {
+        msgEl.textContent = text;
+        msgEl.className = isError ? 'msg-error' : 'msg-success';
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('.input-layout.error').forEach(el => el.classList.remove('error'));
+    }
+
+    function markError(wrapId) {
+        const el = document.getElementById(wrapId);
+        if (el) el.classList.add('error');
+    }
+
+    // Charger la liste des agents
+    onValue(ref(db, 'db_agents'), (snapshot) => {
+        const select = document.getElementById('agentSelect');
+        select.innerHTML = '<option value="">Choisir un agent</option>';
+        if (!snapshot.exists()) {
+            select.innerHTML = '<option value="">Aucun agent trouvé</option>';
+            return;
         }
+        snapshot.forEach((child) => {
+            const d = child.val();
+            const opt = document.createElement('option');
+            // ✅ CORRECTION : Utiliser child.key comme id (cohérent avec le reste de l'app)
+            opt.value = JSON.stringify({
+                id:    child.key,
+                name:  d.agent || 'Agent',
+                tel:   d.agent_tel || '',
+                siege: d.siege || 'DIANDIOLY',
+                zone:  d.zone || ''
+            });
+            opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
+            select.appendChild(opt);
+        });
     });
 
-    window.enregistrer = async function() {
-        const agentRaw = document.getElementById('agentSelect').value;
-        const owner = document.getElementById('ownerName').value.trim();
-        const phone = document.getElementById('ownerPhone').value.trim();
-        const start = document.getElementById('startIndex').value;
-        const price = document.getElementById('pricePerCube').value;
+    window.enregistrer = async function () {
+        clearErrors();
 
-        if (!agentRaw || !owner || !start) return alert("Veuillez remplir les champs obligatoires.");
+        const agentRaw  = document.getElementById('agentSelect').value;
+        const owner     = document.getElementById('ownerName').value.trim();
+        const phone     = document.getElementById('ownerPhone').value.trim();
+        const compteur  = document.getElementById('numCompteur').value.trim();
+        const start     = document.getElementById('startIndex').value;
+        const price     = document.getElementById('pricePerCube').value;
 
-        const agent = JSON.parse(agentRaw);
-        const btn = document.getElementById('btnSubmit');
-        const loader = document.getElementById('loader');
+        let valid = true;
+        if (!agentRaw)  { markError('wrap-agent');   valid = false; }
+        if (!owner)     { markError('wrap-owner');   valid = false; }
+        if (!start)     { markError('wrap-index');   valid = false; }
+        if (!compteur)  { markError('wrap-compteur'); valid = false; }
+
+        if (!valid) { showMsg('Veuillez remplir les champs obligatoires.', true); return; }
+
+        let agent;
+        try { agent = JSON.parse(agentRaw); }
+        catch { showMsg('Agent invalide.', true); return; }
 
         btn.disabled = true;
-        loader.style.display = "block";
+        loader.style.display = 'block';
+        btnTxt.textContent = 'Enregistrement...';
+        showMsg('');
+
+        // Attendre l'auth Firebase
+        await new Promise((resolve) => {
+            const unsub = onAuthStateChanged(auth, (user) => { unsub(); resolve(user); });
+        });
 
         const payload = {
-            agent_id: agent.id,
-            agent_name: agent.name,
-            agent_tel: agent.tel,
-            siege: agent.siege,
-            name: owner,
-            tel: phone,
-            last_index: start.toString(),
-            new_index: parseInt(start),
-            facteur: price,
-            diff: "0", 
-            date_paiement: new Date().toISOString(),
-            statut: "true",
-            facture: "false",
-            print: "false"
+            agent_id:        agent.id,
+            agent_name:      agent.name,
+            agent_tel:       agent.tel,
+            siege:           agent.siege,
+            zone:            agent.zone || '',
+            name:            owner,
+            tel:             phone,
+            numero_compteur: compteur,
+            last_index:      String(start),
+            new_index:       parseInt(start) || 0,
+            facteur:         parseInt(price) || 250,
+            diff:            "0",
+            date_paiement:   new Date().toISOString(),
+            statut:          "false",
+            status:          "impaye",
+            facture:         "false",
+            print:           "false"
         };
 
         try {
             await push(ref(db, 'asufor_db_diandioly'), payload);
-            alert("Compteur enregistré avec succès dans Diandioly !");
-            document.getElementById('ownerName').value = "";
-            document.getElementById('ownerPhone').value = "";
-            document.getElementById('startIndex').value = "";
+            showMsg('✅ Compteur enregistré avec succès !');
+            document.getElementById('ownerName').value  = '';
+            document.getElementById('ownerPhone').value = '';
+            document.getElementById('startIndex').value = '';
+            document.getElementById('numCompteur').value = '';
+            document.getElementById('agentSelect').value = '';
         } catch (e) {
-            alert("Erreur : " + e.message);
+            console.error('Erreur Firebase :', e);
+            showMsg('Erreur : ' + e.message, true);
         } finally {
             btn.disabled = false;
-            loader.style.display = "none";
+            loader.style.display = 'none';
+            btnTxt.textContent = 'ENREGISTRER';
         }
-    }
+    };
 </script>
 </body>
 </html>
