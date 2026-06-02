@@ -1,16 +1,14 @@
-<script src="../security.js"></script>
-<script>
-    checkAccess(['président', 'secrétaire']);
-</script>
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
-<link rel="manifest" href="../manifest.json">
-<script src="../pwa.js" defer></script>
-
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ajouter un Agent - ASUFOR Glass</title>
+    <title>Ajouter un Agent – ASUFOR</title>
+
+    <script src="../security.js"></script>
+
     <style>
         :root {
             --bg-color: #0f172a;
@@ -18,6 +16,8 @@
             --glass-border: rgba(255, 255, 255, 0.1);
             --accent-blue: #38bdf8;
             --text-white: #f8fafc;
+            --error: #ef4444;
+            --success: #22c55e;
         }
 
         body {
@@ -25,13 +25,18 @@
             background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
             color: var(--text-white);
             font-family: 'Segoe UI', system-ui, sans-serif;
-            margin: 0; min-height: 100vh;
-            display: flex; align-items: center; justify-content: center;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
+            box-sizing: border-box;
         }
 
         .glass-card {
-            width: 100%; max-width: 420px;
+            width: 100%;
+            max-width: 420px;
             background: var(--glass-bg);
             backdrop-filter: blur(25px);
             -webkit-backdrop-filter: blur(25px);
@@ -41,91 +46,139 @@
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
         }
 
-        h2 { text-align: center; margin-bottom: 30px; font-weight: 600; color: var(--accent-blue); font-size: 1.4rem; }
+        h2 {
+            text-align: center;
+            margin: 0 0 30px 0;
+            font-weight: 600;
+            color: var(--accent-blue);
+            font-size: 1.4rem;
+        }
 
         .field { margin-bottom: 20px; }
-        
+
         label {
-            display: block; margin-bottom: 8px;
-            font-size: 0.7rem; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 1px;
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
             opacity: 0.6;
         }
 
         input {
-            width: 100%; padding: 14px 18px; border-radius: 12px;
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 12px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--glass-border);
-            color: white; font-size: 1rem;
-            outline: none; transition: 0.3s;
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s, background 0.3s;
             box-sizing: border-box;
         }
 
-        input:focus { border-color: var(--accent-blue); background: rgba(255, 255, 255, 0.08); }
+        input:focus {
+            border-color: var(--accent-blue);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        input.error { border-color: var(--error); }
 
         .btn-submit {
-            width: 100%; padding: 16px; margin-top: 10px;
+            width: 100%;
+            padding: 16px;
+            margin-top: 10px;
             background: var(--accent-blue);
-            border: none; border-radius: 12px;
-            color: #0f172a; font-weight: 800;
-            text-transform: uppercase; cursor: pointer;
-            transition: 0.3s;
+            border: none;
+            border-radius: 12px;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 1rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .btn-submit:active { transform: scale(0.97); }
+        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 
         .footer-link {
-            display: block; text-align: center; margin-top: 25px;
-            color: rgba(255, 255, 255, 0.4); text-decoration: none; font-size: 0.8rem;
+            display: block;
+            text-align: center;
+            margin-top: 25px;
+            color: rgba(255, 255, 255, 0.4);
+            text-decoration: none;
+            font-size: 0.8rem;
+            transition: color 0.2s;
         }
+        .footer-link:hover { color: var(--accent-blue); }
+
+        #msg {
+            text-align: center;
+            font-size: 0.85rem;
+            margin-top: 12px;
+            min-height: 20px;
+            font-weight: 600;
+        }
+        .msg-success { color: var(--success); }
+        .msg-error   { color: var(--error); }
 
         @media (max-width: 380px) {
             .glass-card { padding: 25px 15px; }
             h2 { font-size: 1.2rem; }
-        }
-        @media (min-width: 1400px) { 
-            .glass-card { max-width: 600px; padding: 60px; }
-            h2 { font-size: 2.5rem; }
-            input, button { font-size: 1.2rem; padding: 20px; }
-            label { font-size: 0.9rem; }
         }
     </style>
 </head>
 <body>
 
     <div class="glass-card">
-        <h2>Nouvel Agent</h2>
-        
+        <h2>✚ Nouvel Agent</h2>
+
         <div class="field">
             <label>Nom complet (Agent)</label>
-            <input type="text" id="agent_name" placeholder="Ex: Abou Diop">
+            <input type="text" id="agent_name" placeholder="Ex: Abou Diop" autocomplete="off">
         </div>
 
         <div class="field">
             <label>Numéro Téléphone</label>
-            <input type="tel" id="agent_tel" placeholder="Ex: 775076770">
+            <input type="tel" id="agent_tel" placeholder="Ex: 775076770" inputmode="tel">
         </div>
 
         <div class="field">
             <label>Passcode (6 chiffres)</label>
-            <input type="password" id="agent_pass" placeholder="******" maxlength="6" inputmode="numeric">
+            <input type="password" id="agent_pass" placeholder="••••••" maxlength="6" inputmode="numeric">
         </div>
 
         <div class="field">
             <label>Zone / Quartier</label>
-            <input type="text" id="agent_zone" placeholder="Ex: HLM 2">
+            <input type="text" id="agent_zone" placeholder="Ex: HLM 2" autocomplete="off">
         </div>
 
-        <button class="btn-submit" onclick="sendToFirebase()">Enregistrer l'agent</button>
-        
+        <button class="btn-submit" id="btnEnreg" onclick="sendToFirebase()">
+            <span id="btnText">Enregistrer l'agent</span>
+        </button>
+
+        <div id="msg"></div>
+
         <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-        // 1. IMPORT DE L'AUTH
-        import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        // ✅ CORRECTION : Vérification d'accès avant tout chargement
+        if (typeof window.checkAccess === 'function') {
+            const session = window.checkAccess(['président', 'secrétaire']);
+            if (!session) throw new Error('Accès refusé'); // Stoppe l'exécution du module
+        }
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -133,48 +186,95 @@
             databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
             projectId: "asufor-67a06"
         };
-        
+
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        // 2. INITIALISATION DE L'AUTH (Firebase attachera désormais l'identité du président à la requête)
+        const db  = getDatabase(app);
         const auth = getAuth(app);
 
-        window.sendToFirebase = async function() {
-            const name = document.getElementById('agent_name').value.trim();
-            const tel = document.getElementById('agent_tel').value.trim();
-            const pass = document.getElementById('agent_pass').value;
-            const zone = document.getElementById('agent_zone').value.trim();
+        const msgEl  = document.getElementById('msg');
+        const btn    = document.getElementById('btnEnreg');
+        const btnTxt = document.getElementById('btnText');
 
-            if (!name || !tel || !pass || !zone) {
-                alert("Veuillez remplir tous les champs.");
+        function showMsg(text, isError = false) {
+            msgEl.textContent = text;
+            msgEl.className = isError ? 'msg-error' : 'msg-success';
+        }
+
+        function clearErrors() {
+            document.querySelectorAll('input.error').forEach(i => i.classList.remove('error'));
+        }
+
+        function markError(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('error');
+        }
+
+        window.sendToFirebase = async function () {
+            clearErrors();
+            const name  = document.getElementById('agent_name').value.trim();
+            const tel   = document.getElementById('agent_tel').value.trim();
+            const pass  = document.getElementById('agent_pass').value;
+            const zone  = document.getElementById('agent_zone').value.trim();
+
+            let valid = true;
+            if (!name)  { markError('agent_name'); valid = false; }
+            if (!tel)   { markError('agent_tel');  valid = false; }
+            if (!pass)  { markError('agent_pass'); valid = false; }
+            if (!zone)  { markError('agent_zone'); valid = false; }
+
+            if (!valid) { showMsg('Veuillez remplir tous les champs.', true); return; }
+
+            if (!/^\d{6}$/.test(pass)) {
+                markError('agent_pass');
+                showMsg('Le passcode doit être exactement 6 chiffres.', true);
                 return;
             }
 
-            if (pass.length !== 6) {
-                alert("Le passcode doit faire exactement 6 chiffres.");
+            if (!/^\d{7,15}$/.test(tel)) {
+                markError('agent_tel');
+                showMsg('Numéro de téléphone invalide.', true);
                 return;
             }
+
+            btn.disabled = true;
+            btnTxt.textContent = 'Enregistrement...';
+
+            // ✅ Attendre que Firebase Auth soit prêt
+            await new Promise((resolve) => {
+                const unsub = onAuthStateChanged(auth, (user) => {
+                    unsub();
+                    resolve(user);
+                });
+            });
 
             try {
-                const agentsListRef = ref(db, 'db_agents');
-                const newAgentRef = push(agentsListRef);
-                const uniqueId = newAgentRef.key;
-                
+                const agentsRef   = ref(db, 'db_agents');
+                const newAgentRef = push(agentsRef);
+                const uniqueId    = newAgentRef.key;
+
                 await set(newAgentRef, {
-                    agent: name,
-                    agent_id: uniqueId,
+                    agent:     name,
+                    agent_id:  uniqueId,
                     agent_tel: tel,
-                    passcode: pass,
+                    passcode:  pass,          // Stocké tel quel (hachage côté serveur recommandé)
                     id_source: "267b175fb210e9be",
-                    key: uniqueId,
-                    siege: "DIANDIOLY",
-                    zone: zone
+                    key:       uniqueId,
+                    siege:     "DIANDIOLY",
+                    zone:      zone
                 });
-                
-                alert("Agent " + name + " enregistré avec succès !");
-                document.querySelectorAll('input').forEach(i => i.value = "");
+
+                showMsg('✅ Agent ' + name + ' enregistré avec succès !');
+                document.getElementById('agent_name').value = '';
+                document.getElementById('agent_tel').value  = '';
+                document.getElementById('agent_pass').value = '';
+                document.getElementById('agent_zone').value = '';
+
             } catch (error) {
-                alert("Erreur : " + error.message);
+                console.error('Erreur Firebase :', error);
+                showMsg('Erreur : ' + error.message, true);
+            } finally {
+                btn.disabled = false;
+                btnTxt.textContent = "Enregistrer l'agent";
             }
         };
     </script>
