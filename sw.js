@@ -1,5 +1,5 @@
 // sw.js - Service Worker avec Stratégie "Network First" (Réseau en priorité)
-const CACHE_NAME = 'asufor-cache-v5.6';
+const CACHE_NAME = 'asufor-cache-v5.7';
 
 self.addEventListener('install', (e) => {
     console.log('[Service Worker] Installation et mise à jour forcée');
