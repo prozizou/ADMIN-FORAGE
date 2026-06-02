@@ -1,16 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-    <link rel="manifest" href="../manifest.json">
-    <script src="../pwa.js" defer></script>
-    
-    <script src="../security.js"></script>
-    <script>
-        if (typeof checkAccess === 'function') {
-            checkAccess(['trésorier', 'président', 'secrétaire']);
-        }
-    </script>
-
+    <link rel="manifest" href="manifest.json">
+    <script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v4</title>
@@ -19,16 +11,21 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
+        /* Variables de couleurs globales */
         :root { --bg-dark: #0f172a; --card-dark: #1e293b; --accent-green: #22c55e; --accent-blue: #3b82f6; --text-gray: #94a3b8; }
+        
+        /* Style général de la page (Écran) */
         body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
 
+        /* Barre de navigation et filtres en haut */
         .top-bar { 
             display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
             background: #1a2235; padding: 15px 25px; border-radius: 40px; 
-            margin: 0 auto 30px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            margin: 0 auto 20px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             position: sticky; top: 10px; z-index: 1000;
         }
 
+        /* Champs de recherche et listes déroulantes */
         .search-box { flex: 1; position: relative; min-width: 200px; max-width: 300px; }
         .search-box input { 
             width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
@@ -41,6 +38,7 @@
         }
         .releveur-select option { background: var(--card-dark); }
 
+        /* Boutons d'action */
         .btn-print { 
             background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
             border-radius: 20px; cursor: pointer; font-weight: bold; 
@@ -51,7 +49,47 @@
         .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
         .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
 
-        .list-container { max-width: 900px; margin: auto; }
+        /* --- STYLES DU PANNEAU DE VÉRIFICATION --- */
+        .verify-bar { max-width: 1000px; margin: 0 auto 30px auto; text-align: center; }
+        
+        .btn-verify {
+            background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 12px 30px;
+            border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 1.05rem;
+            transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px; width: 100%; justify-content: center;
+        }
+        .btn-verify:hover { background: rgba(245, 158, 11, 0.4); transform: translateY(-2px); }
+
+        .unpaid-container {
+            display: none; text-align: left; background: var(--card-dark);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            padding: 20px; margin-top: 15px; max-height: 450px; overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        .unpaid-item {
+            background: #242c40; border-radius: 12px; padding: 15px; margin-bottom: 12px;
+            border-left: 4px solid #f59e0b;
+        }
+        .unpaid-item:last-child { margin-bottom: 0; }
+        
+        .unpaid-header { font-weight: bold; margin-bottom: 10px; font-size: 1.1rem; color: white; }
+        .unpaid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        
+        .unpaid-item input, .unpaid-item select {
+            width: 100%; background: #1a2235; border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 10px; border-radius: 8px; font-size: 1rem; box-sizing: border-box;
+            margin-top: 4px;
+        }
+        .unpaid-item input:focus, .unpaid-item select:focus { border-color: var(--accent-blue); outline: none; }
+        
+        .btn-save-item {
+            width: 100%; background: var(--accent-blue); color: white; border: none;
+            padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s;
+        }
+        .btn-save-item:hover { background: #2563eb; }
+
+        /* Conteneur de la liste des factures */
+        .list-container { max-width: 1000px; margin: auto; }
         .facture-item { 
             background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
             margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; 
@@ -59,8 +97,10 @@
         }
         .facture-item:hover { border-color: var(--accent-blue); }
 
+        /* Masquer la zone d'impression sur l'écran normal */
         #print-zone { display: none; }
 
+        /* --- STYLES SPÉCIFIQUES POUR L'IMPRESSION PAPIER --- */
         @media print {
             @page { size: A4; margin: 0; }
             body * { visibility: hidden; } 
@@ -80,12 +120,15 @@
             .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
             .sc-left { left: 10%; } .sc-right { right: 10%; }
             .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
+
+            /* On s'assure de cacher les interfaces lors de l'impression */
+            .top-bar, .verify-bar, .list-container { display: none !important; }
         }
 
+        /* --- ADAPTATION MOBILE --- */
         @media (max-width: 768px) {
             .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
-            .search-box { max-width: 100%; margin-bottom: 5px; }
-            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
+            .search-box, .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
             .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 5px; padding: 15px; font-size: 1.1rem; }
             .master-selection { justify-content: center; }
             .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
@@ -94,7 +137,6 @@
     </style>
 </head>
 <body>
-
 <script>
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -128,16 +170,24 @@
     </div>
 </div>
 
+<div class="verify-bar">
+    <button class="btn-verify" onclick="window.toggleUnpaidList()">
+        <i class="fas fa-edit"></i> Vérifier & Éditer avant Impression
+    </button>
+    <div id="unpaid-container" class="unpaid-container">
+        <div id="unpaid-content">Chargement des données en cours...</div>
+    </div>
+</div>
+
 <div class="list-container" id="list-container">
     <p style="text-align:center; padding: 20px;">Analyse de l'historique et calcul des factures en cours...</p>
 </div>
 
 <div id="print-zone"></div>
-
 <script type="module">
+    // AJOUT DE L'IMPORT `update` POUR POUVOIR MODIFIER LES COMPTEURS
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getDatabase, ref, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
@@ -148,7 +198,6 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const auth = getAuth(app);
     
     let dataCache = {};
     let allBackups = {}; 
@@ -159,7 +208,6 @@
 
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
-        
         if (selectedMonthStr && selectedMonthStr !== "actuel") {
             const parts = selectedMonthStr.split('-');
             dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
@@ -167,21 +215,14 @@
             dRef = dateReleve ? new Date(dateReleve) : new Date();
         }
 
-        if (isOnlyArrieres) {
-            dRef.setMonth(dRef.getMonth() - 1);
-        }
+        if (isOnlyArrieres) { dRef.setMonth(dRef.getMonth() - 1); }
 
         const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
         const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
         const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
         const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         
-        return { 
-            debut: f(dDebut), 
-            fin: f(dFin), 
-            echeance: f(dEcheance), 
-            date_edition: f(new Date()) 
-        };
+        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance), date_edition: f(new Date()) };
     }
     
     async function initMonthFilter() {
@@ -209,7 +250,6 @@
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
         
         let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
-        
         unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
     }
 
@@ -244,18 +284,19 @@
                     if (oldRecord) {
                         historiqueTrouve = true; 
                         if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
-                            let pApaid = parseFloat(oldRecord.apaid) || (Math.max(0, parseFloat(oldRecord.new_index||0)-parseFloat(oldRecord.last_index||0)) * parseFloat(oldRecord.facteur||250));
-                            let pArrieres = parseFloat(oldRecord.arrieres || oldRecord._impaye_anterieur || 0);
-                            arrieres = pApaid + pArrieres;
+                            const apaidExplicite = parseFloat(oldRecord.apaid);
+                            if (!isNaN(apaidExplicite) && apaidExplicite > 0) {
+                                arrieres = apaidExplicite;
+                            } else {
+                                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0);
+                            }
                         }
                         break; 
                     }
                 }
             }
 
-            if (!historiqueTrouve) { 
-                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); 
-            }
+            if (!historiqueTrouve) { arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); }
 
             d.vol = vol;
             d.montantMois = montantMois;
@@ -263,9 +304,7 @@
             d.total = montantMois + arrieres;
             dataCache[key] = d;
 
-            if (d.agent_id) {
-                agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
-            }
+            if (d.agent_id) { agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu"); }
 
             const div = document.createElement('div');
             div.className = 'facture-item';
@@ -302,10 +341,118 @@
         });
         
         releveurSelect.value = currentSelection; 
-
         window.filterList();
+
+        // Mettre à jour la liste de vérification si le panneau est ouvert
+        const verifyContainer = document.getElementById('unpaid-container');
+        if (verifyContainer && verifyContainer.style.display === 'block') {
+            window.renderUnpaidList();
+        }
     }
-    
+
+    // --- FONCTIONS DE VÉRIFICATION ET D'ÉDITION ---
+    window.toggleUnpaidList = function() {
+        const container = document.getElementById('unpaid-container');
+        if (container.style.display === 'none' || container.style.display === '') {
+            container.style.display = 'block';
+            window.renderUnpaidList();
+        } else {
+            container.style.display = 'none';
+        }
+    };
+
+    window.renderUnpaidList = function() {
+        const contentDiv = document.getElementById('unpaid-content');
+        let html = '';
+        let count = 0;
+
+        for (const key in dataCache) {
+            const val = dataCache[key];
+            const estPaye = String(val.status || "").trim().toLowerCase() === "paye" || 
+                            val.statut === true || 
+                            String(val.statut || "").trim().toLowerCase() === "true";
+
+            if (!estPaye) {
+                count++;
+                const nomAffiche = val.name || "Inconnu";
+                const ancienIdx = val.last_index || 0;
+                const nouvelIdx = val.new_index || ancienIdx;
+
+                html += `
+                <div class="unpaid-item" id="item_${key}">
+                    <div class="unpaid-header">👤 ${nomAffiche} (Cpt: ${val.numero_compteur || 'N/A'})</div>
+                    <div class="unpaid-details">
+                        <div>
+                            <small style="color:var(--text-gray)">Ancien Index</small><br>
+                            <span style="font-size:1.1rem; color:white;">${ancienIdx}</span>
+                        </div>
+                        <div>
+                            <small style="color:var(--text-gray)">Nouvel Index</small><br>
+                            <input type="number" id="idx_${key}" value="${nouvelIdx}">
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <small style="color:var(--text-gray)">Statut du paiement</small><br>
+                            <select id="stat_${key}">
+                                <option value="impaye" selected>🔴 Impayé</option>
+                                <option value="paye">🟢 Payé</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn-save-item" onclick="window.saveMeterEdit('${key}')">
+                        <i class="fas fa-save"></i> Enregistrer et Recalculer
+                    </button>
+                </div>`;
+            }
+        }
+
+        if (count === 0) {
+            contentDiv.innerHTML = '<div style="color:var(--accent-green); font-weight:bold; text-align:center; padding:15px; font-size:1.1rem;">✅ Tous les compteurs de cette période sont payés !</div>';
+        } else {
+            const warningText = currentSelectedMonth === "actuel" ? "pour le mois en cours" : `dans l'archive ${currentSelectedMonth}`;
+            contentDiv.innerHTML = `<div style="margin-bottom:15px; font-weight:bold; font-size:1.1rem; color:#f59e0b">⚠️ ${count} compteurs impayés / à vérifier ${warningText}</div>` + html;
+        }
+    };
+
+    window.saveMeterEdit = async function(key) {
+        const btnSave = document.querySelector(`#item_${key} .btn-save-item`);
+        const originalText = btnSave.innerHTML;
+        btnSave.innerHTML = "Sauvegarde...";
+        btnSave.disabled = true;
+
+        const newIdx = document.getElementById(`idx_${key}`).value;
+        const newStat = document.getElementById(`stat_${key}`).value;
+
+        const updates = {};
+        
+        // Mettre à jour la base selon la période sélectionnée
+        if (currentSelectedMonth === "actuel") {
+            updates[`asufor_db_diandioly/${key}/new_index`] = Number(newIdx);
+            updates[`asufor_db_diandioly/${key}/status`] = newStat;
+            updates[`asufor_db_diandioly/${key}/statut`] = newStat === 'paye' ? true : false;
+        } else {
+            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/new_index`] = Number(newIdx);
+            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/status`] = newStat;
+            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/statut`] = newStat === 'paye' ? true : false;
+            
+            // Si on modifie une archive, on évite le décalage sur le mois en cours
+            updates[`asufor_db_diandioly/${key}/last_index`] = String(newIdx);
+        }
+
+        try {
+            await update(ref(db), updates);
+            // Visuellement indiquer le succès (l'UI va se mettre à jour seule grâce à onValue)
+            btnSave.innerHTML = "✅ Réussi";
+            btnSave.style.background = "var(--accent-green)";
+        } catch(e) {
+            alert("Erreur lors de la mise à jour : " + e.message);
+            btnSave.innerHTML = "❌ Erreur";
+            btnSave.disabled = false;
+        }
+    };
+    // --------------------------------------------------------
+
+    initMonthFilter();
+
     window.filterList = function() {
         const q = document.getElementById('searchInput').value.toLowerCase();
         const sel = document.getElementById('releveurFilter').value;
@@ -386,13 +533,6 @@
         });
         printZone.innerHTML = html;
     }
-
-    // Le chargement attend que l'utilisateur soit validé par Firebase
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            initMonthFilter();
-        }
-    });
 </script>
 </body>
 </html>
