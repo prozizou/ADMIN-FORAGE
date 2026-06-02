@@ -1,17 +1,14 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-    <!-- Les fichiers sont dans le dossier parent (../) -->
-    <link rel="manifest" href="../manifest.json">
-    <script src="../pwa.js" defer></script>
-    <script src="../security.js"></script>
-    <!-- Ignore la recherche de favicon.ico pour éviter l'erreur 404 -->
-    <link rel="icon" href="data:,">
-    
+    <link rel="manifest" href="manifest.json">
+    <script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v4</title>
     
+    <!-- ✅ CORRECTION 1 : Chargement de la sécurité centralisée -->
+    <script src="../security.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -26,7 +23,7 @@
         .top-bar { 
             display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
             background: #1a2235; padding: 15px 25px; border-radius: 40px; 
-            margin: 0 auto 20px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            margin: 0 auto 30px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
             position: sticky; top: 10px; z-index: 1000;
         }
 
@@ -54,47 +51,8 @@
         .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
         .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
 
-        /* --- STYLES DU PANNEAU DE VÉRIFICATION --- */
-        .verify-bar { max-width: 1000px; margin: 0 auto 30px auto; text-align: center; }
-        
-        .btn-verify {
-            background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; padding: 12px 30px;
-            border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 1.05rem;
-            transition: all 0.3s; display: inline-flex; align-items: center; gap: 10px; width: 100%; justify-content: center;
-        }
-        .btn-verify:hover { background: rgba(245, 158, 11, 0.4); transform: translateY(-2px); }
-
-        .unpaid-container {
-            display: none; text-align: left; background: var(--card-dark);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 20px; margin-top: 15px; max-height: 450px; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-        
-        .unpaid-item {
-            background: #242c40; border-radius: 12px; padding: 15px; margin-bottom: 12px;
-            border-left: 4px solid #f59e0b;
-        }
-        .unpaid-item:last-child { margin-bottom: 0; }
-        
-        .unpaid-header { font-weight: bold; margin-bottom: 10px; font-size: 1.1rem; color: white; }
-        .unpaid-details { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-        
-        .unpaid-item input, .unpaid-item select {
-            width: 100%; background: #1a2235; border: 1px solid rgba(255,255,255,0.2);
-            color: white; padding: 10px; border-radius: 8px; font-size: 1rem; box-sizing: border-box;
-            margin-top: 4px;
-        }
-        .unpaid-item input:focus, .unpaid-item select:focus { border-color: var(--accent-blue); outline: none; }
-        
-        .btn-save-item {
-            width: 100%; background: var(--accent-blue); color: white; border: none;
-            padding: 10px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1rem; transition: 0.2s;
-        }
-        .btn-save-item:hover { background: #2563eb; }
-
         /* Conteneur de la liste des factures */
-        .list-container { max-width: 1000px; margin: auto; }
+        .list-container { max-width: 900px; margin: auto; }
         .facture-item { 
             background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
             margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; 
@@ -108,10 +66,11 @@
         /* --- STYLES SPÉCIFIQUES POUR L'IMPRESSION PAPIER --- */
         @media print {
             @page { size: A4; margin: 0; }
-            body * { visibility: hidden; } 
-            #print-zone, #print-zone * { visibility: visible; } 
+            body * { visibility: hidden; } /* On cache l'interface d'administration */
+            #print-zone, #print-zone * { visibility: visible; } /* On affiche uniquement le ticket */
             #print-zone { display: block !important; position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
             
+            /* Design du ticket de facture */
             .invoice-page { width: 210mm; height: 297mm; padding: 12mm 18mm; box-sizing: border-box; background: white; page-break-after: always; }
             .p-header { text-align: center; margin-bottom: 5px; font-size: 19px; font-weight: bold; line-height: 1.4; }
             .section-title { font-family: 'Dancing Script', cursive; font-size: 26px; text-align: center; margin: 12px 0 6px 0; }
@@ -121,19 +80,18 @@
             .deadline { margin-top: 15px; font-size: 18px; font-weight: bold; }
             .tresorier { font-family: 'Dancing Script', cursive; font-size: 28px; text-align: right; margin-top: -30px; }
             
+            /* Ligne à découper (Reçu) */
             .p-dashed { border-top: 2px dashed #000; margin: 35px 0; position: relative; }
             .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
             .sc-left { left: 10%; } .sc-right { right: 10%; }
             .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
-
-            /* On s'assure de cacher les interfaces lors de l'impression */
-            .top-bar, .verify-bar, .list-container { display: none !important; }
         }
 
-        /* --- ADAPTATION MOBILE --- */
+        /* --- ADAPTATION MOBILE (Responsive) --- */
         @media (max-width: 768px) {
             .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
-            .search-box, .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
+            .search-box { max-width: 100%; margin-bottom: 5px; }
+            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
             .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 5px; padding: 15px; font-size: 1.1rem; }
             .master-selection { justify-content: center; }
             .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
@@ -142,6 +100,7 @@
     </style>
 </head>
 <body>
+
 <script>
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
@@ -175,25 +134,25 @@
     </div>
 </div>
 
-<div class="verify-bar">
-    <button class="btn-verify" onclick="window.toggleUnpaidList()">
-        <i class="fas fa-edit"></i> Vérifier & Éditer avant Impression
-    </button>
-    <div id="unpaid-container" class="unpaid-container">
-        <div id="unpaid-content">Chargement des données en cours...</div>
-    </div>
-</div>
-
 <div class="list-container" id="list-container">
     <p style="text-align:center; padding: 20px;">Analyse de l'historique et calcul des factures en cours...</p>
 </div>
 
 <div id="print-zone"></div>
-<script type="module">
-    // AJOUT DE L'IMPORT `update` POUR POUVOIR MODIFIER LES COMPTEURS
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    // ✅ CORRECTION 2 : Import Firebase Auth (manquant = cause du blanc)
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    // ✅ CORRECTION 1 : Vérification de la session avant tout
+    if (typeof window.checkAccess === 'function') {
+        const s = window.checkAccess(['président', 'secrétaire', 'trésorier']);
+        if (!s) throw new Error('Accès refusé');
+    }
+
+    // Tes identifiants Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
         authDomain: "asufor-67a06.firebaseapp.com",
@@ -203,33 +162,51 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    // ✅ CORRECTION 2 : Initialisation de l'auth
+    const auth = getAuth(app);
     
+        // Variables globales
     let dataCache = {};
     let allBackups = {}; 
     let unsubCurrentMonth = null;
     let currentSelectedMonth = "actuel";
 
+    // Formateur de prix (Ex: 1000 devient 1 000 FCFA)
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
 
+        // Utilitaire pour créer les dates automatiquement
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
+        
+        // 1. Gérer les archives : si on consulte un mois passé, on prend la date de ce mois
         if (selectedMonthStr && selectedMonthStr !== "actuel") {
             const parts = selectedMonthStr.split('-');
             dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
         } else {
+            // Sinon on utilise la date du jour
             dRef = dateReleve ? new Date(dateReleve) : new Date();
         }
 
-        if (isOnlyArrieres) { dRef.setMonth(dRef.getMonth() - 1); }
+        // 2. Gérer les impayés purs : si 0 consommation ce mois-ci mais qu'il y a une dette, on recule d'un mois
+        if (isOnlyArrieres) {
+            dRef.setMonth(dRef.getMonth() - 1);
+        }
 
         const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
         const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
         const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
         const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
         
-        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance), date_edition: f(new Date()) };
+        return { 
+            debut: f(dDebut), 
+            fin: f(dFin), 
+            echeance: f(dEcheance), 
+            date_edition: f(new Date()) // La date d'impression reste toujours celle d'aujourd'hui en bas
+        };
     }
     
+
+    // --- CHARGEMENT DES MOIS (ARCHIVES) ---
     async function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
         try {
@@ -237,6 +214,7 @@
             let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
             if (snapshot.exists()) {
                 allBackups = snapshot.val(); 
+                // On trie les mois du plus récent au plus ancien
                 const sortedMonths = Object.keys(allBackups).sort().reverse();
                 sortedMonths.forEach(month => { optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`; });
             }
@@ -248,16 +226,28 @@
         }
     }
 
+    // --- CHANGEMENT DE MOIS DANS LE MENU ---
     window.changeMonth = async function() {
         currentSelectedMonth = document.getElementById('monthFilter').value;
         document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
         
+        // Arrête d'écouter l'ancien dossier
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
         
+        // Détermine le bon dossier à lire
         let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
-        unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); });
+        
+        // ✅ CORRECTION 3 : Gestion d'erreur sur la lecture Firebase
+        unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); }, (error) => {
+            console.error("Erreur Firebase :", error.code, error.message);
+            document.getElementById('list-container').innerHTML = 
+                `<p style='text-align:center; color:#ef4444;'>⚠️ Erreur de chargement (${error.code}). Vérifiez votre connexion ou reconnectez-vous.</p>`;
+        });
     }
 
+       // ==========================================
+    // PARTIE 5 : CALCUL ET AFFICHAGE À L'ÉCRAN
+    // ==========================================
     function renderData(snap) {
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
         const sortedMonths = Object.keys(allBackups).sort().reverse();
@@ -266,6 +256,7 @@
         listContainer.innerHTML = ""; 
         dataCache = {}; 
 
+        // --- NOUVEAU : On utilise une Map pour lier l'ID de l'agent à son vrai Nom ---
         const agentsMap = new Map();
 
         snap.forEach(child => {
@@ -278,6 +269,7 @@
             const vol = Math.max(0, nIdx - lIdx);
             const montantMois = vol * parseFloat(d.facteur || 250);
             
+            // --- RECHERCHE PROFONDE DES ARRIÉRÉS ---
             let arrieres = 0;
             let historiqueTrouve = false;
 
@@ -289,10 +281,18 @@
                     if (oldRecord) {
                         historiqueTrouve = true; 
                         if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
+                            // CORRECTION : On utilise UNIQUEMENT le champ arrieres/impaye enregistré.
+                            // On ne recalcule JAMAIS le montant du mois ancien pour éviter les doublons.
+                            // Si le champ 'apaid' existe (montant exact impayé sauvegardé), on l'utilise.
+                            // Sinon on lit directement arrieres ou _impaye_anterieur du record courant (d),
+                            // car c'est lui qui porte la vraie valeur à jour.
                             const apaidExplicite = parseFloat(oldRecord.apaid);
                             if (!isNaN(apaidExplicite) && apaidExplicite > 0) {
+                                // apaid est explicitement renseigné → c'est la dette exacte
                                 arrieres = apaidExplicite;
                             } else {
+                                // Pas de apaid → on lit la dette depuis le record actuel (d)
+                                // qui est la source la plus fiable pour la dette courante
                                 arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0);
                             }
                         }
@@ -301,7 +301,9 @@
                 }
             }
 
-            if (!historiqueTrouve) { arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); }
+            if (!historiqueTrouve) { 
+                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); 
+            }
 
             d.vol = vol;
             d.montantMois = montantMois;
@@ -309,8 +311,12 @@
             d.total = montantMois + arrieres;
             dataCache[key] = d;
 
-            if (d.agent_id) { agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu"); }
+            // --- NOUVEAU : Enregistrement de l'agent (ID + Nom) ---
+            if (d.agent_id) {
+                agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
+            }
 
+            // --- CRÉATION DE LA CARTE VISUELLE ---
             const div = document.createElement('div');
             div.className = 'facture-item';
             div.setAttribute('data-id', key);
@@ -337,6 +343,7 @@
             listContainer.appendChild(div);
         });
 
+        // --- NOUVEAU : Met à jour la liste des agents avec les vrais noms ---
         const releveurSelect = document.getElementById('releveurFilter');
         const currentSelection = releveurSelect.value;
         releveurSelect.innerHTML = '<option value="">Tous les agents</option>';
@@ -346,119 +353,29 @@
         });
         
         releveurSelect.value = currentSelection; 
+
         window.filterList();
-
-        // Mettre à jour la liste de vérification si le panneau est ouvert
-        const verifyContainer = document.getElementById('unpaid-container');
-        if (verifyContainer && verifyContainer.style.display === 'block') {
-            window.renderUnpaidList();
-        }
     }
+    
 
-    // --- FONCTIONS DE VÉRIFICATION ET D'ÉDITION ---
-    window.toggleUnpaidList = function() {
-        const container = document.getElementById('unpaid-container');
-        if (container.style.display === 'none' || container.style.display === '') {
-            container.style.display = 'block';
-            window.renderUnpaidList();
+        // ==========================================
+    // PARTIE 6 : FILTRES ET GÉNÉRATION PAPIER
+    // ==========================================
+    
+    // ✅ CORRECTION 2 : On attend que Firebase Auth confirme la session avant de lire les données
+    // Sans ça, auth == null → règles refusent → rien ne s'affiche
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            initMonthFilter();
         } else {
-            container.style.display = 'none';
+            document.getElementById('list-container').innerHTML = 
+                "<p style='text-align:center; color:#ef4444;'>⚠️ Session expirée. <a href='../index.html' style='color:#3b82f6'>Reconnectez-vous</a></p>";
         }
-    };
+    });
 
-    window.renderUnpaidList = function() {
-        const contentDiv = document.getElementById('unpaid-content');
-        let html = '';
-        let count = 0;
-
-        for (const key in dataCache) {
-            const val = dataCache[key];
-            const estPaye = String(val.status || "").trim().toLowerCase() === "paye" || 
-                            val.statut === true || 
-                            String(val.statut || "").trim().toLowerCase() === "true";
-
-            if (!estPaye) {
-                count++;
-                const nomAffiche = val.name || "Inconnu";
-                const ancienIdx = val.last_index || 0;
-                const nouvelIdx = val.new_index || ancienIdx;
-
-                html += `
-                <div class="unpaid-item" id="item_${key}">
-                    <div class="unpaid-header">👤 ${nomAffiche} (Cpt: ${val.numero_compteur || 'N/A'})</div>
-                    <div class="unpaid-details">
-                        <div>
-                            <small style="color:var(--text-gray)">Ancien Index</small><br>
-                            <span style="font-size:1.1rem; color:white;">${ancienIdx}</span>
-                        </div>
-                        <div>
-                            <small style="color:var(--text-gray)">Nouvel Index</small><br>
-                            <input type="number" id="idx_${key}" value="${nouvelIdx}">
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <small style="color:var(--text-gray)">Statut du paiement</small><br>
-                            <select id="stat_${key}">
-                                <option value="impaye" selected>🔴 Impayé</option>
-                                <option value="paye">🟢 Payé</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button class="btn-save-item" onclick="window.saveMeterEdit('${key}')">
-                        <i class="fas fa-save"></i> Enregistrer et Recalculer
-                    </button>
-                </div>`;
-            }
-        }
-
-        if (count === 0) {
-            contentDiv.innerHTML = '<div style="color:var(--accent-green); font-weight:bold; text-align:center; padding:15px; font-size:1.1rem;">✅ Tous les compteurs de cette période sont payés !</div>';
-        } else {
-            const warningText = currentSelectedMonth === "actuel" ? "pour le mois en cours" : `dans l'archive ${currentSelectedMonth}`;
-            contentDiv.innerHTML = `<div style="margin-bottom:15px; font-weight:bold; font-size:1.1rem; color:#f59e0b">⚠️ ${count} compteurs impayés / à vérifier ${warningText}</div>` + html;
-        }
-    };
-
-    window.saveMeterEdit = async function(key) {
-        const btnSave = document.querySelector(`#item_${key} .btn-save-item`);
-        const originalText = btnSave.innerHTML;
-        btnSave.innerHTML = "Sauvegarde...";
-        btnSave.disabled = true;
-
-        const newIdx = document.getElementById(`idx_${key}`).value;
-        const newStat = document.getElementById(`stat_${key}`).value;
-
-        const updates = {};
-        
-        // Mettre à jour la base selon la période sélectionnée
-        if (currentSelectedMonth === "actuel") {
-            updates[`asufor_db_diandioly/${key}/new_index`] = Number(newIdx);
-            updates[`asufor_db_diandioly/${key}/status`] = newStat;
-            updates[`asufor_db_diandioly/${key}/statut`] = newStat === 'paye' ? true : false;
-        } else {
-            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/new_index`] = Number(newIdx);
-            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/status`] = newStat;
-            updates[`asufor_backup/${currentSelectedMonth}/donnees/${key}/statut`] = newStat === 'paye' ? true : false;
-            
-            // Si on modifie une archive, on évite le décalage sur le mois en cours
-            updates[`asufor_db_diandioly/${key}/last_index`] = String(newIdx);
-        }
-
-        try {
-            await update(ref(db), updates);
-            // Visuellement indiquer le succès (l'UI va se mettre à jour seule grâce à onValue)
-            btnSave.innerHTML = "✅ Réussi";
-            btnSave.style.background = "var(--accent-green)";
-        } catch(e) {
-            alert("Erreur lors de la mise à jour : " + e.message);
-            btnSave.innerHTML = "❌ Erreur";
-            btnSave.disabled = false;
-        }
-    };
-    // --------------------------------------------------------
-
-    initMonthFilter();
-
+    // Filtre la liste (Recherche texte & Agent)
     window.filterList = function() {
+        // ... (ne change pas ton code ici)
         const q = document.getElementById('searchInput').value.toLowerCase();
         const sel = document.getElementById('releveurFilter').value;
         document.querySelectorAll('.facture-item').forEach(it => {
@@ -466,9 +383,10 @@
             const mRel = sel === "" || it.getAttribute('data-releveur') === sel;
             it.style.display = (mText && mRel) ? 'flex' : 'none';
         });
-        window.renderPrint(); 
+        window.renderPrint(); // Met à jour le papier si on cache des éléments sélectionnés
     }
 
+    // Coche ou décoche tout ce qui est visible (Ignore les factures à 0)
     window.toggleAll = function(src) {
         document.querySelectorAll('.facture-item').forEach(it => { 
             if(it.style.display !== 'none') {
@@ -479,17 +397,26 @@
         window.renderPrint();
     }
 
+           // Construit les pages HTML prêtes pour l'imprimante
     window.renderPrint = function() {
         const selected = document.querySelectorAll('.bill-cb:checked');
         const printZone = document.getElementById('print-zone');
         let html = "";
         
         selected.forEach(box => {
+            // --- LA NOUVELLE LIGNE EST ICI ---
+            // On ignore cette facture si elle est actuellement masquée par un filtre (Agent ou Recherche)
             if (box.closest('.facture-item').style.display === 'none') return;
             
             const d = dataCache[box.getAttribute('data-id')];
+            
+            // --- NOUVEAU : On détecte si c'est une facture 100% arriérés ---
             const isOnlyArrieres = (d.montantMois === 0 && d.arrieres > 0);
+            
+            // --- NOUVEAU : On passe les paramètres à notre formateur de dates ---
             const dates = formatSmartDates(d.date, currentSelectedMonth, isOnlyArrieres);
+            
+            // ... (Le reste de ton code HTML pour l'impression avec html += `...`)
             
             html += `
             <div class="invoice-page">
