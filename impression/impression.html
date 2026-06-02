@@ -5,97 +5,211 @@
     <script src="pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Diandioly - Impression v4</title>
+    <title>ASUFOR Diandioly - Impression v5</title>
     
-    <!-- ✅ CORRECTION 1 : Chargement de la sécurité centralisée -->
+    <!-- ✅ Sécurité centralisée -->
     <script src="../security.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        /* Variables de couleurs globales */
-        :root { --bg-dark: #0f172a; --card-dark: #1e293b; --accent-green: #22c55e; --accent-blue: #3b82f6; --text-gray: #94a3b8; }
-        
-        /* Style général de la page (Écran) */
-        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-dark); color: white; min-height: 100vh; padding: 20px; }
-
-        /* Barre de navigation et filtres en haut */
-        .top-bar { 
-            display: flex; gap: 15px; justify-content: space-between; align-items: center; flex-wrap: wrap;
-            background: #1a2235; padding: 15px 25px; border-radius: 40px; 
-            margin: 0 auto 30px auto; max-width: 1000px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-            position: sticky; top: 10px; z-index: 1000;
+        /* ── Variables globales ── */
+        :root {
+            --bg-dark:      #0f172a;
+            --card-dark:    #1e293b;
+            --accent-green: #22c55e;
+            --accent-blue:  #3b82f6;
+            --accent-amber: #f59e0b;
+            --accent-red:   #ef4444;
+            --text-gray:    #94a3b8;
         }
 
-        /* Champs de recherche et listes déroulantes */
-        .search-box { flex: 1; position: relative; min-width: 200px; max-width: 300px; }
-        .search-box input { 
-            width: 100%; padding: 12px 12px 12px 45px; border-radius: 20px; 
-            border: none; background: #242c40; color: white; outline: none; font-size: 1rem; box-sizing: border-box;
-        }
-        .search-box i { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-gray); }
+        body { margin:0; font-family:'Inter',sans-serif; background:var(--bg-dark); color:white; min-height:100vh; padding:20px; }
 
+        /* ── Barre de navigation ── */
+        .top-bar {
+            display:flex; gap:15px; justify-content:space-between; align-items:center; flex-wrap:wrap;
+            background:#1a2235; padding:15px 25px; border-radius:40px;
+            margin:0 auto 30px auto; max-width:1000px; box-shadow:0 10px 30px rgba(0,0,0,0.4);
+            position:sticky; top:10px; z-index:1000;
+        }
+        .search-box { flex:1; position:relative; min-width:200px; max-width:300px; }
+        .search-box input {
+            width:100%; padding:12px 12px 12px 45px; border-radius:20px;
+            border:none; background:#242c40; color:white; outline:none; font-size:1rem; box-sizing:border-box;
+        }
+        .search-box i { position:absolute; left:18px; top:50%; transform:translateY(-50%); color:var(--text-gray); }
         .releveur-select {
-            padding: 12px 18px; border-radius: 20px; border: none; background: #242c40; color: white; outline: none; font-size: 1rem; cursor: pointer; flex: 1; min-width: 150px; max-width: 200px;
+            padding:12px 18px; border-radius:20px; border:none; background:#242c40; color:white;
+            outline:none; font-size:1rem; cursor:pointer; flex:1; min-width:150px; max-width:200px;
         }
-        .releveur-select option { background: var(--card-dark); }
-
-        /* Boutons d'action */
-        .btn-print { 
-            background: var(--accent-green); color: white; border: none; padding: 10px 25px; 
-            border-radius: 20px; cursor: pointer; font-weight: bold; 
-            display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.3s; min-width: 90px;
+        .releveur-select option { background:var(--card-dark); }
+        .btn-print {
+            background:var(--accent-green); color:white; border:none; padding:10px 25px;
+            border-radius:20px; cursor:pointer; font-weight:bold;
+            display:flex; flex-direction:column; align-items:center; gap:4px; transition:0.3s; min-width:90px;
         }
-        .btn-print:hover { transform: scale(1.05); background: #16a34a; box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); }
+        .btn-print:hover { transform:scale(1.05); background:#16a34a; box-shadow:0 0 20px rgba(34,197,94,0.4); }
+        .master-selection { background:#2d3748; padding:12px 20px; border-radius:20px; display:flex; align-items:center; gap:10px; font-weight:bold; }
+        .master-selection input { width:22px; height:22px; cursor:pointer; accent-color:var(--accent-green); }
 
-        .master-selection { background: #2d3748; padding: 12px 20px; border-radius: 20px; display: flex; align-items: center; gap: 10px; font-weight: bold; }
-        .master-selection input { width: 22px; height: 22px; cursor: pointer; accent-color: var(--accent-green); }
-
-        /* Conteneur de la liste des factures */
-        .list-container { max-width: 900px; margin: auto; }
-        .facture-item { 
-            background: var(--card-dark); padding: 15px 20px; border-radius: 20px; 
-            margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; 
-            border: 1px solid rgba(255,255,255,0.05); transition: 0.2s;
+        /* ── Bannière modifications en attente ── */
+        #banner-modifs {
+            display:none; max-width:900px; margin:-10px auto 20px auto;
+            background:linear-gradient(135deg,#78350f,#92400e); border:1px solid var(--accent-amber);
+            border-radius:16px; padding:12px 20px;
+            display:none; align-items:center; gap:12px; font-size:0.95rem;
         }
-        .facture-item:hover { border-color: var(--accent-blue); }
+        #banner-modifs.visible { display:flex; }
+        #banner-modifs i { color:var(--accent-amber); font-size:1.3rem; flex-shrink:0; }
+        #banner-modifs span { flex:1; }
+        #banner-modifs strong { color:var(--accent-amber); }
+        #btn-reset-all {
+            background:transparent; border:1px solid var(--accent-amber); color:var(--accent-amber);
+            padding:6px 14px; border-radius:12px; cursor:pointer; font-size:0.85rem; white-space:nowrap;
+            transition:0.2s;
+        }
+        #btn-reset-all:hover { background:var(--accent-amber); color:#000; }
 
-        /* Masquer la zone d'impression sur l'écran normal */
-        #print-zone { display: none; }
+        /* ── Liste des factures ── */
+        .list-container { max-width:900px; margin:auto; }
+        .facture-item {
+            background:var(--card-dark); padding:15px 20px; border-radius:20px;
+            margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;
+            border:1px solid rgba(255,255,255,0.05); transition:border-color 0.2s;
+            flex-wrap:wrap; gap:12px;
+        }
+        .facture-item:hover { border-color:var(--accent-blue); }
+        .facture-item.is-modified { border-color:var(--accent-amber) !important; }
 
-        /* --- STYLES SPÉCIFIQUES POUR L'IMPRESSION PAPIER --- */
+        /* Infos à gauche */
+        .item-info { flex:1; min-width:180px; }
+        .item-info strong { font-size:1.05rem; }
+        .item-info .sub { color:var(--text-gray); font-size:0.88rem; margin-top:2px; }
+
+        /* Badge "Modifié" */
+        .badge-modifie {
+            display:inline-flex; align-items:center; gap:5px;
+            background:rgba(245,158,11,0.15); border:1px solid var(--accent-amber);
+            color:var(--accent-amber); font-size:0.75rem; font-weight:600;
+            padding:2px 10px; border-radius:20px; margin-top:5px;
+        }
+
+        /* Zone droite : montants + boutons */
+        .item-right { display:flex; align-items:center; gap:14px; }
+        .item-amounts { text-align:right; }
+        .item-amounts .amounts-detail { color:var(--text-gray); font-size:0.82rem; }
+        .item-amounts .total-val { font-size:1.1rem; font-weight:700; }
+        .total-green { color:var(--accent-green); }
+        .total-gray  { color:var(--text-gray); }
+
+        /* Bouton crayon */
+        .btn-edit {
+            background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4);
+            color:var(--accent-blue); width:36px; height:36px; border-radius:50%;
+            cursor:pointer; font-size:0.85rem; display:flex; align-items:center; justify-content:center;
+            transition:0.2s; flex-shrink:0;
+        }
+        .btn-edit:hover { background:var(--accent-blue); color:white; }
+
+        /* ── Modal d'édition inline ── */
+        .edit-overlay {
+            display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2000; align-items:center; justify-content:center; padding:20px;
+        }
+        .edit-overlay.open { display:flex; }
+        .edit-modal {
+            background:#1e293b; border:1px solid var(--accent-amber);
+            border-radius:24px; padding:28px; width:100%; max-width:420px;
+            box-shadow:0 20px 60px rgba(0,0,0,0.6);
+            animation: popIn 0.2s ease;
+        }
+        @keyframes popIn {
+            from { transform:scale(0.9); opacity:0; }
+            to   { transform:scale(1);   opacity:1; }
+        }
+        .edit-modal h3 {
+            margin:0 0 6px 0; font-size:1.15rem; color:var(--accent-amber);
+        }
+        .edit-modal .edit-client-name { color:var(--text-gray); font-size:0.9rem; margin-bottom:20px; }
+        .edit-modal label { display:block; font-size:0.85rem; color:var(--text-gray); margin-bottom:6px; }
+        
+        .edit-row { margin-bottom:16px; }
+        .edit-row .read-val {
+            background:#0f172a; padding:10px 16px; border-radius:12px;
+            color:white; font-weight:600; font-size:1rem;
+        }
+        .edit-input-wrap { position:relative; }
+        .edit-input-wrap input {
+            width:100%; padding:12px 60px 12px 16px; border-radius:14px;
+            border:2px solid var(--accent-amber); background:#0f172a;
+            color:white; font-size:1.1rem; font-weight:700; outline:none; box-sizing:border-box;
+            transition:box-shadow 0.2s;
+        }
+        .edit-input-wrap input:focus { box-shadow:0 0 0 3px rgba(245,158,11,0.3); }
+        .edit-input-wrap .unit { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.85rem; pointer-events:none; }
+        
+        .edit-preview {
+            background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3);
+            border-radius:12px; padding:12px 16px; margin-top:8px;
+            display:flex; justify-content:space-between; align-items:center;
+        }
+        .edit-preview span { color:var(--text-gray); font-size:0.9rem; }
+        .edit-preview strong { color:var(--accent-green); font-size:1.1rem; }
+
+        .edit-buttons { display:flex; gap:10px; margin-top:22px; }
+        .btn-confirm {
+            flex:1; background:var(--accent-amber); color:#000; border:none;
+            padding:13px; border-radius:14px; font-weight:700; font-size:1rem;
+            cursor:pointer; transition:0.2s;
+        }
+        .btn-confirm:hover { background:#fbbf24; }
+        .btn-cancel-edit {
+            flex:1; background:rgba(255,255,255,0.08); color:white; border:none;
+            padding:13px; border-radius:14px; font-weight:600; font-size:1rem;
+            cursor:pointer; transition:0.2s;
+        }
+        .btn-cancel-edit:hover { background:rgba(255,255,255,0.14); }
+        .btn-reset-one {
+            background:rgba(239,68,68,0.15); color:var(--accent-red); border:1px solid rgba(239,68,68,0.35);
+            padding:10px 16px; border-radius:12px; font-size:0.85rem; cursor:pointer; transition:0.2s;
+        }
+        .btn-reset-one:hover { background:var(--accent-red); color:white; }
+
+        /* ── Zone d'impression ── */
+        #print-zone { display:none; }
+
+        /* ── IMPRESSION PAPIER ── */
         @media print {
-            @page { size: A4; margin: 0; }
-            body * { visibility: hidden; } /* On cache l'interface d'administration */
-            #print-zone, #print-zone * { visibility: visible; } /* On affiche uniquement le ticket */
-            #print-zone { display: block !important; position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; }
-            
-            /* Design du ticket de facture */
-            .invoice-page { width: 210mm; height: 297mm; padding: 12mm 18mm; box-sizing: border-box; background: white; page-break-after: always; }
-            .p-header { text-align: center; margin-bottom: 5px; font-size: 19px; font-weight: bold; line-height: 1.4; }
-            .section-title { font-family: 'Dancing Script', cursive; font-size: 26px; text-align: center; margin: 12px 0 6px 0; }
-            .info-box { border: 2.5px solid #333; border-radius: 18px; padding: 15px 25px; margin-bottom: 18px; }
-            .p-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 18px; }
-            .bold { font-weight: 900; }
-            .deadline { margin-top: 15px; font-size: 18px; font-weight: bold; }
-            .tresorier { font-family: 'Dancing Script', cursive; font-size: 28px; text-align: right; margin-top: -30px; }
-            
-            /* Ligne à découper (Reçu) */
-            .p-dashed { border-top: 2px dashed #000; margin: 35px 0; position: relative; }
-            .scissors { position: absolute; top: -14px; background: white; padding: 0 10px; font-size: 22px; }
-            .sc-left { left: 10%; } .sc-right { right: 10%; }
-            .footer-line { border-top: 4px solid black; margin-top: 15px; padding-top: 15px; }
+            @page { size:A4; margin:0; }
+            body * { visibility:hidden; }
+            #print-zone, #print-zone * { visibility:visible; }
+            #print-zone { display:block !important; position:absolute; left:0; top:0; width:100%; color:black; background:white; }
+            .invoice-page { width:210mm; height:297mm; padding:12mm 18mm; box-sizing:border-box; background:white; page-break-after:always; }
+            .p-header { text-align:center; margin-bottom:5px; font-size:19px; font-weight:bold; line-height:1.4; }
+            .section-title { font-family:'Dancing Script',cursive; font-size:26px; text-align:center; margin:12px 0 6px 0; }
+            .info-box { border:2.5px solid #333; border-radius:18px; padding:15px 25px; margin-bottom:18px; }
+            .p-row { display:flex; justify-content:space-between; margin-bottom:8px; font-size:18px; }
+            .bold { font-weight:900; }
+            .deadline { margin-top:15px; font-size:18px; font-weight:bold; }
+            .tresorier { font-family:'Dancing Script',cursive; font-size:28px; text-align:right; margin-top:-30px; }
+            .p-dashed { border-top:2px dashed #000; margin:35px 0; position:relative; }
+            .scissors { position:absolute; top:-14px; background:white; padding:0 10px; font-size:22px; }
+            .sc-left { left:10%; } .sc-right { right:10%; }
+            .footer-line { border-top:4px solid black; margin-top:15px; padding-top:15px; }
+            /* Mention "arriérés corrigés" sur facture imprimée si modifié manuellement */
+            .modif-notice { font-size:11px; color:#888; font-style:italic; margin-top:4px; }
         }
 
-        /* --- ADAPTATION MOBILE (Responsive) --- */
-        @media (max-width: 768px) {
-            .top-bar { flex-direction: column; align-items: stretch; border-radius: 20px; padding: 15px; }
-            .search-box { max-width: 100%; margin-bottom: 5px; }
-            .releveur-select { max-width: 100%; width: 100%; margin-bottom: 5px; box-sizing: border-box; }
-            .btn-print { width: 100%; flex-direction: row; justify-content: center; margin-bottom: 5px; padding: 15px; font-size: 1.1rem; }
-            .master-selection { justify-content: center; }
-            .facture-item { flex-direction: column; align-items: flex-start; gap: 15px; }
-            .facture-item > div:last-child { width: 100%; justify-content: space-between; }
+        /* ── Responsive mobile ── */
+        @media (max-width:768px) {
+            .top-bar { flex-direction:column; align-items:stretch; border-radius:20px; padding:15px; }
+            .search-box { max-width:100%; margin-bottom:5px; }
+            .releveur-select { max-width:100%; width:100%; margin-bottom:5px; box-sizing:border-box; }
+            .btn-print { width:100%; flex-direction:row; justify-content:center; margin-bottom:5px; padding:15px; font-size:1.1rem; }
+            .master-selection { justify-content:center; }
+            .facture-item { flex-direction:column; align-items:flex-start; }
+            .item-right { width:100%; justify-content:space-between; }
         }
     </style>
 </head>
@@ -103,321 +217,474 @@
 
 <script>
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            for(let registration of registrations) { registration.update(); }
-        });
+        navigator.serviceWorker.getRegistrations().then(regs => { for(let r of regs) r.update(); });
     }
 </script>
 
+<!-- ── Barre de navigation ── -->
 <div class="top-bar">
     <div class="search-box">
         <i class="fas fa-search"></i>
         <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="window.filterList()">
     </div>
-
-    <select id="monthFilter" onchange="window.changeMonth()" class="releveur-select" style="border-left: 3px solid var(--accent-blue);">
+    <select id="monthFilter" onchange="window.changeMonth()" class="releveur-select" style="border-left:3px solid var(--accent-blue);">
         <option value="actuel">📂 Chargement des périodes...</option>
     </select>
-
     <select id="releveurFilter" onchange="window.filterList()" class="releveur-select">
         <option value="">Tous les agents</option>
     </select>
-
     <button class="btn-print" onclick="window.print()">
         <i class="fas fa-print"></i>
         <span>Imprimer</span>
     </button>
-
     <div class="master-selection">
         <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)">
         <label for="master-cb">Tout</label>
     </div>
 </div>
 
-<div class="list-container" id="list-container">
-    <p style="text-align:center; padding: 20px;">Analyse de l'historique et calcul des factures en cours...</p>
+<!-- ── Bannière modifications ── -->
+<div id="banner-modifs">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span>
+        <strong id="banner-count">0</strong> arriérés modifiés manuellement — ces valeurs ne seront pas sauvegardées dans Firebase, elles s'appliquent uniquement à cette impression.
+    </span>
+    <button id="btn-reset-all" onclick="window.resetAllOverrides()">
+        <i class="fas fa-undo"></i> Tout réinitialiser
+    </button>
 </div>
 
+<!-- ── Liste des factures ── -->
+<div class="list-container" id="list-container">
+    <p style="text-align:center; padding:20px;">Analyse de l'historique et calcul des factures en cours...</p>
+</div>
+
+<!-- ── Zone d'impression (cachée à l'écran) ── -->
 <div id="print-zone"></div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-    // ✅ CORRECTION 2 : Import Firebase Auth (manquant = cause du blanc)
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+<!-- ── Modal d'édition des arriérés ── -->
+<div class="edit-overlay" id="edit-overlay" onclick="window.closeEditIfOutside(event)">
+    <div class="edit-modal" id="edit-modal">
+        <h3><i class="fas fa-pencil-alt"></i> Modifier les arriérés</h3>
+        <p class="edit-client-name" id="edit-client-name"></p>
 
-    // ✅ CORRECTION 1 : Vérification de la session avant tout
+        <div class="edit-row">
+            <label>Montant du mois (calculé, non modifiable)</label>
+            <div class="read-val" id="edit-montant-mois">—</div>
+        </div>
+
+        <div class="edit-row">
+            <label>Arriérés / Solde antérieur impayé</label>
+            <div class="edit-input-wrap">
+                <input type="number" id="edit-input-arrieres" min="0" step="50"
+                       oninput="window.updateEditPreview()" onkeydown="window.editKeyDown(event)">
+                <span class="unit">FCFA</span>
+            </div>
+        </div>
+
+        <div class="edit-preview">
+            <span>Nouveau total à payer</span>
+            <strong id="edit-preview-total">—</strong>
+        </div>
+
+        <div class="edit-buttons">
+            <button class="btn-cancel-edit" onclick="window.closeEditModal()">
+                <i class="fas fa-times"></i> Annuler
+            </button>
+            <button class="btn-reset-one" id="btn-reset-one" onclick="window.resetOneOverride()">
+                <i class="fas fa-undo"></i> Réinitialiser
+            </button>
+            <button class="btn-confirm" onclick="window.confirmEdit()">
+                <i class="fas fa-check"></i> Appliquer
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     SCRIPT PRINCIPAL
+════════════════════════════════════════════════════ -->
+<script type="module">
+    import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getAuth, onAuthStateChanged }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    // ✅ Vérification de la session
     if (typeof window.checkAccess === 'function') {
         const s = window.checkAccess(['président', 'secrétaire', 'trésorier']);
         if (!s) throw new Error('Accès refusé');
     }
 
-    // Tes identifiants Firebase
+    // ── Config Firebase ──
     const firebaseConfig = {
-        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-        authDomain: "asufor-67a06.firebaseapp.com",
+        apiKey:      "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+        authDomain:  "asufor-67a06.firebaseapp.com",
         databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-        projectId: "asufor-67a06"
+        projectId:   "asufor-67a06"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    // ✅ CORRECTION 2 : Initialisation de l'auth
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
     const auth = getAuth(app);
-    
-        // Variables globales
-    let dataCache = {};
-    let allBackups = {}; 
-    let unsubCurrentMonth = null;
+
+    // ── Variables globales ──
+    let dataCache           = {};   // données Firebase brutes + calculées
+    let allBackups          = {};   // archives mensuelles
+    let manualOverrides     = {};   // { [key]: { arrieres: number, original: number } }
+    let editCurrentKey      = null; // clé en cours d'édition dans le modal
+    let unsubCurrentMonth   = null;
     let currentSelectedMonth = "actuel";
 
-    // Formateur de prix (Ex: 1000 devient 1 000 FCFA)
-    const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(val) + " FCFA";
+    // ── Formateurs ──
+    const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(Math.round(val)) + " FCFA";
 
-        // Utilitaire pour créer les dates automatiquement
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
-        
-        // 1. Gérer les archives : si on consulte un mois passé, on prend la date de ce mois
         if (selectedMonthStr && selectedMonthStr !== "actuel") {
             const parts = selectedMonthStr.split('-');
             dRef = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, 15);
         } else {
-            // Sinon on utilise la date du jour
             dRef = dateReleve ? new Date(dateReleve) : new Date();
         }
-
-        // 2. Gérer les impayés purs : si 0 consommation ce mois-ci mais qu'il y a une dette, on recule d'un mois
-        if (isOnlyArrieres) {
-            dRef.setMonth(dRef.getMonth() - 1);
-        }
-
-        const dDebut = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1); 
-        const dFin = new Date(dRef.getFullYear(), dRef.getMonth(), 1);
-        const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(), 15);
-        const f = (d) => d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        
-        return { 
-            debut: f(dDebut), 
-            fin: f(dFin), 
-            echeance: f(dEcheance), 
-            date_edition: f(new Date()) // La date d'impression reste toujours celle d'aujourd'hui en bas
-        };
+        if (isOnlyArrieres) dRef.setMonth(dRef.getMonth() - 1);
+        const dDebut    = new Date(dRef.getFullYear(), dRef.getMonth() - 1, 1);
+        const dFin      = new Date(dRef.getFullYear(), dRef.getMonth(),     1);
+        const dEcheance = new Date(dRef.getFullYear(), dRef.getMonth(),    15);
+        const f = d => d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' });
+        return { debut: f(dDebut), fin: f(dFin), echeance: f(dEcheance), date_edition: f(new Date()) };
     }
-    
 
-    // --- CHARGEMENT DES MOIS (ARCHIVES) ---
+    // ── Mise à jour de la bannière des modifications ──
+    function updateBanner() {
+        const count = Object.keys(manualOverrides).length;
+        const banner = document.getElementById('banner-modifs');
+        if (count > 0) {
+            document.getElementById('banner-count').textContent = count;
+            banner.classList.add('visible');
+        } else {
+            banner.classList.remove('visible');
+        }
+    }
+
+    // ── Chargement du sélecteur de mois ──
     async function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
         try {
             const snapshot = await get(ref(db, 'asufor_backup'));
             let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
             if (snapshot.exists()) {
-                allBackups = snapshot.val(); 
-                // On trie les mois du plus récent au plus ancien
-                const sortedMonths = Object.keys(allBackups).sort().reverse();
-                sortedMonths.forEach(month => { optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`; });
+                allBackups = snapshot.val();
+                Object.keys(allBackups).sort().reverse().forEach(month => {
+                    optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`;
+                });
             }
             monthSelect.innerHTML = optionsHtml;
-            window.changeMonth(); 
-        } catch (error) {
+            window.changeMonth();
+        } catch (e) {
             monthSelect.innerHTML = '<option value="actuel">🌟 Mois Actuel</option>';
             window.changeMonth();
         }
     }
 
-    // --- CHANGEMENT DE MOIS DANS LE MENU ---
-    window.changeMonth = async function() {
+    // ── Changement de mois ──
+    window.changeMonth = function() {
         currentSelectedMonth = document.getElementById('monthFilter').value;
+        // Réinitialise les overrides manuels lors d'un changement de mois
+        manualOverrides = {};
+        updateBanner();
         document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
-        
-        // Arrête d'écouter l'ancien dossier
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
-        
-        // Détermine le bon dossier à lire
-        let currentPath = currentSelectedMonth === "actuel" ? "asufor_db_diandioly" : `asufor_backup/${currentSelectedMonth}/donnees`;
-        
-        // ✅ CORRECTION 3 : Gestion d'erreur sur la lecture Firebase
-        unsubCurrentMonth = onValue(ref(db, currentPath), (snap) => { renderData(snap); }, (error) => {
-            console.error("Erreur Firebase :", error.code, error.message);
-            document.getElementById('list-container').innerHTML = 
-                `<p style='text-align:center; color:#ef4444;'>⚠️ Erreur de chargement (${error.code}). Vérifiez votre connexion ou reconnectez-vous.</p>`;
+        const path = currentSelectedMonth === "actuel"
+            ? "asufor_db_diandioly"
+            : `asufor_backup/${currentSelectedMonth}/donnees`;
+        unsubCurrentMonth = onValue(ref(db, path), renderData, (err) => {
+            console.error("Firebase:", err.code, err.message);
+            document.getElementById('list-container').innerHTML =
+                `<p style='text-align:center;color:#ef4444;'>⚠️ Erreur (${err.code}). Reconnectez-vous.</p>`;
         });
-    }
+    };
 
-       // ==========================================
-    // PARTIE 5 : CALCUL ET AFFICHAGE À L'ÉCRAN
-    // ==========================================
+    // ══════════════════════════════════════════
+    // RENDU DE LA LISTE
+    // ══════════════════════════════════════════
     function renderData(snap) {
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
-        const sortedMonths = Object.keys(allBackups).sort().reverse();
-        
-        const listContainer = document.getElementById('list-container');
-        listContainer.innerHTML = ""; 
-        dataCache = {}; 
-
-        // --- NOUVEAU : On utilise une Map pour lier l'ID de l'agent à son vrai Nom ---
+        const sortedMonths     = Object.keys(allBackups).sort().reverse();
+        const listContainer    = document.getElementById('list-container');
+        listContainer.innerHTML = "";
+        dataCache = {};
         const agentsMap = new Map();
 
         snap.forEach(child => {
-            const d = child.val();
+            const d   = child.val();
             const key = child.key;
-            
-            const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
-            const nIdx = parseFloat(d.new_index || 0);
-            const lIdx = parseFloat(d.last_index || 0);
-            const vol = Math.max(0, nIdx - lIdx);
-            const montantMois = vol * parseFloat(d.facteur || 250);
-            
-            // --- RECHERCHE PROFONDE DES ARRIÉRÉS ---
-            let arrieres = 0;
-            let historiqueTrouve = false;
 
+            const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
+            const nIdx         = parseFloat(d.new_index  || 0);
+            const lIdx         = parseFloat(d.last_index || 0);
+            const vol          = Math.max(0, nIdx - lIdx);
+            const montantMois  = vol * parseFloat(d.facteur || 250);
+
+            // ── Recherche profonde des arriérés Firebase ──
+            let arrieres = 0, historiqueTrouve = false;
             for (let m of sortedMonths) {
-                if (m < selectedMonthStr && allBackups[m] && allBackups[m].donnees) {
-                    const historicalRecords = Object.values(allBackups[m].donnees);
-                    const oldRecord = historicalRecords.find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr);
-                    
+                if (m < selectedMonthStr && allBackups[m]?.donnees) {
+                    const oldRecord = Object.values(allBackups[m].donnees)
+                        .find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr);
                     if (oldRecord) {
-                        historiqueTrouve = true; 
+                        historiqueTrouve = true;
                         if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
-                            // CORRECTION : On utilise UNIQUEMENT le champ arrieres/impaye enregistré.
-                            // On ne recalcule JAMAIS le montant du mois ancien pour éviter les doublons.
-                            // Si le champ 'apaid' existe (montant exact impayé sauvegardé), on l'utilise.
-                            // Sinon on lit directement arrieres ou _impaye_anterieur du record courant (d),
-                            // car c'est lui qui porte la vraie valeur à jour.
                             const apaidExplicite = parseFloat(oldRecord.apaid);
-                            if (!isNaN(apaidExplicite) && apaidExplicite > 0) {
-                                // apaid est explicitement renseigné → c'est la dette exacte
-                                arrieres = apaidExplicite;
-                            } else {
-                                // Pas de apaid → on lit la dette depuis le record actuel (d)
-                                // qui est la source la plus fiable pour la dette courante
-                                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0);
-                            }
+                            arrieres = (!isNaN(apaidExplicite) && apaidExplicite > 0)
+                                ? apaidExplicite
+                                : parseFloat(d.arrieres || d._impaye_anterieur || 0);
                         }
-                        break; 
+                        break;
                     }
                 }
             }
+            if (!historiqueTrouve) arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0);
 
-            if (!historiqueTrouve) { 
-                arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0); 
-            }
-
-            d.vol = vol;
+            d.vol        = vol;
             d.montantMois = montantMois;
-            d.arrieres = arrieres;
-            d.total = montantMois + arrieres;
+            // Applique l'override manuel s'il existe, sinon valeur Firebase
+            d.arrieres   = manualOverrides[key] !== undefined ? manualOverrides[key].arrieres : arrieres;
+            d.arrieresFB = arrieres;   // valeur Firebase d'origine (pour reset)
+            d.total      = montantMois + d.arrieres;
             dataCache[key] = d;
 
-            // --- NOUVEAU : Enregistrement de l'agent (ID + Nom) ---
-            if (d.agent_id) {
-                agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
-            }
+            if (d.agent_id) agentsMap.set(d.agent_id, d.agent_name || "Agent inconnu");
 
-            // --- CRÉATION DE LA CARTE VISUELLE ---
+            // ── Création de la carte ──
+            const isModified = manualOverrides[key] !== undefined;
             const div = document.createElement('div');
-            div.className = 'facture-item';
-            div.setAttribute('data-id', key);
-            div.setAttribute('data-search', `${(d.name || '').toLowerCase()} ${currentNumCompteurStr}`);
+            div.className = 'facture-item' + (isModified ? ' is-modified' : '');
+            div.setAttribute('data-id',       key);
+            div.setAttribute('data-search',   `${(d.name || '').toLowerCase()} ${currentNumCompteurStr}`);
             div.setAttribute('data-releveur', d.agent_id || '');
-            
-            const checkboxHtml = d.total > 0 
-                ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.renderPrint()" style="width:20px; height:20px; accent-color:var(--accent-green); cursor:pointer;">`
-                : `<span style="font-size: 0.8rem; color: var(--text-gray); font-style: italic;">Rien à payer</span>`;
+
+            const badgeHtml = isModified
+                ? `<div><span class="badge-modifie"><i class="fas fa-pencil-alt"></i> Arriérés modifiés</span></div>`
+                : '';
+
+            const checkboxHtml = d.total > 0
+                ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.renderPrint()"
+                          style="width:20px;height:20px;accent-color:var(--accent-green);cursor:pointer;">`
+                : `<span style="font-size:0.8rem;color:var(--text-gray);font-style:italic;">Rien à payer</span>`;
 
             div.innerHTML = `
-                <div>
-                    <strong style="font-size:1.1rem">${d.name || 'Inconnu'}</strong><br>
-                    <span style="color:var(--text-gray); font-size:0.9rem">Cpt: ${d.numero_compteur || 'N/A'} | Zone: ${d.zone || 'N/A'}</span>
+                <div class="item-info">
+                    <strong>${d.name || 'Inconnu'}</strong>
+                    <div class="sub">Cpt: ${d.numero_compteur || 'N/A'} | Zone: ${d.zone || 'N/A'}</div>
+                    ${badgeHtml}
                 </div>
-                <div style="display:flex; align-items:center; gap:20px;">
-                    <div style="text-align:right">
-                        <div style="color:var(--text-gray); font-size:0.8rem">Mois: ${fPrice(montantMois)} | Arr: ${fPrice(arrieres)}</div>
-                        <strong style="color:${d.total > 0 ? 'var(--accent-green)' : 'var(--text-gray)'}; font-size:1.1rem">${fPrice(d.total)}</strong>
+                <div class="item-right">
+                    <div class="item-amounts">
+                        <div class="amounts-detail" id="detail-${key}">
+                            Mois: ${fPrice(montantMois)} | Arr: <span id="arr-${key}">${fPrice(d.arrieres)}</span>
+                        </div>
+                        <div class="total-val ${d.total > 0 ? 'total-green' : 'total-gray'}" id="total-${key}">
+                            ${fPrice(d.total)}
+                        </div>
                     </div>
+                    <button class="btn-edit" onclick="window.openEditModal('${key}')" title="Modifier les arriérés">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
                     ${checkboxHtml}
-                </div>
-            `;
+                </div>`;
             listContainer.appendChild(div);
         });
 
-        // --- NOUVEAU : Met à jour la liste des agents avec les vrais noms ---
+        // ── Mise à jour du filtre agents ──
         const releveurSelect = document.getElementById('releveurFilter');
-        const currentSelection = releveurSelect.value;
+        const current = releveurSelect.value;
         releveurSelect.innerHTML = '<option value="">Tous les agents</option>';
-        
-        agentsMap.forEach((agentName, agentId) => {
-            releveurSelect.innerHTML += `<option value="${agentId}">👤 ${agentName.toUpperCase()}</option>`;
+        agentsMap.forEach((name, id) => {
+            releveurSelect.innerHTML += `<option value="${id}">👤 ${name.toUpperCase()}</option>`;
         });
-        
-        releveurSelect.value = currentSelection; 
+        releveurSelect.value = current;
 
         window.filterList();
+        updateBanner();
     }
-    
 
-        // ==========================================
-    // PARTIE 6 : FILTRES ET GÉNÉRATION PAPIER
-    // ==========================================
-    
-    // ✅ CORRECTION 2 : On attend que Firebase Auth confirme la session avant de lire les données
-    // Sans ça, auth == null → règles refusent → rien ne s'affiche
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            initMonthFilter();
-        } else {
-            document.getElementById('list-container').innerHTML = 
-                "<p style='text-align:center; color:#ef4444;'>⚠️ Session expirée. <a href='../index.html' style='color:#3b82f6'>Reconnectez-vous</a></p>";
+    // ══════════════════════════════════════════
+    // GESTION DU MODAL D'ÉDITION DES ARRIÉRÉS
+    // ══════════════════════════════════════════
+
+    window.openEditModal = function(key) {
+        const d = dataCache[key];
+        if (!d) return;
+        editCurrentKey = key;
+
+        document.getElementById('edit-client-name').textContent =
+            `${d.name || 'Inconnu'} — Cpt: ${d.numero_compteur || 'N/A'} — Zone: ${d.zone || 'DIANDIOLY'}`;
+        document.getElementById('edit-montant-mois').textContent = fPrice(d.montantMois);
+
+        const input = document.getElementById('edit-input-arrieres');
+        input.value = Math.round(d.arrieres);
+        window.updateEditPreview();
+
+        // Affiche/cache le bouton "Réinitialiser" selon qu'il y a un override
+        document.getElementById('btn-reset-one').style.display =
+            manualOverrides[key] !== undefined ? 'inline-flex' : 'none';
+
+        document.getElementById('edit-overlay').classList.add('open');
+        setTimeout(() => input.focus(), 80);
+    };
+
+    window.updateEditPreview = function() {
+        const key = editCurrentKey;
+        if (!key) return;
+        const montantMois = dataCache[key]?.montantMois || 0;
+        const newArrieres = Math.max(0, parseFloat(document.getElementById('edit-input-arrieres').value) || 0);
+        document.getElementById('edit-preview-total').textContent = fPrice(montantMois + newArrieres);
+    };
+
+    window.editKeyDown = function(e) {
+        if (e.key === 'Enter')  window.confirmEdit();
+        if (e.key === 'Escape') window.closeEditModal();
+    };
+
+    window.confirmEdit = function() {
+        const key = editCurrentKey;
+        if (!key) return;
+        const newArrieres = Math.max(0, parseFloat(document.getElementById('edit-input-arrieres').value) || 0);
+        manualOverrides[key] = { arrieres: newArrieres, original: dataCache[key].arrieresFB };
+
+        // Met à jour dataCache
+        dataCache[key].arrieres = newArrieres;
+        dataCache[key].total    = dataCache[key].montantMois + newArrieres;
+
+        // Met à jour la carte dans le DOM sans recharger toute la liste
+        refreshCard(key);
+        updateBanner();
+        window.renderPrint();
+        window.closeEditModal();
+    };
+
+    window.resetOneOverride = function() {
+        const key = editCurrentKey;
+        if (!key) return;
+        delete manualOverrides[key];
+        dataCache[key].arrieres = dataCache[key].arrieresFB;
+        dataCache[key].total    = dataCache[key].montantMois + dataCache[key].arrieresFB;
+
+        document.getElementById('edit-input-arrieres').value = Math.round(dataCache[key].arrieres);
+        window.updateEditPreview();
+        document.getElementById('btn-reset-one').style.display = 'none';
+
+        refreshCard(key);
+        updateBanner();
+        window.renderPrint();
+        window.closeEditModal();
+    };
+
+    window.resetAllOverrides = function() {
+        if (!confirm('Réinitialiser tous les arriérés modifiés manuellement ?')) return;
+        Object.keys(manualOverrides).forEach(key => {
+            if (dataCache[key]) {
+                dataCache[key].arrieres = dataCache[key].arrieresFB;
+                dataCache[key].total    = dataCache[key].montantMois + dataCache[key].arrieresFB;
+                refreshCard(key);
+            }
+        });
+        manualOverrides = {};
+        updateBanner();
+        window.renderPrint();
+    };
+
+    window.closeEditModal = function() {
+        document.getElementById('edit-overlay').classList.remove('open');
+        editCurrentKey = null;
+    };
+
+    window.closeEditIfOutside = function(e) {
+        if (e.target === document.getElementById('edit-overlay')) window.closeEditModal();
+    };
+
+    // Rafraîchit uniquement les éléments visuels d'une carte sans tout re-render
+    function refreshCard(key) {
+        const d   = dataCache[key];
+        const div = document.querySelector(`.facture-item[data-id="${key}"]`);
+        if (!div || !d) return;
+
+        const isModified = manualOverrides[key] !== undefined;
+        div.classList.toggle('is-modified', isModified);
+
+        // Badge
+        const info = div.querySelector('.item-info');
+        const oldBadge = info.querySelector('.badge-modifie');
+        if (oldBadge) oldBadge.closest('div').remove();
+        if (isModified) {
+            const bdiv = document.createElement('div');
+            bdiv.innerHTML = `<span class="badge-modifie"><i class="fas fa-pencil-alt"></i> Arriérés modifiés</span>`;
+            info.appendChild(bdiv);
         }
-    });
 
-    // Filtre la liste (Recherche texte & Agent)
+        // Montants
+        const arrEl   = document.getElementById(`arr-${key}`);
+        const totalEl = document.getElementById(`total-${key}`);
+        if (arrEl)   arrEl.textContent   = fPrice(d.arrieres);
+        if (totalEl) {
+            totalEl.textContent = fPrice(d.total);
+            totalEl.className = `total-val ${d.total > 0 ? 'total-green' : 'total-gray'}`;
+        }
+
+        // Checkbox si total est passé à 0 (rare)
+        const right = div.querySelector('.item-right');
+        let cb = right.querySelector('.bill-cb, span');
+        if (d.total > 0 && (!cb || cb.tagName === 'SPAN')) {
+            if (cb) cb.remove();
+            const newCb = document.createElement('input');
+            newCb.type = 'checkbox'; newCb.className = 'bill-cb';
+            newCb.setAttribute('data-id', key);
+            newCb.setAttribute('onchange', 'window.renderPrint()');
+            newCb.style.cssText = "width:20px;height:20px;accent-color:var(--accent-green);cursor:pointer;";
+            right.appendChild(newCb);
+        }
+    }
+
+    // ══════════════════════════════════════════
+    // FILTRES
+    // ══════════════════════════════════════════
     window.filterList = function() {
-        // ... (ne change pas ton code ici)
-        const q = document.getElementById('searchInput').value.toLowerCase();
+        const q   = document.getElementById('searchInput').value.toLowerCase();
         const sel = document.getElementById('releveurFilter').value;
         document.querySelectorAll('.facture-item').forEach(it => {
             const mText = it.getAttribute('data-search').includes(q);
-            const mRel = sel === "" || it.getAttribute('data-releveur') === sel;
+            const mRel  = sel === "" || it.getAttribute('data-releveur') === sel;
             it.style.display = (mText && mRel) ? 'flex' : 'none';
         });
-        window.renderPrint(); // Met à jour le papier si on cache des éléments sélectionnés
-    }
+        window.renderPrint();
+    };
 
-    // Coche ou décoche tout ce qui est visible (Ignore les factures à 0)
     window.toggleAll = function(src) {
-        document.querySelectorAll('.facture-item').forEach(it => { 
-            if(it.style.display !== 'none') {
-                const checkbox = it.querySelector('.bill-cb');
-                if (checkbox) checkbox.checked = src.checked; 
+        document.querySelectorAll('.facture-item').forEach(it => {
+            if (it.style.display !== 'none') {
+                const cb = it.querySelector('.bill-cb');
+                if (cb) cb.checked = src.checked;
             }
         });
         window.renderPrint();
-    }
+    };
 
-           // Construit les pages HTML prêtes pour l'imprimante
+    // ══════════════════════════════════════════
+    // GÉNÉRATION DES PAGES D'IMPRESSION
+    // ══════════════════════════════════════════
     window.renderPrint = function() {
-        const selected = document.querySelectorAll('.bill-cb:checked');
         const printZone = document.getElementById('print-zone');
         let html = "";
-        
-        selected.forEach(box => {
-            // --- LA NOUVELLE LIGNE EST ICI ---
-            // On ignore cette facture si elle est actuellement masquée par un filtre (Agent ou Recherche)
-            if (box.closest('.facture-item').style.display === 'none') return;
-            
-            const d = dataCache[box.getAttribute('data-id')];
-            
-            // --- NOUVEAU : On détecte si c'est une facture 100% arriérés ---
+
+        document.querySelectorAll('.bill-cb:checked').forEach(box => {
+            const item = box.closest('.facture-item');
+            if (item.style.display === 'none') return;
+
+            const d   = dataCache[box.getAttribute('data-id')];
             const isOnlyArrieres = (d.montantMois === 0 && d.arrieres > 0);
-            
-            // --- NOUVEAU : On passe les paramètres à notre formateur de dates ---
             const dates = formatSmartDates(d.date, currentSelectedMonth, isOnlyArrieres);
-            
-            // ... (Le reste de ton code HTML pour l'impression avec html += `...`)
-            
+            const isModified = manualOverrides[box.getAttribute('data-id')] !== undefined;
+
             html += `
             <div class="invoice-page">
                 <div class="p-header">Forage DIANDIOLY 🚰<br>77 624 70 30</div>
@@ -425,14 +692,12 @@
                 <div class="info-box">
                     <div class="p-row"><span>DU : <strong>${dates.debut}</strong></span><span>AU : <strong>${dates.fin}</strong></span></div>
                 </div>
-                
                 <div class="section-title">Détails du client</div>
                 <div class="info-box">
                     <div class="p-row"><span>Numéro Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
                     <div class="p-row"><span>Prénom/Nom</span><span>${d.name}</span></div>
                     <div class="p-row"><span>Adresse</span><span>${d.zone || 'DIANDIOLY'}</span></div>
                 </div>
-                
                 <div class="section-title">Détails consommation</div>
                 <div class="info-box">
                     <div class="p-row"><span>Dernier index</span><span>${d.last_index} m³</span></div>
@@ -440,31 +705,48 @@
                     <div class="p-row bold"><span>m³ vendus</span><span>${d.vol} m³</span></div>
                     <div class="p-row"><span>Prix Unitaire</span><span>250 FCFA</span></div>
                     <div class="p-row"><span>Montant du mois</span><span>${fPrice(d.montantMois)}</span></div>
-                    <div class="p-row" style="color:#e53e3e"><span>Solde antérieur impayé</span><span>${fPrice(d.arrieres)}</span></div>
-                    <div class="p-row bold" style="font-size:22px; border-top:2px solid #000; padding-top:8px; margin-top:5px;">
+                    <div class="p-row" style="color:#c53030">
+                        <span>Solde antérieur impayé</span>
+                        <span>${fPrice(d.arrieres)}${isModified ? ' *' : ''}</span>
+                    </div>
+                    <div class="p-row bold" style="font-size:22px;border-top:2px solid #000;padding-top:8px;margin-top:5px;">
                         <span>Montant Total à Payer</span><span>${fPrice(d.total)}</span>
                     </div>
+                    ${isModified ? `<div class="modif-notice">* Montant corrigé manuellement avant impression</div>` : ''}
                 </div>
-                
                 <div class="deadline">À payer avant le <strong>${dates.echeance}</strong></div>
                 <div class="tresorier">Le trésorier</div>
-                
-                <div class="p-dashed"><i class="fas fa-scissors scissors sc-left"></i><i class="fas fa-scissors scissors sc-right"></i></div>
-                
+                <div class="p-dashed">
+                    <i class="fas fa-scissors scissors sc-left"></i>
+                    <i class="fas fa-scissors scissors sc-right"></i>
+                </div>
                 <div class="section-title" style="font-size:20px">Reçu de paiement</div>
                 <div class="p-row"><span>N° Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
                 <div class="p-row"><span>Prénom & Nom</span><span>${d.name}</span></div>
-                
                 <div class="footer-line">
                     <div class="p-row"><span>Consommation (${d.vol} m³)</span><span>${fPrice(d.montantMois)}</span></div>
-                    <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}</span></div>
+                    <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}${isModified ? ' *' : ''}</span></div>
                     <div class="p-row bold" style="font-size:22px"><span>Total Reçu</span><span>${fPrice(d.total)}</span></div>
-                    <div style="font-size:12px; margin-top:5px; opacity:0.7">Date du relevé : ${dates.date_edition}</div>
+                    <div style="font-size:12px;margin-top:5px;opacity:0.7">Date du relevé : ${dates.date_edition}</div>
                 </div>
             </div>`;
         });
+
         printZone.innerHTML = html;
-    }
+    };
+
+    // ══════════════════════════════════════════
+    // DÉMARRAGE — on attend la confirmation Auth
+    // ══════════════════════════════════════════
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            initMonthFilter();
+        } else {
+            document.getElementById('list-container').innerHTML =
+                "<p style='text-align:center;color:#ef4444;'>⚠️ Session expirée. <a href='../index.html' style='color:#3b82f6'>Reconnectez-vous</a></p>";
+        }
+    });
+
 </script>
 </body>
 </html>
