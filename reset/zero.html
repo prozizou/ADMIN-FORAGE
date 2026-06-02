@@ -303,12 +303,12 @@
         <div id="log-msg">Initialisation du système...</div>
         <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
     </div>
-        <script type="module">
+       <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-        // ✅ Vérification d'accès – Président uniquement
+        // ✅ Vérification d'accès
         if (typeof window.checkAccess === 'function') {
             const s = window.checkAccess(['président']);
             if (!s) throw new Error('Accès refusé');
@@ -325,11 +325,19 @@
         const db   = getDatabase(app);
         const auth = getAuth(app);
 
+        // Mois actuel (Cycle en cours de clôture)
         const now  = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
-        const cycleKey        = `${year}-${month}`;
+        const cycleKey = `${year}-${month}`;
         const expectedPasscode = `${year}${month}`;
+
+        // Calcul dynamique du mois précédent (pour lire l'archive correspondante)
+        const prevDate = new Date();
+        prevDate.setMonth(prevDate.getMonth() - 1);
+        const prevYear = prevDate.getFullYear();
+        const prevMonth = String(prevDate.getMonth() + 1).padStart(2, '0');
+        const prevCycleKey = `${prevYear}-${prevMonth}`;
 
         const btn          = document.getElementById('btn-action');
         const btnVerify    = document.getElementById('btn-verify');
@@ -380,6 +388,7 @@
                     btn.textContent = "Lancer Maintenance";
                     btn.disabled = false;
                     btnVerify.style.display = 'block'; 
+                    btnVerify.textContent = `🔍 Vérifier les impayés du mois précédent (${prevCycleKey})`;
                     log.textContent = "Saisissez le passcode du mois (" + expectedPasscode + ").";
                 }
             } catch (e) {
@@ -399,12 +408,13 @@
 
         window.loadUnpaidMeters = async function() {
             const contentDiv = document.getElementById('unpaid-content');
-            contentDiv.innerHTML = `${spinnerIcon} Chargement des impayés...`;
+            contentDiv.innerHTML = `${spinnerIcon} Chargement de l'archive ${prevCycleKey}...`;
             
             try {
-                const snap = await get(ref(db, 'asufor_db_diandioly'));
+                // Lecture depuis l'archive du mois précédent !
+                const snap = await get(ref(db, `asufor_backup/${prevCycleKey}/donnees`));
                 if (!snap.exists()) {
-                    contentDiv.innerHTML = 'Aucune donnée trouvée dans la base.';
+                    contentDiv.innerHTML = `<div style="padding:10px; text-align:center; color:var(--text-dim)">Aucune archive trouvée pour ${prevCycleKey}.</div>`;
                     return;
                 }
 
@@ -414,12 +424,15 @@
 
                 for (const key in data) {
                     const val = data[key];
+                    // Vérification rigoureuse du statut booléen ou texte
                     const estPaye = String(val.status || "").trim().toLowerCase() === "paye" || 
+                                    val.statut === true || 
                                     String(val.statut || "").trim().toLowerCase() === "true";
 
                     if (!estPaye) {
                         count++;
-                        const nomAffiche = val.nom ? `${val.prenom || ''} ${val.nom}`.trim() : key;
+                        // Gestion des deux formats de nom (name ou nom/prenom)
+                        const nomAffiche = val.name ? val.name : (val.nom ? `${val.prenom || ''} ${val.nom}`.trim() : key);
                         const ancienIdx = val.last_index || 0;
                         const nouvelIdx = val.new_index || ancienIdx;
 
@@ -440,15 +453,15 @@
                                     </select>
                                 </div>
                             </div>
-                            <button class="btn-save-item" onclick="saveMeterEdit('${key}')">💾 Enregistrer modif.</button>
+                            <button class="btn-save-item" onclick="saveMeterEdit('${key}')">💾 Corriger l'archive ${prevCycleKey}</button>
                         </div>`;
                     }
                 }
 
                 if (count === 0) {
-                    contentDiv.innerHTML = '<div style="color:var(--success); font-weight:bold; text-align:center; padding:10px;">✅ Tous les compteurs sont à jour et payés !</div>';
+                    contentDiv.innerHTML = `<div style="color:var(--success); font-weight:bold; text-align:center; padding:10px;">✅ Tous les compteurs de l'archive ${prevCycleKey} sont payés !</div>`;
                 } else {
-                    contentDiv.innerHTML = `<div style="margin-bottom:12px; font-weight:bold; color:var(--warning)">⚠️ ${count} compteurs actuellement impayés</div>` + html;
+                    contentDiv.innerHTML = `<div style="margin-bottom:12px; font-weight:bold; color:var(--warning)">⚠️ ${count} compteurs impayés dans l'archive ${prevCycleKey}</div>` + html;
                 }
 
             } catch (e) {
@@ -467,16 +480,20 @@
 
             try {
                 const updates = {};
-                updates[`asufor_db_diandioly/${key}/new_index`] = Number(newIdx);
-                updates[`asufor_db_diandioly/${key}/status`] = newStat;
-                updates[`asufor_db_diandioly/${key}/statut`] = newStat === 'paye' ? "true" : "false";
+                // 1. Mise à jour dans le backup du mois précédent
+                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/new_index`] = Number(newIdx);
+                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/status`] = newStat;
+                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/statut`] = newStat === 'paye' ? true : false; // Booléen corrigé
+
+                // 2. Synchronisation: On met à jour le last_index de la base active pour éviter un saut d'index ce mois-ci
+                updates[`asufor_db_diandioly/${key}/last_index`] = String(newIdx);
 
                 await update(ref(db), updates);
                 
                 if(newStat === 'paye') {
                     document.getElementById(`item_${key}`).remove();
                 } else {
-                    btnSave.innerHTML = "✅ Sauvegardé";
+                    btnSave.innerHTML = "✅ Archivé";
                     btnSave.style.background = "var(--success)";
                     setTimeout(() => {
                         btnSave.innerHTML = originalText;
@@ -551,6 +568,7 @@
                     const montantMois = conso * facteur;
 
                     const estPaye = String(val.status || "").trim().toLowerCase() === "paye"
+                                 || val.statut === true 
                                  || String(val.statut || "").trim().toLowerCase() === "true";
 
                     const arrieresCourants = parseFloat(val.arrieres || val._impaye_anterieur || 0);
@@ -559,7 +577,7 @@
                     updates[`asufor_db_diandioly/${key}/last_index`]       = String(nIdx);
                     updates[`asufor_db_diandioly/${key}/new_index`]        = nIdx;
                     updates[`asufor_db_diandioly/${key}/status`]           = "impaye";
-                    updates[`asufor_db_diandioly/${key}/statut`]           = "false";
+                    updates[`asufor_db_diandioly/${key}/statut`]           = false; // Booléen corrigé
                     updates[`asufor_db_diandioly/${key}/apaid`]            = nouvelApaid;
                     updates[`asufor_db_diandioly/${key}/arrieres`]         = 0;
                     updates[`asufor_db_diandioly/${key}/facture`]          = "false";
@@ -587,5 +605,4 @@
             }
         };
     </script>
-</body>
-</html>
+    
