@@ -65,7 +65,10 @@ window.setTab = function(tabName) {
     currentTab = tabName;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tab-' + tabName).classList.add('active');
-    displayLimit = 100; 
+    displayLimit = 100;
+    // Afficher/masquer la carte de progression uniquement pour l'onglet Relevés
+    const progressCard = document.getElementById('releves-progress-card');
+    if (progressCard) progressCard.style.display = (tabName === 'releves') ? 'block' : 'none';
     window.applyFilter();
 };
 
@@ -350,6 +353,11 @@ window.applyFilter = function() {
 
         if (currentTab === 'paye' && !isPaid) return false;
         if (currentTab === 'impaye' && isPaid) return false;
+        // Onglet Relevés : uniquement les compteurs dont l'index a bien été saisi (new_index > 0)
+        if (currentTab === 'releves') {
+            const hasIndex = parseFloat(item.new_index || 0) > 0;
+            if (!hasIndex) return false;
+        }
         
         return true; 
     });
@@ -377,6 +385,7 @@ window.applyFilter = function() {
 
     renderList();
     updateCharts(tCFA_Paye, tCFA_Impaye);
+    updateRelevesProgress();
 }
 
 function updateCharts(paye, impaye) {
@@ -433,6 +442,24 @@ function updateCharts(paye, impaye) {
     });
 }
 
+function updateRelevesProgress() {
+    const allEntries = Object.values(storeReleves);
+    const total = allEntries.length;
+    const relevesCount = allEntries.filter(item => parseFloat(item.new_index || 0) > 0).length;
+    const pct = total > 0 ? Math.round((relevesCount / total) * 100) : 0;
+
+    const ratio = document.getElementById('releves-ratio');
+    const fill = document.getElementById('releves-bar-fill');
+    const pctEl = document.getElementById('releves-progress-pct');
+
+    if (ratio) ratio.textContent = relevesCount + ' / ' + total;
+    if (fill) {
+        fill.style.width = pct + '%';
+        fill.style.background = pct === 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+    }
+    if (pctEl) pctEl.textContent = pct + '%';
+}
+
 function renderList() {
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
@@ -461,6 +488,11 @@ function renderList() {
             ? `<span class="audit-trail">Modifié par ${item.last_modified_by} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
             : '';
 
+        // Badge relevé affiché dans l'onglet Relevés
+        const relevesBadge = (currentTab === 'releves')
+            ? `<span class="badge-releve"><i class="fa-solid fa-gauge-high"></i> Relevé</span>`
+            : '';
+
         const editBtn = (currentUser.toLowerCase() === 'président')
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
             : '';
@@ -474,7 +506,7 @@ function renderList() {
         
         div.innerHTML = `
             <div style="flex: 1;">
-                <b style="color:var(--text-main);">${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
+                <b style="color:var(--text-main);">${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
                 <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${item.numero_compteur || 'N/A'}</small><br>
                 <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
                     ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
@@ -521,33 +553,47 @@ window.closeEditModal = function() {
     document.getElementById('edit-modal').style.display = 'none';
 };
 
-document.getElementById('edit-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
+// ✅ CORRECTION : submitEdit() exposé globalement (le form est maintenant un div dans le HTML)
+window.submitEdit = function() {
     if (currentUser.toLowerCase() !== 'président') {
         showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
         closeEditModal();
         return;
     }
-    
+
     const key = document.getElementById('edit-key').value;
     if (!key) return;
-    
-    const updatedData = {
-        name: document.getElementById('edit-name').value.trim(),
-        numero_compteur: document.getElementById('edit-compteur').value.trim(),
-        last_index: parseFloat(document.getElementById('edit-last-index').value) || 0,
-        new_index: parseFloat(document.getElementById('edit-new-index').value) || 0,
-        facteur: parseFloat(document.getElementById('edit-facteur').value) || 0,
-        last_modified_by: currentUser,
-        last_modified_at: new Date().toISOString()
-    };
-    
+
+    const nameVal    = document.getElementById('edit-name').value.trim();
+    const cptVal     = document.getElementById('edit-compteur').value.trim();
+    const lastIdx    = parseFloat(document.getElementById('edit-last-index').value);
+    const newIdx     = parseFloat(document.getElementById('edit-new-index').value);
+    const facteurVal = parseFloat(document.getElementById('edit-facteur').value);
+
+    if (!nameVal) { showToast("Le nom du client est requis.", true); return; }
+    if (isNaN(lastIdx) || isNaN(newIdx) || isNaN(facteurVal)) {
+        showToast("Les valeurs d'index et facteur doivent être des nombres.", true);
+        return;
+    }
+    if (newIdx < lastIdx) {
+        if (!confirm("Le nouvel index est inférieur à l'ancien. Confirmer quand même ?")) return;
+    }
+
     if (!currentActivePath) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
     }
-    
+
+    const updatedData = {
+        name:             nameVal,
+        numero_compteur:  cptVal,
+        last_index:       lastIdx,
+        new_index:        newIdx,
+        facteur:          facteurVal,
+        last_modified_by: currentUser,
+        last_modified_at: new Date().toISOString()
+    };
+
     const dbPath = `${currentActivePath}/${key}`;
     update(ref(db, dbPath), updatedData)
         .then(() => {
@@ -555,11 +601,15 @@ document.getElementById('edit-form').addEventListener('submit', function(e) {
             closeEditModal();
         })
         .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
-});
+};
 
-document.getElementById('edit-modal').addEventListener('click', function(e) {
-    if (e.target === this) closeEditModal();
-});
+// Fermer le modal en cliquant sur l'overlay
+const editModal = document.getElementById('edit-modal');
+if (editModal) {
+    editModal.addEventListener('click', function(e) {
+        if (e.target === this) closeEditModal();
+    });
+}
 
 function handleScroll() {
     const listElement = document.getElementById('scrollable-list');

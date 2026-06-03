@@ -3,22 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Diandioly - Gestion Pro</title>
-    
+    <title>ASUFOR Diandioly – Statistiques</title>
+
     <link rel="manifest" href="../manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="stats.css">
-    
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
-    
+
+    <!-- ✅ CORRECTION : security.js chargé AVANT le module stats.js -->
     <script src="../security.js"></script>
     <script>
+        // Vérification synchrone immédiate
         if (typeof checkAccess === 'function') {
             checkAccess(['trésorier', 'président', 'secrétaire']);
         }
     </script>
+
     <script src="../pwa.js" defer></script>
 </head>
 <body>
@@ -33,9 +36,15 @@
                 <h2 style="margin:0; font-size: 1.2rem;">ASUFOR Diandioly</h2>
             </div>
             <div class="header-actions">
-                <button class="btn-theme" onclick="toggleTheme()"><i id="theme-icon" class="fa-solid fa-moon"></i></button>
-                <button class="btn-export" style="background: var(--danger);" onclick="exportPDFImpayes()"><i class="fa-solid fa-file-pdf"></i> PDF Impayés</button>
-                <button class="btn-export" onclick="exportCSV()"><i class="fa-solid fa-file-excel"></i> Exporter</button>
+                <button class="btn-theme" onclick="toggleTheme()" title="Changer le thème">
+                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                </button>
+                <button class="btn-export" style="background: var(--danger);" onclick="exportPDFImpayes()">
+                    <i class="fa-solid fa-file-pdf"></i> PDF Impayés
+                </button>
+                <button class="btn-export" onclick="exportCSV()">
+                    <i class="fa-solid fa-file-excel"></i> CSV
+                </button>
             </div>
         </div>
 
@@ -62,30 +71,50 @@
         </div>
 
         <div class="charts-container">
-            <div class="chart-box">
-                <canvas id="pieChart"></canvas>
-            </div>
-            <div class="chart-box">
-                <canvas id="barChart"></canvas>
-            </div>
+            <div class="chart-box"><canvas id="pieChart"></canvas></div>
+            <div class="chart-box"><canvas id="barChart"></canvas></div>
         </div>
 
         <div class="tabs">
-            <button class="tab-btn active" id="tab-all" onclick="setTab('all')">Tous</button>
-            <button class="tab-btn" id="tab-paye" onclick="setTab('paye')">Payés</button>
-            <button class="tab-btn" id="tab-impaye" onclick="setTab('impaye')">Impayés</button>
+            <button class="tab-btn active" id="tab-all"     onclick="setTab('all')">Tous</button>
+            <button class="tab-btn"        id="tab-paye"    onclick="setTab('paye')">Payés</button>
+            <button class="tab-btn"        id="tab-impaye"  onclick="setTab('impaye')">Impayés</button>
+            <button class="tab-btn tab-btn-releves" id="tab-releves" onclick="setTab('releves')"><i class="fa-solid fa-gauge-high"></i> Relevés</button>
+        </div>
+
+        <div id="releves-progress-card" style="display:none;">
+            <div class="releves-progress-header">
+                <span><i class="fa-solid fa-gauge-high"></i> Compteurs relevés</span>
+                <span id="releves-ratio">0 / 0</span>
+            </div>
+            <div class="releves-progress-bar-bg">
+                <div class="releves-progress-bar-fill" id="releves-bar-fill"></div>
+            </div>
+            <div id="releves-progress-pct" class="releves-progress-pct">0%</div>
         </div>
     </div>
 
     <div class="list-section" id="scrollable-list">
         <div class="filter-row">
             <div style="position: relative; display: flex; flex: 1;">
-                <input type="text" id="search-client" placeholder="🔍 Rechercher client ou compteur..." oninput="applyFilter()" style="padding-right: 45px; width: 100%;">
-                <button id="btn-mic" onclick="startVoiceSearch()" title="Recherche vocale" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-sub); transition: 0.3s;">
+                <input
+                    type="text"
+                    id="search-client"
+                    placeholder="🔍 Rechercher client ou compteur..."
+                    oninput="applyFilter()"
+                    style="padding-right: 45px; width: 100%;"
+                >
+                <button
+                    id="btn-mic"
+                    onclick="startVoiceSearch()"
+                    title="Recherche vocale"
+                    style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-sub);transition:0.3s;"
+                >
                     <i class="fa-solid fa-microphone"></i>
                 </button>
             </div>
         </div>
+
         <div class="filter-row" style="margin-bottom: 20px;">
             <select id="sort-spinner" onchange="applyFilter()">
                 <option value="recent">⏱️ Plus récent</option>
@@ -97,28 +126,34 @@
             </select>
         </div>
 
-        <div id="item-count" style="font-size: 0.85rem; font-weight: bold; color: var(--text-sub); margin-bottom: 10px; text-align: right;">
+        <div id="item-count" style="font-size:0.85rem;font-weight:bold;color:var(--text-sub);margin-bottom:10px;text-align:right;">
             0 élément(s)
         </div>
 
         <div id="skeleton-loader">
-            <div class="skeleton-item"><div class="skeleton-text" style="width: 50%;"></div><div class="skeleton-text" style="width: 80%;"></div></div>
-            <div class="skeleton-item"><div class="skeleton-text" style="width: 40%;"></div><div class="skeleton-text" style="width: 70%;"></div></div>
-            <div class="skeleton-item"><div class="skeleton-text" style="width: 60%;"></div><div class="skeleton-text" style="width: 90%;"></div></div>
+            <div class="skeleton-item"><div class="skeleton-text" style="width:50%"></div><div class="skeleton-text" style="width:80%"></div></div>
+            <div class="skeleton-item"><div class="skeleton-text" style="width:40%"></div><div class="skeleton-text" style="width:70%"></div></div>
+            <div class="skeleton-item"><div class="skeleton-text" style="width:60%"></div><div class="skeleton-text" style="width:90%"></div></div>
         </div>
 
         <div id="releves-list"></div>
-        <button id="btn-load-more" class="load-more" onclick="loadMore()" style="display:none;">⬇️ Charger plus (100)</button>
+
+        <button id="btn-load-more" class="load-more" onclick="loadMore()" style="display:none;">
+            ⬇️ Charger plus (100)
+        </button>
     </div>
 </div>
 
-<button id="back-to-top" onclick="scrollToTop()"><i class="fa-solid fa-arrow-up"></i></button>
+<button id="back-to-top" onclick="scrollToTop()">
+    <i class="fa-solid fa-arrow-up"></i>
+</button>
 
-<div id="edit-modal" class="modal-overlay" style="display: none;">
+<!-- Modal de modification -->
+<div id="edit-modal" class="modal-overlay" style="display:none;">
     <div class="modal-content">
         <span class="close-btn" onclick="closeEditModal()">&times;</span>
         <h3><i class="fa-solid fa-pen-to-square"></i> Modifier le relevé</h3>
-        <form id="edit-form">
+        <div id="edit-form">
             <input type="hidden" id="edit-key">
             <label>Nom du client</label>
             <input type="text" id="edit-name" required>
@@ -128,13 +163,13 @@
             <input type="number" id="edit-last-index" step="any" required>
             <label>Nouvel index</label>
             <input type="number" id="edit-new-index" step="any" required>
-            <label>Facteur</label>
+            <label>Facteur (prix/m³)</label>
             <input type="number" id="edit-facteur" step="any" required>
             <div class="modal-actions">
                 <button type="button" onclick="closeEditModal()">Annuler</button>
-                <button type="submit">Enregistrer</button>
+                <button type="button" onclick="submitEdit()">Enregistrer</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 
