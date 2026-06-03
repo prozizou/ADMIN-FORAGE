@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASUFOR Admin – Anomalies</title>
+    <style>
+        :root {
+            --bg-color: #1a1e21;
+            --text-main: #dfe6e9;
+            --accent-blue: #38bdf8;
+            --accent-warn: #fbbf24;
+            --accent-red: #f87171;
+            --accent-green: #4ade80;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glow: rgba(251, 191, 36, 0.15);
+            --card-bg: rgba(255,255,255,0.04);
+        }
+        [data-theme="light"] {
+            --bg-color: #f0f2f5;
+            --text-main: #2d3436;
+            --glass: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(200, 200, 200, 0.5);
+            --glow: rgba(0, 0, 0, 0.05);
+            --card-bg: rgba(255,255,255,0.85);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: radial-gradient(circle at top right, #2d3436, var(--bg-color));
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 0 0 80px 0;
+            min-height: 100vh;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        /* ── HEADER ── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: rgba(26, 30, 33, 0.85);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        [data-theme="light"] .topbar { background: rgba(240,242,245,0.9); }
+
+        .btn-back {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            text-decoration: none;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .btn-back:hover { background: rgba(255,255,255,0.12); }
+
+        .topbar-title { flex: 1; }
+        .topbar-title h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+        .topbar-title p  { margin: 2px 0 0; font-size: 0.78rem; opacity: 0.55; }
+
+        .theme-switch {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+
+        /* ── STATS BAR ── */
+        .stats-bar {
+            display: flex;
+            gap: 12px;
+            padding: 16px 20px 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .stats-bar::-webkit-scrollbar { display: none; }
+
+        .stat-chip {
+            flex-shrink: 0;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            padding: 10px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 90px;
+        }
+        .stat-chip .val { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+        .stat-chip .lbl { font-size: 0.72rem; opacity: 0.6; margin-top: 4px; text-align: center; }
+        .chip-warn { border-color: rgba(251,191,36,0.4); }
+        .chip-warn .val { color: var(--accent-warn); }
+        .chip-red  { border-color: rgba(248,113,113,0.4); }
+        .chip-red  .val { color: var(--accent-red); }
+        .chip-green { border-color: rgba(74,222,128,0.4); }
+        .chip-green .val { color: var(--accent-green); }
+
+        /* ── SEARCH + FILTER ── */
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            padding: 14px 20px 0;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            position: relative;
+        }
+        .search-box input {
+            width: 100%;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 10px 14px 10px 38px;
+            color: var(--text-main);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-box input:focus { border-color: var(--accent-warn); }
+        .search-box svg {
+            position: absolute;
+            left: 12px; top: 50%;
+            transform: translateY(-50%);
+            width: 16px; height: 16px;
+            fill: rgba(255,255,255,0.35);
+        }
+
+        .filter-btn {
+            flex-shrink: 0;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .filter-btn.active, .filter-btn:hover {
+            background: rgba(251,191,36,0.18);
+            border-color: var(--accent-warn);
+            color: var(--accent-warn);
+        }
+
+        /* ── FILTER PILLS ── */
+        .filter-pills {
+            display: flex;
+            gap: 8px;
+            padding: 10px 20px 0;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .filter-pills::-webkit-scrollbar { display: none; }
+
+        .pill {
+            flex-shrink: 0;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            border: 1px solid var(--glass-border);
+            background: var(--glass);
+            transition: all 0.2s;
+        }
+        .pill.active { background: var(--accent-warn); border-color: var(--accent-warn); color: #1a1e21; font-weight: 600; }
+
+        /* ── LIST ── */
+        .list-container { padding: 16px 20px 0; }
+
+        .section-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.5;
+            margin: 0 0 10px;
+        }
+
+        .anomaly-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(251,191,36,0.2);
+            border-radius: 18px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+        .anomaly-card:hover { border-color: rgba(251,191,36,0.5); transform: translateY(-2px); }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            cursor: pointer;
+        }
+
+        .badge-icon {
+            width: 42px; height: 42px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .badge-anomaly { background: rgba(251,191,36,0.15); }
+        .badge-photo   { background: rgba(56,189,248,0.15); }
+        .badge-both    { background: rgba(248,113,113,0.15); }
+
+        .card-info { flex: 1; min-width: 0; }
+        .card-info .name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .card-info .meta {
+            font-size: 0.78rem;
+            opacity: 0.55;
+            margin-top: 2px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+        .dot-warn  { background: var(--accent-warn); box-shadow: 0 0 6px var(--accent-warn); }
+        .dot-blue  { background: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); }
+        .dot-red   { background: var(--accent-red);  box-shadow: 0 0 6px var(--accent-red); }
+
+        .chevron {
+            transition: transform 0.25s;
+            opacity: 0.4;
+            font-size: 18px;
+        }
+        .card-header.open .chevron { transform: rotate(180deg); }
+
+        /* ── DETAIL PANEL ── */
+        .card-detail {
+            display: none;
+            padding: 0 16px 16px;
+            border-top: 1px solid var(--glass-border);
+        }
+        .card-detail.open { display: block; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 12px 0;
+        }
+        .detail-item { font-size: 0.82rem; }
+        .detail-item .d-lbl { opacity: 0.5; margin-bottom: 2px; }
+        .detail-item .d-val { font-weight: 600; }
+
+        .photo-thumb {
+            width: 100%;
+            border-radius: 12px;
+            margin: 10px 0;
+            border: 1px solid var(--glass-border);
+            cursor: pointer;
+            transition: transform 0.2s;
+            max-height: 220px;
+            object-fit: cover;
+        }
+        .photo-thumb:hover { transform: scale(1.01); }
+
+        .no-photo {
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.4;
+            font-size: 0.85rem;
+            border: 1px dashed var(--glass-border);
+            border-radius: 12px;
+            margin: 10px 0;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .btn-action {
+            flex: 1;
+            padding: 9px 12px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .btn-action:active { transform: scale(0.97); }
+        .btn-resolve { background: rgba(74,222,128,0.2); color: var(--accent-green); border: 1px solid rgba(74,222,128,0.3); }
+        .btn-view    { background: rgba(56,189,248,0.15); color: var(--accent-blue);  border: 1px solid rgba(56,189,248,0.25); }
+        .btn-delete  { background: rgba(248,113,113,0.15); color: var(--accent-red); border: 1px solid rgba(248,113,113,0.25); }
+
+        /* ── EMPTY STATE ── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            opacity: 0.5;
+        }
+        .empty-state .big-icon { font-size: 56px; margin-bottom: 12px; }
+        .empty-state p { font-size: 0.95rem; margin: 0; }
+
+        /* ── LIGHTBOX ── */
+        .lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: rgba(0,0,0,0.92);
+            align-items: center;
+            justify-content: center;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 95vw;
+            max-height: 90vh;
+            border-radius: 12px;
+            object-fit: contain;
+        }
+        .lightbox-close {
+            position: absolute;
+            top: 20px; right: 20px;
+            font-size: 30px;
+            color: white;
+            cursor: pointer;
+            background: none;
+            border: none;
+            line-height: 1;
+        }
+
+        /* ── LOADER ── */
+        .loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 60px 20px;
+            gap: 14px;
+            opacity: 0.6;
+        }
+        .spinner {
+            width: 36px; height: 36px;
+            border: 3px solid var(--glass-border);
+            border-top-color: var(--accent-warn);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── TOAST ── */
+        .toast {
+            position: fixed;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: #2d3436;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+            white-space: nowrap;
+            border: 1px solid var(--glass-border);
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+
+        @media (min-width: 768px) {
+            .list-container { max-width: 760px; margin: 0 auto; padding: 16px 30px 0; }
+            .stats-bar, .toolbar, .filter-pills { max-width: 760px; margin: 0 auto; padding-left: 30px; padding-right: 30px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <a href="../home/accueil.html" class="btn-back" title="Retour">&#8592;</a>
+        <div class="topbar-title">
+            <h1>⚠️ Anomalies</h1>
+            <p id="subtitle">Chargement...</p>
+        </div>
+        <button class="theme-switch" id="themeBtn" aria-label="Thème">🌓</button>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-bar" id="stats-bar">
+        <div class="stat-chip chip-warn">
+            <span class="val" id="stat-total">–</span>
+            <span class="lbl">Total</span>
+        </div>
+        <div class="stat-chip chip-red">
+            <span class="val" id="stat-photo-only">–</span>
+            <span class="lbl">Avec photo</span>
+        </div>
+        <div class="stat-chip chip-green">
+            <span class="val" id="stat-resolved">–</span>
+            <span class="lbl">Résolues</span>
+        </div>
+        <div class="stat-chip" style="border-color:rgba(56,189,248,0.3);">
+            <span class="val" id="stat-today" style="color:var(--accent-blue);">–</span>
+            <span class="lbl">Aujourd'hui</span>
+        </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+        <div class="search-box">
+            <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="search-input" placeholder="Rechercher un client...">
+        </div>
+        <button class="filter-btn" id="sort-btn" onclick="toggleSort()">⬇ Date</button>
+    </div>
+
+    <!-- FILTER PILLS -->
+    <div class="filter-pills">
+        <span class="pill active" data-filter="all" onclick="setFilter('all', this)">Toutes</span>
+        <span class="pill" data-filter="with-photo" onclick="setFilter('with-photo', this)">📷 Avec photo</span>
+        <span class="pill" data-filter="no-photo" onclick="setFilter('no-photo', this)">Sans photo</span>
+        <span class="pill" data-filter="today" onclick="setFilter('today', this)">Aujourd'hui</span>
+        <span class="pill" data-filter="resolved" onclick="setFilter('resolved', this)">✅ Résolues</span>
+    </div>
+
+    <!-- LIST -->
+    <div class="list-container">
+        <p class="section-label" id="list-label">Chargement...</p>
+        <div id="anomaly-list">
+            <div class="loader"><div class="spinner"></div><span>Connexion à la base de données...</span></div>
+        </div>
+    </div>
+
+    <!-- LIGHTBOX -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+        <img id="lightbox-img" src="" alt="Photo compteur">
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast"></div>
+
+    <!-- FIREBASE -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="../security.js"></script>
+
+    <script>
+        // ── AUTH ──
+        const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
+
+        // ── FIREBASE CONFIG ──
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
+            authDomain: "asufor-67a06.firebaseapp.com",
+            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
+            projectId: "asufor-67a06"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ── STATE ──
+        let allAnomalies = [];
+        let currentFilter = 'all';
+        let searchQuery   = '';
+        let sortDesc      = true; // plus récent en premier
+
+        // ── THEME ──
+        (function() {
+            const saved = localStorage.getItem('asufor-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', saved);
+        })();
+        document.getElementById('themeBtn').addEventListener('click', () => {
+            const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('asufor-theme', next);
+        });
+
+        // ── TOAST ──
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // ── LIGHTBOX ──
+        function openLightbox(url) {
+            document.getElementById('lightbox-img').src = url;
+            document.getElementById('lightbox').classList.add('open');
+        }
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('open');
+        }
+
+        // ── FORMAT DATE ──
+        function formatDate(ts) {
+            if (!ts) return '—';
+            const d = new Date(ts);
+            const today = new Date();
+            const isToday = d.toDateString() === today.toDateString();
+            if (isToday) return 'Aujourd\'hui ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+            return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) +
+                   ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function isToday(ts) {
+            if (!ts) return false;
+            return new Date(ts).toDateString() === new Date().toDateString();
+        }
+
+        // ── LOAD DATA ──
+        db.ref('asufor_db_diandioly').on('value', snap => {
+            const raw = snap.val() || {};
+            allAnomalies = [];
+
+            for (const [key, data] of Object.entries(raw)) {
+                // Anomalie = note présente OU photo_url présente
+                if (data.note || data.photo_url) {
+                    allAnomalies.push({ key, ...data });
+                }
+            }
+
+            updateStats();
+            render();
+        });
+
+        // ── STATS ──
+        function updateStats() {
+            const withPhoto  = allAnomalies.filter(a => a.photo_url).length;
+            const resolved   = allAnomalies.filter(a => a.anomaly_resolved).length;
+            const todayCount = allAnomalies.filter(a => isToday(a.anomaly_date || a.last_modified)).length;
+
+            document.getElementById('stat-total').textContent     = allAnomalies.length;
+            document.getElementById('stat-photo-only').textContent = withPhoto;
+            document.getElementById('stat-resolved').textContent  = resolved;
+            document.getElementById('stat-today').textContent     = todayCount;
+
+            document.getElementById('subtitle').textContent =
+                allAnomalies.length === 0
+                    ? 'Aucune anomalie signalée'
+                    : `${allAnomalies.length} anomalie${allAnomalies.length > 1 ? 's' : ''} détectée${allAnomalies.length > 1 ? 's' : ''}`;
+        }
+
+        // ── FILTER ──
+        function setFilter(f, el) {
+            currentFilter = f;
+            document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+            el.classList.add('active');
+            render();
+        }
+
+        function toggleSort() {
+            sortDesc = !sortDesc;
+            document.getElementById('sort-btn').textContent = sortDesc ? '⬇ Date' : '⬆ Date';
+            render();
+        }
+
+        document.getElementById('search-input').addEventListener('input', e => {
+            searchQuery = e.target.value.toLowerCase().trim();
+            render();
+        });
+
+        // ── RENDER ──
+        function render() {
+            let data = [...allAnomalies];
+
+            // Filtre par type
+            if (currentFilter === 'with-photo')  data = data.filter(a => a.photo_url);
+            if (currentFilter === 'no-photo')     data = data.filter(a => !a.photo_url);
+            if (currentFilter === 'today')        data = data.filter(a => isToday(a.anomaly_date || a.last_modified));
+            if (currentFilter === 'resolved')     data = data.filter(a => a.anomaly_resolved);
+
+            // Recherche
+            if (searchQuery) {
+                data = data.filter(a =>
+                    (a.name || '').toLowerCase().includes(searchQuery) ||
+                    (a.key  || '').toLowerCase().includes(searchQuery) ||
+                    (a.note || '').toLowerCase().includes(searchQuery)
+                );
+            }
+
+            // Tri
+            data.sort((a, b) => {
+                const ta = a.anomaly_date || a.last_modified || 0;
+                const tb = b.anomaly_date || b.last_modified || 0;
+                return sortDesc ? tb - ta : ta - tb;
+            });
+
+            // Label
+            document.getElementById('list-label').textContent =
+                data.length === 0 ? '' : `${data.length} résultat${data.length > 1 ? 's' : ''}`;
+
+            const container = document.getElementById('anomaly-list');
+
+            if (data.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="big-icon">✅</div>
+                        <p>Aucune anomalie pour ce filtre</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = data.map(a => buildCard(a)).join('');
+
+            // Toggle expand
+            container.querySelectorAll('.card-header').forEach(h => {
+                h.addEventListener('click', () => {
+                    h.classList.toggle('open');
+                    const detail = h.nextElementSibling;
+                    detail.classList.toggle('open');
+                });
+            });
+        }
+
+        // ── BUILD CARD ──
+        function buildCard(a) {
+            const hasNote  = !!a.note;
+            const hasPhoto = !!a.photo_url;
+            const resolved = !!a.anomaly_resolved;
+            const dateTs   = a.anomaly_date || a.last_modified;
+
+            const iconEmoji = hasNote && hasPhoto ? '🔴' : hasPhoto ? '📷' : '⚠️';
+            const badgeClass = hasNote && hasPhoto ? 'badge-both' : hasPhoto ? 'badge-photo' : 'badge-anomaly';
+            const dotClass   = hasNote && hasPhoto ? 'dot-red'    : hasPhoto ? 'dot-blue'   : 'dot-warn';
+
+            const photoBlock = hasPhoto
+                ? `<img class="photo-thumb" src="${a.photo_url}" alt="Photo compteur" onclick="openLightbox('${a.photo_url}')">`
+                : `<div class="no-photo">📷 Aucune photo jointe</div>`;
+
+            const resolvedBadge = resolved
+                ? `<span style="color:var(--accent-green);font-size:0.78rem;">✅ Résolue</span>`
+                : '';
+
+            return `
+            <div class="anomaly-card" id="card-${a.key}">
+                <div class="card-header">
+                    <div class="badge-icon ${badgeClass}">${iconEmoji}</div>
+                    <div class="card-info">
+                        <div class="name">${a.name || a.key}</div>
+                        <div class="meta">
+                            <span>🔑 ${a.key}</span>
+                            <span>📅 ${formatDate(dateTs)}</span>
+                            ${resolvedBadge}
+                        </div>
+                    </div>
+                    <div class="status-dot ${dotClass}"></div>
+                    <span class="chevron">▾</span>
+                </div>
+                <div class="card-detail">
+                    ${photoBlock}
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <div class="d-lbl">Dernier index</div>
+                            <div class="d-val">${a.last_index ?? '—'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="d-lbl">Nouvel index</div>
+                            <div class="d-val">${a.new_index ?? '—'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="d-lbl">Statut relevé</div>
+                            <div class="d-val">${a.statut ? '✅ Fait' : '⏳ En attente'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="d-lbl">Note agent</div>
+                            <div class="d-val">${a.note || '—'}</div>
+                        </div>
+                    </div>
+                    <div class="action-row">
+                        ${hasPhoto ? `<button class="btn-action btn-view" onclick="openLightbox('${a.photo_url}')">🔍 Voir photo</button>` : ''}
+                        ${!resolved ? `<button class="btn-action btn-resolve" onclick="resolveAnomaly('${a.key}')">✅ Résoudre</button>` : ''}
+                        <button class="btn-action btn-delete" onclick="deleteAnomaly('${a.key}')">🗑 Effacer</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        // ── ACTIONS ──
+        async function resolveAnomaly(key) {
+            if (!confirm('Marquer cette anomalie comme résolue ?')) return;
+            try {
+                await db.ref(`asufor_db_diandioly/${key}`).update({ anomaly_resolved: true, last_modified: Date.now() });
+                showToast('✅ Anomalie marquée comme résolue');
+            } catch (e) {
+                showToast('❌ Erreur de mise à jour');
+            }
+        }
+
+        async function deleteAnomaly(key) {
+            if (!confirm('Effacer cette anomalie ? (note et photo supprimées)')) return;
+            try {
+                await db.ref(`asufor_db_diandioly/${key}`).update({
+                    note: null, photo_url: null,
+                    anomaly_date: null, anomaly_resolved: null,
+                    last_modified: Date.now()
+                });
+                showToast('🗑 Anomalie effacée');
+            } catch (e) {
+                showToast('❌ Erreur de suppression');
+            }
+        }
+    </script>
+</body>
+</html>
