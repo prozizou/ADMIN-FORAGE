@@ -8,6 +8,8 @@
     <title>ASUFOR Admin | Maintenance Master</title>
 
     <script src="../security.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
 
     <style>
         :root {
@@ -314,16 +316,27 @@
             if (!s) throw new Error('Accès refusé');
         }
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-            authDomain: "asufor-67a06.firebaseapp.com",
-            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-            projectId: "asufor-67a06"
-        };
+        const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
+
+        // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
+        const esc = window.escHtml || ((s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;'));
+
+        // ✅ FIX LOGIQUE : un compteur d'eau est MONOTONE — son index ne régresse jamais.
+        // Renvoie l'index réel à conserver : le nouveau relevé s'il est valide et >= ancien,
+        // sinon (non relevé, 0, ou aberrant) on CONSERVE l'ancien index. Jamais de retour à 0.
+        function indexConserve(val) {
+            const lRaw = parseFloat(val.last_index);
+            const lIdx = Number.isFinite(lRaw) ? lRaw : 0;
+            const nRaw = parseFloat(val.new_index);
+            const nIdx = (Number.isFinite(nRaw) && nRaw >= lIdx) ? nRaw : lIdx;
+            return { lIdx, nIdx };
+        }
 
         // Mois actuel (Cycle en cours de clôture)
         const now  = new Date();
@@ -389,7 +402,8 @@
                     btn.disabled = false;
                     btnVerify.style.display = 'block'; 
                     btnVerify.textContent = `🔍 Vérifier les impayés du mois précédent (${prevCycleKey})`;
-                    log.textContent = "Saisissez le passcode du mois (" + expectedPasscode + ").";
+                    // ✅ CORRECTION sécurité : ne pas afficher le passcode attendu à l'écran
+                    log.textContent = "Saisissez le passcode dynamique du mois (format AAAAMM).";
                 }
             } catch (e) {
                 log.textContent = "Erreur de connexion Firebase : " + e.message;
@@ -433,27 +447,30 @@
                         count++;
                         // Gestion des deux formats de nom (name ou nom/prenom)
                         const nomAffiche = val.name ? val.name : (val.nom ? `${val.prenom || ''} ${val.nom}`.trim() : key);
-                        const ancienIdx = val.last_index || 0;
-                        const nouvelIdx = val.new_index || ancienIdx;
+                        // ✅ FIX : index conservé (l'ancien index ne tombe pas à 0 si non relevé)
+                        const { lIdx: ancienIdx, nIdx: nouvelIdx } = indexConserve(val);
+                        // ✅ FIX XSS : échapper nom et clé avant injection HTML
+                        const safeNom = esc(nomAffiche);
+                        const safeKey = esc(key);
 
                         html += `
-                        <div class="unpaid-item" id="item_${key}">
-                            <div class="unpaid-header">👤 ${nomAffiche} (ID: ${key})</div>
+                        <div class="unpaid-item" id="item_${safeKey}">
+                            <div class="unpaid-header">👤 ${safeNom} (ID: ${safeKey})</div>
                             <div class="unpaid-details">
                                 <div><small style="color:var(--text-dim)">Ancien Index</small><br>${ancienIdx}</div>
                                 <div>
                                     <small style="color:var(--text-dim)">Nouvel Index</small><br>
-                                    <input type="number" id="idx_${key}" value="${nouvelIdx}">
+                                    <input type="number" id="idx_${safeKey}" value="${nouvelIdx}" min="${ancienIdx}" data-ancien="${ancienIdx}">
                                 </div>
                                 <div style="grid-column: span 2;">
                                     <small style="color:var(--text-dim)">Statut du paiement</small><br>
-                                    <select id="stat_${key}">
+                                    <select id="stat_${safeKey}">
                                         <option value="impaye" selected>🔴 Impayé</option>
                                         <option value="paye">🟢 Payé</option>
                                     </select>
                                 </div>
                             </div>
-                            <button class="btn-save-item" onclick="saveMeterEdit('${key}')">💾 Corriger l'archive ${prevCycleKey}</button>
+                            <button class="btn-save-item" onclick="saveMeterEdit('${safeKey}')">💾 Corriger l'archive ${esc(prevCycleKey)}</button>
                         </div>`;
                     }
                 }
@@ -472,11 +489,29 @@
         window.saveMeterEdit = async function(key) {
             const btnSave = document.querySelector(`#item_${key} .btn-save-item`);
             const originalText = btnSave.innerHTML;
+
+            const idxInput = document.getElementById(`idx_${key}`);
+            const newStat = document.getElementById(`stat_${key}`).value;
+
+            // ✅ FIX : anti-régression — l'index saisi ne peut pas être inférieur à l'ancien.
+            const ancien = parseFloat(idxInput.dataset.ancien) || 0;
+            const nVal   = parseFloat(idxInput.value);
+
+            if (!Number.isFinite(nVal)) {
+                alert("Index invalide : saisissez un nombre.");
+                idxInput.focus();
+                return;
+            }
+            if (nVal < ancien) {
+                alert(`Index refusé : ${nVal} est inférieur à l'ancien index (${ancien}).\nUn compteur d'eau ne peut pas régresser.`);
+                idxInput.value = ancien;
+                idxInput.focus();
+                return;
+            }
+
+            const newIdx = nVal;
             btnSave.innerHTML = "Sauvegarde...";
             btnSave.disabled = true;
-
-            const newIdx = document.getElementById(`idx_${key}`).value;
-            const newStat = document.getElementById(`stat_${key}`).value;
 
             try {
                 const updates = {};
@@ -518,6 +553,10 @@
             }
         });
 
+        // ✅ CORRECTION : compteur de tentatives de passcode pour éviter le brute-force
+        let maintenanceAttempts = 0;
+        const MAX_MAINTENANCE_ATTEMPTS = 3;
+
         window.runMaintenance = async function () {
             if (!navigator.onLine) {
                 alert("Vous êtes hors ligne. Action impossible.");
@@ -525,12 +564,25 @@
             }
 
             const inputPass = document.getElementById('passcode').value;
-            if (inputPass !== expectedPasscode) {
-                alert("Passcode incorrect !");
+            maintenanceAttempts++;
+            if (maintenanceAttempts > MAX_MAINTENANCE_ATTEMPTS) {
+                log.textContent = "Trop de tentatives incorrectes. Rechargez la page.";
+                log.style.color = "var(--danger)";
+                btn.disabled = true;
                 return;
             }
+            if (inputPass !== expectedPasscode) {
+                const remaining = MAX_MAINTENANCE_ATTEMPTS - maintenanceAttempts;
+                alert("Passcode incorrect !" + (remaining > 0 ? " (" + remaining + " essai(s) restant(s))" : " Rechargez la page."));
+                document.getElementById('passcode').value = '';
+                if (remaining <= 0) btn.disabled = true;
+                return;
+            }
+            maintenanceAttempts = 0; // Reset si correct
 
             if (!confirm(`⚠️ ATTENTION\n\nVoulez-vous clôturer le cycle ${cycleKey} et réinitialiser la base Diandioly ?\n\nCette opération est irréversible.`)) return;
+            // ✅ CORRECTION : Effacer le passcode dès que validé
+            document.getElementById('passcode').value = '';
 
             document.getElementById('unpaid-container').style.display = 'none';
             btnVerify.style.display = 'none';
@@ -561,19 +613,28 @@
 
                 keys.forEach(key => {
                     const val = data[key];
-                    const nIdx    = parseFloat(val.new_index   || 0);
-                    const lIdx    = parseFloat(val.last_index  || 0);
-                    const facteur = parseFloat(val.facteur     || 250);
-                    const conso   = Math.max(0, nIdx - lIdx);
+
+                    // ✅ FIX : index conservé (jamais de régression à 0 si non relevé)
+                    const { lIdx, nIdx } = indexConserve(val);
+
+                    // ✅ FIX : ne pas écraser un facteur légitime à 0 via ||
+                    const fRaw    = parseFloat(val.facteur);
+                    const facteur = Number.isFinite(fRaw) ? fRaw : 250;
+
+                    const conso       = Math.max(0, nIdx - lIdx);
                     const montantMois = conso * facteur;
 
                     const estPaye = String(val.status || "").trim().toLowerCase() === "paye"
                                  || val.statut === true 
                                  || String(val.statut || "").trim().toLowerCase() === "true";
 
-                    const arrieresCourants = parseFloat(val.arrieres || val._impaye_anterieur || 0);
+                    // ✅ FIX : arriérés à 0 légitimes préservés (?? au lieu de ||)
+                    const aRaw = parseFloat(val.arrieres ?? val._impaye_anterieur);
+                    const arrieresCourants = Number.isFinite(aRaw) ? aRaw : 0;
                     const nouvelApaid = estPaye ? 0 : (montantMois + arrieresCourants);
 
+                    // ✅ FIX : last_index ET new_index = index réel conservé.
+                    // Le mois prochain repart de l'index physique du compteur, pas de 0.
                     updates[`asufor_db_diandioly/${key}/last_index`]       = String(nIdx);
                     updates[`asufor_db_diandioly/${key}/new_index`]        = nIdx;
                     updates[`asufor_db_diandioly/${key}/status`]           = "impaye";
