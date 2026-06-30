@@ -409,8 +409,7 @@
                 log.textContent = "Erreur de connexion Firebase : " + e.message;
             }
         }
-
-        window.toggleUnpaidList = async function() {
+window.toggleUnpaidList = async function() {
             const container = document.getElementById('unpaid-container');
             if (container.style.display === 'none' || container.style.display === '') {
                 container.style.display = 'block';
@@ -633,10 +632,12 @@
                     const arrieresCourants = Number.isFinite(aRaw) ? aRaw : 0;
                     const nouvelApaid = estPaye ? 0 : (montantMois + arrieresCourants);
 
-                    // ✅ FIX : last_index ET new_index = index réel conservé.
-                    // Le mois prochain repart de l'index physique du compteur, pas de 0.
+                    // ✅ FIX : le NOUVEL index DEVIENT l'ANCIEN index (déplacement, pas duplication).
+                    // last_index = relevé final conservé ; new_index est VIDÉ pour accueillir
+                    // la relève du mois prochain. indexConserve() retombe sur last_index si
+                    // new_index reste vide => aucune régression à 0 au cycle suivant.
                     updates[`asufor_db_diandioly/${key}/last_index`]       = String(nIdx);
-                    updates[`asufor_db_diandioly/${key}/new_index`]        = nIdx;
+                    updates[`asufor_db_diandioly/${key}/new_index`]        = "";
                     updates[`asufor_db_diandioly/${key}/status`]           = "impaye";
                     updates[`asufor_db_diandioly/${key}/statut`]           = false; // Booléen corrigé
                     updates[`asufor_db_diandioly/${key}/apaid`]            = nouvelApaid;
