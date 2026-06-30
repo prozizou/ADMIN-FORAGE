@@ -1,0 +1,84 @@
+{
+  "rules": {
+    // ──────────────────────────────────────────────────────────────
+    //  ASUFOR Diandioly — Règles de sécurité Realtime Database
+    //  BROUILLON à TESTER avant déploiement (firebase deploy --only database)
+    //
+    //  Les rôles sont ici déduits de l'e-mail du compte Firebase Auth :
+    //    président  -> president@diandioly.com
+    //    secrétaire -> secretaire@diandioly.com
+    //    trésorier  -> tresorier@diandioly.com
+    //
+    //  ⚠️  RECOMMANDATION : à terme, remplacer ces tests d'e-mail par des
+    //      "custom claims" (auth.token.role == 'president', etc.) posés via
+    //      l'Admin SDK / une Cloud Function. C'est plus robuste qu'un e-mail.
+    // ──────────────────────────────────────────────────────────────
+
+    // Refus par défaut : rien n'est lisible/inscriptible hors des noeuds déclarés.
+    ".read": false,
+    ".write": false,
+
+    // ============ AGENTS (relevés terrain) ============
+    "db_agents": {
+      // Lecture : tout admin authentifié (le formulaire compteur liste les agents).
+      ".read": "auth != null",
+
+      // Écriture : création/gestion réservée au président et au secrétaire.
+      ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')",
+
+      // Index requis par la vérification de doublon (orderByChild('agent_tel')).
+      ".indexOn": ["agent_tel"],
+
+      "$agentId": {
+        ".validate": "newData.hasChildren(['agent', 'agent_tel', 'passcode', 'zone'])",
+        "agent":      { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 100" },
+        "agent_tel":  { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{7,15}$/)" },
+        // ⚠️  passcode encore en clair : valider le format en attendant un hachage côté serveur.
+        "passcode":   { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{6}$/)" },
+        "zone":       { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "siege":      { ".validate": "newData.isString()" },
+        "agent_id":   { ".validate": "newData.isString()" },
+        "key":        { ".validate": "newData.isString()" },
+        "id_source":  { ".validate": "newData.isString()" },
+        "created_at": { ".validate": "newData.isString()" },
+        // Tout autre champ inattendu est refusé (verrouille le schéma agent).
+        "$other":     { ".validate": false }
+      }
+    },
+
+    // ============ COMPTEURS / RELEVÉS (cycle courant) ============
+    "asufor_db_diandioly": {
+      // Lecture : tous les rôles authentifiés (stats, impression, anomalies).
+      ".read": "auth != null",
+
+      "$recordId": {
+        // Création : président ou secrétaire uniquement.
+        // Mise à jour (paiement, anomalie, archivage) : les trois rôles connus.
+        ".write": "auth != null && ( (!data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')) || (data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')) )",
+
+        // Validation des champs critiques. Les autres champs applicatifs
+        // (statut/status/facture/print/apaid/arrieres/anomaly_*/last_modified*…)
+        // restent permis pour ne pas casser les écritures partielles existantes.
+        "name":            { ".validate": "newData.isString() && newData.val().length <= 100" },
+        "numero_compteur": { ".validate": "newData.isString()" },
+        "new_index":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "last_index":      { ".validate": "newData.isString() || newData.isNumber()" },
+        "facteur":         { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "tel":             { ".validate": "!newData.exists() || newData.val().matches(/^[0-9]{0,15}$/)" },
+        "agent_id":        { ".validate": "newData.isString()" },
+        "$other":          { ".validate": true }
+      }
+    },
+
+    // ============ ARCHIVES DE CYCLE (reset/clôture) ============
+    "asufor_backup": {
+      // Lecture : tous les rôles authentifiés (consultation des cycles passés).
+      ".read": "auth != null",
+      // Écriture : président uniquement (opération irréversible de clôture).
+      ".write": "auth != null && auth.token.email == 'president@diandioly.com'",
+      "$cycle": {
+        ".validate": "newData.hasChildren(['donnees'])"
+      }
+    }
+  }
+}

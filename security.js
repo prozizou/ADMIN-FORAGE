@@ -1,14 +1,41 @@
 /**
- * ASUFOR - Sécurité Centralisée (Version Robuste v2)
+ * ASUFOR - Sécurité Centralisée (Version Robuste v3)
  *
- * CORRECTIONS :
+ * CORRECTIONS v3 :
  * 1. Expiration de session après 8h (évite les sessions éternelles)
  * 2. Redirection relative correcte selon la profondeur du dossier courant
  * 3. checkAccess retourne la session proprement
  * 4. logout() supprime aussi bien 'asufor_session' que le token Firebase
+ * 5. ✅ NOUVEAU : Vérification que session.time existe avant calcul d'expiration
+ * 6. ✅ NOUVEAU : Protection contre XSS — sanitisation du rôle avant affichage
+ * 7. ✅ NOUVEAU : Gestion de l'erreur si localStorage est inaccessible (mode privé strict)
  */
 
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 heures
+
+/**
+ * Sanitise un texte pour éviter toute injection HTML.
+ */
+function sanitizeText(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(String(str)));
+    return div.innerHTML;
+}
+
+/**
+ * ✅ NOUVEAU : Échappement HTML partagé, exposé globalement.
+ * À utiliser pour TOUTE valeur dynamique injectée dans innerHTML
+ * (noms de propriétaires, numéros de compteur, zones, etc.).
+ * Couvre & < > " ' pour neutraliser le XSS stocké.
+ */
+window.escHtml = function (str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+};
 
 /**
  * Calcule le chemin relatif vers index.html depuis la page actuelle.
@@ -16,16 +43,37 @@ const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 heures
  */
 function getIndexPath() {
     const path = window.location.pathname;
-    // Compte les segments après "admin/"
     const segments = path.replace(/\/$/, '').split('/').filter(Boolean);
-    // On cherche l'index du dossier "admin" dans l'URL
     const adminIdx = segments.indexOf('admin');
     const depth = adminIdx >= 0 ? segments.length - adminIdx - 1 : 0;
     return depth > 0 ? '../index.html' : 'index.html';
 }
 
+/**
+ * Lecture sécurisée de localStorage (résiste au mode privé strict).
+ */
+function safeGetItem(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        console.warn('[ASUFOR] localStorage inaccessible :', e);
+        return null;
+    }
+}
+
+/**
+ * Écriture sécurisée de localStorage.
+ */
+function safeRemoveItem(key) {
+    try {
+        localStorage.removeItem(key);
+    } catch (e) {
+        console.warn('[ASUFOR] Impossible de supprimer la clé localStorage :', key);
+    }
+}
+
 window.logout = function () {
-    localStorage.removeItem('asufor_session');
+    safeRemoveItem('asufor_session');
     // Déconnexion Firebase si le SDK compat est chargé
     if (typeof firebase !== 'undefined' && firebase.auth) {
         firebase.auth().signOut().catch(() => {});
@@ -35,11 +83,12 @@ window.logout = function () {
 
 window.checkAccess = function (authorizedRoles = []) {
     // Ne pas vérifier sur la page de login elle-même
-    if (window.location.pathname.includes('index.html')) {
+    if (window.location.pathname.includes('index.html') ||
+        window.location.pathname.endsWith('/')) {
         return null;
     }
 
-    const sessionData = localStorage.getItem('asufor_session');
+    const sessionData = safeGetItem('asufor_session');
 
     if (!sessionData) {
         window.location.replace(getIndexPath());
@@ -55,20 +104,30 @@ window.checkAccess = function (authorizedRoles = []) {
         return null;
     }
 
-    if (!session || !session.role || typeof session.role !== 'string') {
+    // ✅ CORRECTION : Validation stricte des champs de la session
+    if (!session ||
+        typeof session.role !== 'string' ||
+        session.role.trim() === '' ||
+        typeof session.time !== 'number') {
         window.logout();
         return null;
     }
 
-    // ✅ CORRECTION : Vérification de l'expiration de session
+    // ✅ CORRECTION : Vérification robuste de l'expiration
     const now = Date.now();
-    if (session.time && (now - session.time) > SESSION_DURATION_MS) {
+    if ((now - session.time) > SESSION_DURATION_MS) {
         alert('Votre session a expiré. Veuillez vous reconnecter.');
         window.logout();
         return null;
     }
 
-    // ✅ CORRECTION : Vérification des rôles autorisés
+    // ✅ CORRECTION : Validation des rôles
+    const validRoles = ['président', 'secrétaire', 'trésorier'];
+    if (!validRoles.includes(session.role)) {
+        window.logout();
+        return null;
+    }
+
     if (authorizedRoles.length > 0 && !authorizedRoles.includes(session.role)) {
         alert('Accès refusé pour votre rôle.');
         const homePath = getIndexPath().replace('index.html', 'home/accueil.html');

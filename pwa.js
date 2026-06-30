@@ -8,21 +8,23 @@
  */
 
 // 1. Enregistrement du Service Worker
+// ✅ CORRECTION : on dérive le chemin du SW depuis le src de CE script (pwa.js → sw.js).
+// pwa.js et sw.js étant côte à côte à la racine, ça résout correctement le bon URL
+// quelle que soit la profondeur de la page (racine, /reset/, /home/, ...) ET en local.
+// On capture document.currentScript de façon SYNCHRONE (il est null dans le handler 'load').
+const PWA_SELF = document.currentScript;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        // Chercher sw.js à la racine du scope de l'appli
-        const swUrl = new URL('sw.js', window.location.href.split('/').slice(0, -1).join('/') + '/').href
-            .replace(/\/[^/]+\/sw\.js$/, '/sw.js'); // Remonte à la racine admin/
+        let swUrl = 'sw.js';
+        try {
+            const src = (PWA_SELF && PWA_SELF.src) ? PWA_SELF.src : '';
+            if (src) swUrl = src.replace(/pwa\.js(\?.*)?$/, 'sw.js');
+        } catch (_) { /* fallback sur 'sw.js' */ }
 
-        // Chemin fixe depuis la racine du site admin
-        const rootSwPath = window.location.pathname.includes('/admin/')
-            ? window.location.pathname.substring(0, window.location.pathname.indexOf('/admin/') + 7) + 'sw.js'
-            : 'sw.js';
-
-        navigator.serviceWorker.register(rootSwPath)
+        navigator.serviceWorker.register(swUrl)
             .then(reg => {
                 console.log('[PWA] Service Worker enregistré :', reg.scope);
-                reg.update(); // Force la vérification d'une mise à jour
+                reg.update();
             })
             .catch(err => console.warn('[PWA] Erreur SW :', err));
     });

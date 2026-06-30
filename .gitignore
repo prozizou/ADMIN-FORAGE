@@ -1,0 +1,47 @@
+# Dépendances
+node_modules/
+package-lock.json
+yarn.lock
+
+# Fichiers OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build & Deployment
+dist/
+build/
+out/
+.vercel/
+.env.local
+.env.*.local
+
+# Secrets (NE JAMAIS COMMITTER)
+.env
+.env.production
+firebase-key.json
+serviceAccountKey.json
+
+# Fichiers temporaires
+*.tmp
+*.temp
+.cache/

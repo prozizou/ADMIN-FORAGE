@@ -11,6 +11,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="firebase-config.js"></script>
 
     <style>
         :root {
@@ -204,13 +206,13 @@
     <h2 class="header-title">ASUFOR ADMIN</h2>
     <p class="header-subtitle">Réseau : Forage Diandioly</p>
 
-    <div class="role-selector">
-        <button class="role-btn active" onclick="setRole('secrétaire', this)">Secrétaire</button>
-        <button class="role-btn" onclick="setRole('président', this)">Président</button>
-        <button class="role-btn" onclick="setRole('trésorier', this)">Trésorier</button>
+    <div class="role-selector" role="group" aria-label="Sélection du rôle">
+        <button class="role-btn active" onclick="setRole('secrétaire', this)" aria-pressed="true">Secrétaire</button>
+        <button class="role-btn" onclick="setRole('président', this)" aria-pressed="false">Président</button>
+        <button class="role-btn" onclick="setRole('trésorier', this)" aria-pressed="false">Trésorier</button>
     </div>
 
-    <div class="dots" id="dots">
+    <div class="dots" id="dots" aria-label="Progression du code" role="status">
         <div class="dot"></div>
         <div class="dot"></div>
         <div class="dot"></div>
@@ -220,17 +222,17 @@
     </div>
 
     <div class="keypad" id="keypad">
-        <button class="key" onclick="press('1')">1</button>
-        <button class="key" onclick="press('2')">2</button>
-        <button class="key" onclick="press('3')">3</button>
-        <button class="key" onclick="press('4')">4</button>
-        <button class="key" onclick="press('5')">5</button>
-        <button class="key" onclick="press('6')">6</button>
-        <button class="key" onclick="press('7')">7</button>
-        <button class="key" onclick="press('8')">8</button>
-        <button class="key" onclick="press('9')">9</button>
+        <button class="key" onclick="press('1')" aria-label="1">1</button>
+        <button class="key" onclick="press('2')" aria-label="2">2</button>
+        <button class="key" onclick="press('3')" aria-label="3">3</button>
+        <button class="key" onclick="press('4')" aria-label="4">4</button>
+        <button class="key" onclick="press('5')" aria-label="5">5</button>
+        <button class="key" onclick="press('6')" aria-label="6">6</button>
+        <button class="key" onclick="press('7')" aria-label="7">7</button>
+        <button class="key" onclick="press('8')" aria-label="8">8</button>
+        <button class="key" onclick="press('9')" aria-label="9">9</button>
         <div style="visibility:hidden"></div>
-        <button class="key" onclick="press('0')">0</button>
+        <button class="key" onclick="press('0')" aria-label="0">0</button>
         <button class="key" onclick="del()" aria-label="Effacer">
             <svg class="key-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
@@ -240,56 +242,100 @@
         </button>
     </div>
 
-    <p id="status">&nbsp;</p>
-    <a href="#" class="forgot-link" onclick="return false;">Assistance administrateur</a>
+    <p id="status" role="alert">&nbsp;</p>
+    <!-- ✅ CORRECTION : Le lien "Assistance" ne doit pas être un href vide cliquable -->
+    <span class="forgot-link" style="cursor:default;">Assistance administrateur</span>
 </div>
 
 <script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-        authDomain: "asufor-67a06.firebaseapp.com",
-        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-        projectId: "asufor-67a06"
-    };
+    // ✅ CORRECTION : Redirection immédiate si session locale valide déjà présente
+    (function checkExistingSession() {
+        let raw;
+        try { raw = localStorage.getItem('asufor_session'); } catch(e) { return; }
+        if (!raw) return;
+        try {
+            const s = JSON.parse(raw);
+            const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
+            const validRoles = ['président', 'secrétaire', 'trésorier'];
+            if (s && s.role && validRoles.includes(s.role) &&
+                typeof s.time === 'number' &&
+                (Date.now() - s.time) < SESSION_DURATION_MS) {
+                window.location.replace('home/accueil.html');
+            } else {
+                localStorage.removeItem('asufor_session');
+            }
+        } catch (e) {
+            try { localStorage.removeItem('asufor_session'); } catch(_) {}
+        }
+    })();
 
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
+    const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+    // ✅ CORRECTION : init défensive. Si la config n'a pas chargé (404) ou si firebase
+    // n'est pas disponible, on N'APPELLE PAS firebase.auth() (qui lèverait une exception
+    // et interromprait tout le script → erreurs TDZ en cascade sur emailMap/lockUntil).
+    // auth reste null et l'UI affiche un message clair au lieu de planter.
+    let auth = null;
+    if (!firebaseConfig || typeof firebase === 'undefined') {
+        console.error('[ASUFOR] firebase-config.js non chargé !');
+    } else {
+        try {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+        } catch (e) {
+            console.error('[ASUFOR] Échec initialisation Firebase :', e);
+        }
+    }
 
     let code = "";
     let role = "secrétaire";
     let isVerifying = false;
 
-    // ✅ CORRECTION : Protection contre brute-force
+    // ✅ Protection brute-force (persistée en sessionStorage pour résister au rechargement)
     let failCount = 0;
     let lockUntil = 0;
     const MAX_FAILS = 5;
     const LOCK_DURATION_MS = 30000; // 30 secondes
 
+    // ✅ CORRECTION : Restauration du verrouillage depuis sessionStorage
+    try {
+        const stored = JSON.parse(sessionStorage.getItem('asufor_lock') || '{}');
+        if (stored.lockUntil && stored.lockUntil > Date.now()) {
+            lockUntil = stored.lockUntil;
+            failCount = stored.failCount || 0;
+        }
+    } catch (_) {}
+
     const statusEl = document.getElementById('status');
     const cardEl   = document.getElementById('loginCard');
     const keypadEl = document.getElementById('keypad');
 
-    const emailMap = {
+    // ✅ CORRECTION : Emails définis dans un objet gelé (non modifiable)
+    const emailMap = Object.freeze({
         "secrétaire": "secretaire@diandioly.com",
         "président":  "president@diandioly.com",
         "trésorier":  "tresorier@diandioly.com"
-    };
+    });
 
-    // ✅ CORRECTION : On ne force pas signOut si l'utilisateur a une session valide
-    auth.onAuthStateChanged((user) => {
+    // ✅ CORRECTION : Ne pas forcer signOut si session valide
+    if (auth) auth.onAuthStateChanged((user) => {
         if (user) {
-            const session = localStorage.getItem('asufor_session');
+            let session = null;
+            try { session = JSON.parse(localStorage.getItem('asufor_session') || 'null'); } catch(_) {}
             if (!session) {
-                // Connecté Firebase mais pas de session locale => déconnexion propre
                 auth.signOut();
             }
-            // Si session locale existe, on le laisse tranquille (il est déjà authentifié)
         }
     });
 
     function setLockState(locked) {
         const keys = keypadEl.querySelectorAll('.key');
         keys.forEach(k => k.disabled = locked);
+    }
+
+    function saveLockState() {
+        try {
+            sessionStorage.setItem('asufor_lock', JSON.stringify({ lockUntil, failCount }));
+        } catch(_) {}
     }
 
     function checkLock() {
@@ -305,9 +351,17 @@
     }
 
     function setRole(newRole, btn) {
+        // ✅ CORRECTION : Valider le rôle avant de l'accepter
+        const validRoles = Object.keys(emailMap);
+        if (!validRoles.includes(newRole)) return;
+
         role = newRole;
-        document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.role-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+        });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
         code = "";
         statusEl.innerHTML = "&nbsp;";
         statusEl.className = "";
@@ -344,6 +398,16 @@
 
     function verify() {
         if (isVerifying) return;
+
+        // ✅ CORRECTION : si la config Firebase n'a pas chargé, message clair plutôt que crash.
+        if (!auth) {
+            statusEl.textContent = "⚠️ Configuration non chargée. Rechargez la page.";
+            statusEl.className = "status-error";
+            code = "";
+            updateDots();
+            return;
+        }
+
         isVerifying = true;
 
         statusEl.textContent = "Vérification en cours...";
@@ -356,13 +420,25 @@
             return;
         }
 
+        // ✅ CORRECTION : Validation du code avant envoi (6 chiffres uniquement)
+        if (!/^\d{6}$/.test(code)) {
+            triggerError("Code invalide.");
+            return;
+        }
+
         auth.signInWithEmailAndPassword(email, code)
             .then(() => {
                 failCount = 0;
-                localStorage.setItem('asufor_session', JSON.stringify({
-                    role: role,
-                    time: Date.now()
-                }));
+                lockUntil = 0;
+                saveLockState();
+                try {
+                    localStorage.setItem('asufor_session', JSON.stringify({
+                        role: role,
+                        time: Date.now()
+                    }));
+                } catch(e) {
+                    console.error('Impossible de sauvegarder la session :', e);
+                }
                 statusEl.textContent = "Accès autorisé ✓";
                 statusEl.className = "status-success";
                 setTimeout(() => window.location.replace('home/accueil.html'), 600);
@@ -370,10 +446,12 @@
             .catch((e) => {
                 console.error("Authentification échouée :", e.code);
                 failCount++;
+                saveLockState();
 
                 if (failCount >= MAX_FAILS) {
                     lockUntil = Date.now() + LOCK_DURATION_MS;
                     failCount = 0;
+                    saveLockState();
                     statusEl.textContent = "Trop de tentatives. Attendez 30s.";
                     statusEl.className = "status-error";
                     setTimeout(() => {
@@ -400,6 +478,9 @@
             if (!checkLock()) setLockState(false);
         }, 500);
     }
+
+    // Vérifier le verrouillage au chargement
+    checkLock();
 </script>
 </body>
 </html>

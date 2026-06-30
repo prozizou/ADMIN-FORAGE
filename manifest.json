@@ -1,8 +1,9 @@
 {
   "name": "ASUFOR Diandioly",
   "short_name": "ASUFOR",
-  "description": "G?rance Rurale de l'Eau - ASUFOR Diandioly",
-  "start_url": "/index.html",
+  "description": "Gérance Rurale de l'Eau - ASUFOR Diandioly",
+  "start_url": "index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#3b82f6",
@@ -11,15 +12,16 @@
       "src": "icons/icon-192.jpg",
       "sizes": "192x192",
       "type": "image/jpeg",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.jpg",
       "sizes": "512x512",
       "type": "image/jpeg",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
-  ]
+  ],
+  "orientation": "portrait",
+  "lang": "fr",
+  "categories": ["utilities", "productivity"]
 }
-
-
