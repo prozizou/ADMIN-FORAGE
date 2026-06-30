@@ -81,6 +81,42 @@ window.logout = function () {
     window.location.replace(getIndexPath());
 };
 
+/**
+ * ✅ NOUVEAU v4 : Point unique de gestion de la perte de session Firebase.
+ *
+ * Avant cette correction, chaque page (stats.js, impression.html, zero.html,
+ * agent.html, list.html) gérait différemment le cas "onAuthStateChanged(user=null)" :
+ * certaines affichaient un message, stats.js redirigeait SILENCIEUSEMENT
+ * (juste un console.error) → c'est ce qui causait l'écran d'erreur sans
+ * explication visible côté utilisateur.
+ *
+ * Cette fonction centralise le comportement :
+ * 1. Affiche toujours un message visible à l'utilisateur (pas seulement en console)
+ * 2. Nettoie systématiquement la session locale (le localStorage 'asufor_session'
+ *    pouvait rester valide même quand le token Firebase était perdu — c'est la
+ *    désynchronisation à l'origine du bug)
+ * 3. Redirige après un court délai pour laisser le temps de lire le message
+ *
+ * @param {string} [reason] - Message technique à logger en console (debug).
+ * @param {Function} [onMessage] - Callback optionnel pour afficher le message
+ *        avec l'UI de la page (ex: showToast). Si absent, utilise une alert().
+ */
+window.handleFirebaseSessionLoss = function (reason, onMessage) {
+    console.warn('[ASUFOR] Perte de session Firebase :', reason || 'inconnue');
+    safeRemoveItem('asufor_session');
+
+    const message = "⚠️ Session expirée ou invalide. Reconnexion nécessaire.";
+    if (typeof onMessage === 'function') {
+        try { onMessage(message); } catch (_) { alert(message); }
+    } else {
+        alert(message);
+    }
+
+    setTimeout(() => {
+        window.location.replace(getIndexPath());
+    }, 900);
+};
+
 window.checkAccess = function (authorizedRoles = []) {
     // Ne pas vérifier sur la page de login elle-même
     if (window.location.pathname.includes('index.html') ||
