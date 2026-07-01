@@ -38,15 +38,27 @@ window.escHtml = function (str) {
 };
 
 /**
- * Calcule le chemin relatif vers index.html depuis la page actuelle.
- * Fonctionne pour admin/ (depth 0) et admin/xxx/ (depth 1).
+ * Calcule le chemin relatif vers index.html (situé à la RACINE du site) depuis
+ * la page actuelle.
+ *
+ * ✅ CORRECTION : l'ancienne version cherchait un segment « admin » dans l'URL
+ *    (héritage d'un déploiement sous /admin/). Sur ce déploiement Vercel, l'app
+ *    est à la racine (/home/accueil.html, /counter/list.html…), sans segment
+ *    « admin » → depth calculé = 0 → retournait « index.html », qui depuis
+ *    /home/ se résolvait en /home/index.html → 404 (l'erreur observée).
+ *
+ *    On compte désormais la profondeur réelle en DOSSIERS depuis la racine :
+ *    on ignore le dernier segment quand c'est un fichier (…/xxx.html), et on
+ *    remonte d'autant de « ../ ».
  */
 function getIndexPath() {
-    const path = window.location.pathname;
-    const segments = path.replace(/\/$/, '').split('/').filter(Boolean);
-    const adminIdx = segments.indexOf('admin');
-    const depth = adminIdx >= 0 ? segments.length - adminIdx - 1 : 0;
-    return depth > 0 ? '../index.html' : 'index.html';
+    const path = window.location.pathname;          // ex : /home/accueil.html
+    const endsWithSlash = /\/$/.test(path);
+    const segments = path.split('/').filter(Boolean); // ex : ['home','accueil.html']
+    // Si l'URL finit par '/', tous les segments sont des dossiers.
+    // Sinon, le dernier segment est le fichier courant → on ne le compte pas.
+    const dirDepth = endsWithSlash ? segments.length : Math.max(0, segments.length - 1);
+    return dirDepth > 0 ? '../'.repeat(dirDepth) + 'index.html' : 'index.html';
 }
 
 /**

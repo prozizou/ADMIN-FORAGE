@@ -1,6 +1,8 @@
-// sw.js - Service Worker ASUFOR v11 (Stratégie Network First robuste)
+// sw.js - Service Worker ASUFOR v11.1 (Stratégie Network First robuste)
 //
-// v11 : bump de version du cache (v10 → v11) pour PURGER automatiquement
+// v11.1 : correctif getIndexPath (redirections /home/index.html 404) + bump de
+//         cache pour forcer la ré-activation du SW et purger l'ancien cache.
+// v11   : bump de version du cache (v10 → v11) pour PURGER automatiquement
 //       l'ancien cache au prochain déploiement. Indispensable : sans ce bump,
 //       le Service Worker continue de servir les anciens fichiers (stats.js,
 //       impression.html…) même après un redéploiement Vercel.
@@ -13,7 +15,7 @@
 // 5. ✅ NOUVEAU : Vérification que la réponse est clonable avant mise en cache
 // 6. ✅ NOUVEAU : Timeout réseau pour basculer sur le cache plus vite hors ligne
 
-const CACHE_NAME = 'asufor-cache-v11.0';
+const CACHE_NAME = 'asufor-cache-v11.1';
 
 // Ressources à ne JAMAIS mettre en cache localement
 const NEVER_CACHE = [

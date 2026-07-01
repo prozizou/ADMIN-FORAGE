@@ -98,12 +98,14 @@
     }
 
     function autoLoginHref() {
-        // Reprend la même logique de profondeur que security.js
+        // ✅ index.html est à la RACINE du site. On compte la profondeur réelle
+        //    en dossiers (on ignore le fichier .html courant), indépendamment de
+        //    tout segment « admin » (cf. correctif getIndexPath dans security.js).
         var path = window.location.pathname;
-        var segs = path.replace(/\/$/, '').split('/').filter(Boolean);
-        var idx = segs.indexOf('admin');
-        var depth = idx >= 0 ? segs.length - idx - 1 : (segs.length > 1 ? 1 : 0);
-        return depth > 0 ? '../index.html' : 'index.html';
+        var endsWithSlash = /\/$/.test(path);
+        var segs = path.split('/').filter(Boolean);
+        var dirDepth = endsWithSlash ? segs.length : Math.max(0, segs.length - 1);
+        return dirDepth > 0 ? new Array(dirDepth + 1).join('../') + 'index.html' : 'index.html';
     }
 
     var API = {
