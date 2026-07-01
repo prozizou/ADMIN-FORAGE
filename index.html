@@ -248,26 +248,32 @@
 </div>
 
 <script>
-    // ✅ CORRECTION : Redirection immédiate si session locale valide déjà présente
-    (function checkExistingSession() {
+    // ✅ CORRECTION MAJEURE : la session locale (localStorage) ne prouve PAS
+    //    que le jeton Firebase est valide. Les règles de sécurité n'acceptent
+    //    QUE le jeton Firebase (auth != null). Rediriger vers l'accueil sur la
+    //    seule foi du localStorage laissait entrer un utilisateur SANS session
+    //    Firebase → toutes les lectures échouaient (« Session utilisateur non
+    //    valide »). On ne redirige donc plus ici : on se contente de purger une
+    //    session locale invalide/expirée. La décision d'entrer dans l'app est
+    //    prise par l'observateur onAuthStateChanged (Firebase = source de vérité).
+    function localSessionValid() {
         let raw;
-        try { raw = localStorage.getItem('asufor_session'); } catch(e) { return; }
-        if (!raw) return;
+        try { raw = localStorage.getItem('asufor_session'); } catch (e) { return false; }
+        if (!raw) return false;
         try {
             const s = JSON.parse(raw);
             const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
             const validRoles = ['président', 'secrétaire', 'trésorier'];
-            if (s && s.role && validRoles.includes(s.role) &&
+            const ok = s && s.role && validRoles.includes(s.role) &&
                 typeof s.time === 'number' &&
-                (Date.now() - s.time) < SESSION_DURATION_MS) {
-                window.location.replace('home/accueil.html');
-            } else {
-                localStorage.removeItem('asufor_session');
-            }
+                (Date.now() - s.time) < SESSION_DURATION_MS;
+            if (!ok) { try { localStorage.removeItem('asufor_session'); } catch (_) {} }
+            return ok;
         } catch (e) {
-            try { localStorage.removeItem('asufor_session'); } catch(_) {}
+            try { localStorage.removeItem('asufor_session'); } catch (_) {}
+            return false;
         }
-    })();
+    }
 
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
     // ✅ CORRECTION : init défensive. Si la config n'a pas chargé (404) ou si firebase
@@ -316,14 +322,22 @@
         "trésorier":  "tresorier@diandioly.com"
     });
 
-    // ✅ CORRECTION : Ne pas forcer signOut si session valide
+    // ✅ CORRECTION : Firebase = source de vérité pour l'accès aux données.
+    //  • user + session locale valide → accès confirmé, on entre dans l'app
+    //    (sauf pendant une connexion en cours : verify() gère alors la redirection
+    //     pour laisser s'afficher le message « Accès autorisé ✓ »).
+    //  • user SANS session locale valide → état incohérent → on déconnecte Firebase.
+    //  • pas de user → on purge la session locale « fantôme » (sinon l'app croit
+    //    l'utilisateur connecté alors que Firebase le refuse), et on affiche le clavier.
     if (auth) auth.onAuthStateChanged((user) => {
         if (user) {
-            let session = null;
-            try { session = JSON.parse(localStorage.getItem('asufor_session') || 'null'); } catch(_) {}
-            if (!session) {
-                auth.signOut();
+            if (localSessionValid()) {
+                if (!isVerifying) window.location.replace('home/accueil.html');
+            } else {
+                auth.signOut().catch(() => {});
             }
+        } else {
+            try { localStorage.removeItem('asufor_session'); } catch (_) {}
         }
     });
 
