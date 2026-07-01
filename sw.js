@@ -8,7 +8,7 @@
 // 5. ✅ NOUVEAU : Vérification que la réponse est clonable avant mise en cache
 // 6. ✅ NOUVEAU : Timeout réseau pour basculer sur le cache plus vite hors ligne
 
-const CACHE_NAME = 'asufor-cache-v10.0';
+const CACHE_NAME = 'asufor-cache-v10.1';
 
 // Ressources à ne JAMAIS mettre en cache localement
 const NEVER_CACHE = [
