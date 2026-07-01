@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="dark">
 <head>
     <meta charset="UTF-8">
+    <meta name="theme-color" content="#0f172a">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly – Statistiques</title>
 
@@ -15,10 +16,14 @@
 
     <!-- ✅ CORRECTION : security.js chargé AVANT le module stats.js -->
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
     <script>
-        // Vérification synchrone immédiate
-        if (typeof checkAccess === 'function') {
-            checkAccess(['trésorier', 'président', 'secrétaire']);
+        // ✅ CORRECTION : utiliser window.checkAccess (cohérent avec tous les autres fichiers)
+        if (typeof window.checkAccess === 'function') {
+            window.checkAccess(['trésorier', 'président', 'secrétaire']);
         }
     </script>
 
@@ -168,6 +173,32 @@
             <div class="modal-actions">
                 <button type="button" onclick="closeEditModal()">Annuler</button>
                 <button type="button" onclick="submitEdit()">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Remplacement Compteur -->
+<div id="replace-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeReplaceModal()">&times;</span>
+        <h3><i class="fa-solid fa-tools"></i> Remplacer le compteur</h3>
+        <div id="replace-form">
+            <input type="hidden" id="replace-key">
+            
+            <div style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 10px; margin-bottom: 15px; font-size: 0.85rem; color: #f1f5f9; border-radius: 4px;">
+                ⚠️ Cette action va transformer la consommation en cours en dette (arriérés) et lier le client à son nouveau compteur.
+            </div>
+
+            <label>Nouveau Numéro de compteur</label>
+            <input type="text" id="replace-compteur" placeholder="Ex: 00456" required>
+            
+            <label>Index de départ du nouveau compteur</label>
+            <input type="number" id="replace-start-index" value="0" step="any" required>
+
+            <div class="modal-actions">
+                <button type="button" onclick="closeReplaceModal()">Annuler</button>
+                <button type="button" style="background: #f59e0b; color: #0f172a; font-weight: bold;" onclick="submitReplace()">Valider le remplacement</button>
             </div>
         </div>
     </div>

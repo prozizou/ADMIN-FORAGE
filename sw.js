@@ -1,4 +1,4 @@
-// sw.js - Service Worker ASUFOR v9 (Stratégie Network First robuste)
+// sw.js - Service Worker ASUFOR v10 (Stratégie Network First robuste)
 //
 // CORRECTIONS v8 :
 // 1. Exclut les requêtes Firebase/CDN du cache local (évite des conflits d'auth)
@@ -8,7 +8,7 @@
 // 5. ✅ NOUVEAU : Vérification que la réponse est clonable avant mise en cache
 // 6. ✅ NOUVEAU : Timeout réseau pour basculer sur le cache plus vite hors ligne
 
-const CACHE_NAME = 'asufor-cache-v9.11';
+const CACHE_NAME = 'asufor-cache-v10.0';
 
 // Ressources à ne JAMAIS mettre en cache localement
 const NEVER_CACHE = [
@@ -28,12 +28,12 @@ function shouldCache(url) {
 }
 
 self.addEventListener('install', () => {
-    console.log('[SW] Installation v9');
+    console.log('[SW] Installation v10');
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
-    console.log('[SW] Activation v9');
+    console.log('[SW] Activation v10');
     e.waitUntil(
         caches.keys().then(keys =>
             Promise.all(

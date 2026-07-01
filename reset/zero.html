@@ -8,6 +8,8 @@
     <title>ASUFOR Admin | Maintenance Master</title>
 
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
 
@@ -378,7 +380,8 @@
         async function checkStatus() {
             if (!navigator.onLine) {
                 log.textContent = "En attente de connexion réseau.";
-                return;            }
+                return;
+            }
             try {
                 const backupRef = ref(db, `asufor_backup/${cycleKey}`);
                 const snap      = await get(backupRef);
@@ -406,6 +409,12 @@
                 }
             } catch (e) {
                 log.textContent = "Erreur de connexion Firebase : " + e.message;
+                if (window.AsuforLoader) {
+                    AsuforLoader.fail('Erreur de connexion Firebase. Session peut-être expirée.', { retry: checkStatus });
+                }
+                return;
+            } finally {
+                if (window.AsuforLoader) AsuforLoader.hide();
             }
         }
 
@@ -544,11 +553,22 @@
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                if (navigator.onLine) checkStatus();
-                else window.dispatchEvent(new Event('offline'));
+                if (navigator.onLine) {
+                    if (window.AsuforLoader) AsuforLoader.show('Vérification du cycle…');
+                    checkStatus();
+                } else {
+                    if (window.AsuforLoader) AsuforLoader.hide();
+                    window.dispatchEvent(new Event('offline'));
+                }
             } else {
+                // ✅ CORRECTION v4 : nettoyer 'asufor_session' pour éviter la
+                // désynchronisation avec l'état Firebase réel.
+                try { localStorage.removeItem('asufor_session'); } catch(_) {}
                 log.textContent = "Session Firebase expirée. Veuillez vous reconnecter.";
                 btn.disabled = true;
+                if (window.AsuforLoader) {
+                    AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
+                }
             }
         });
 

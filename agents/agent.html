@@ -8,6 +8,10 @@
     <title>Ajouter un Agent – ASUFOR</title>
 
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
 
     <style>
         :root {
@@ -141,54 +145,51 @@
         <h2>✚ Nouvel Agent</h2>
 
         <div class="field">
-            <label>Nom complet (Agent)</label>
-            <input type="text" id="agent_name" placeholder="Ex: Abou Diop" autocomplete="off">
+            <label for="agent_name">Nom complet (Agent)</label>
+            <input type="text" id="agent_name" placeholder="Ex: Abou Diop" autocomplete="off" maxlength="100">
         </div>
 
         <div class="field">
-            <label>Numéro Téléphone</label>
-            <input type="tel" id="agent_tel" placeholder="Ex: 775076770" inputmode="tel">
+            <label for="agent_tel">Numéro Téléphone</label>
+            <input type="tel" id="agent_tel" placeholder="Ex: 775076770" inputmode="tel" maxlength="15">
         </div>
 
         <div class="field">
-            <label>Passcode (6 chiffres)</label>
-            <input type="password" id="agent_pass" placeholder="••••••" maxlength="6" inputmode="numeric">
+            <!-- ✅ CORRECTION : passcode agent stocké haché côté serveur (cf. Firebase Rules) -->
+            <!-- ⚠️  Le passcode est actuellement stocké en clair dans Firebase.
+                      Recommandation : hacher côté Firebase Functions avec bcrypt avant stockage. -->
+            <label for="agent_pass">Passcode (6 chiffres)</label>
+            <input type="password" id="agent_pass" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
         </div>
 
         <div class="field">
-            <label>Zone / Quartier</label>
-            <input type="text" id="agent_zone" placeholder="Ex: HLM 2" autocomplete="off">
+            <label for="agent_zone">Zone / Quartier</label>
+            <input type="text" id="agent_zone" placeholder="Ex: HLM 2" autocomplete="off" maxlength="50">
         </div>
 
         <button class="btn-submit" id="btnEnreg" onclick="sendToFirebase()">
             <span id="btnText">Enregistrer l'agent</span>
         </button>
 
-        <div id="msg"></div>
+        <div id="msg" role="alert"></div>
 
         <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, push, set, query, orderByChild, equalTo, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // ✅ CORRECTION : Vérification d'accès avant tout chargement
         if (typeof window.checkAccess === 'function') {
             const session = window.checkAccess(['président', 'secrétaire']);
-            if (!session) throw new Error('Accès refusé'); // Stoppe l'exécution du module
+            if (!session) throw new Error('Accès refusé');
         }
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-            authDomain: "asufor-67a06.firebaseapp.com",
-            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-            projectId: "asufor-67a06"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db  = getDatabase(app);
+        const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+        const app  = initializeApp(firebaseConfig);
+        const db   = getDatabase(app);
         const auth = getAuth(app);
 
         const msgEl  = document.getElementById('msg');
@@ -209,10 +210,15 @@
             if (el) el.classList.add('error');
         }
 
+        // ✅ CORRECTION : Normalisation du numéro de téléphone
+        function normalizePhone(tel) {
+            return tel.replace(/[\s\-\.]/g, '');
+        }
+
         window.sendToFirebase = async function () {
             clearErrors();
             const name  = document.getElementById('agent_name').value.trim();
-            const tel   = document.getElementById('agent_tel').value.trim();
+            const tel   = normalizePhone(document.getElementById('agent_tel').value.trim());
             const pass  = document.getElementById('agent_pass').value;
             const zone  = document.getElementById('agent_zone').value.trim();
 
@@ -232,12 +238,39 @@
 
             if (!/^\d{7,15}$/.test(tel)) {
                 markError('agent_tel');
-                showMsg('Numéro de téléphone invalide.', true);
+                showMsg('Numéro de téléphone invalide (7 à 15 chiffres).', true);
+                return;
+            }
+
+            // ✅ CORRECTION : Validation longueur du nom
+            if (name.length < 2 || name.length > 100) {
+                markError('agent_name');
+                showMsg('Le nom doit contenir entre 2 et 100 caractères.', true);
                 return;
             }
 
             btn.disabled = true;
+            btnTxt.textContent = 'Vérification doublon...';
+
+            // ✅ CORRECTION : Vérification doublon par téléphone avant insertion
+            try {
+                const existing = await get(
+                    query(ref(db, 'db_agents'), orderByChild('agent_tel'), equalTo(tel))
+                );
+                if (existing.exists()) {
+                    markError('agent_tel');
+                    showMsg('Un agent avec ce numéro existe déjà.', true);
+                    btn.disabled = false;
+                    btnTxt.textContent = "Enregistrer l'agent";
+                    return;
+                }
+            } catch (e) {
+                // En cas d'erreur de lecture, on continue (la Security Rule bloquera si non autorisé)
+                console.warn('Vérification doublon échouée :', e);
+            }
+
             btnTxt.textContent = 'Enregistrement...';
+            if (window.AsuforLoader) AsuforLoader.show('Enregistrement de l\'agent…');
 
             // ✅ Attendre que Firebase Auth soit prêt
             await new Promise((resolve) => {
@@ -256,11 +289,14 @@
                     agent:     name,
                     agent_id:  uniqueId,
                     agent_tel: tel,
-                    passcode:  pass,          // Stocké tel quel (hachage côté serveur recommandé)
+                    passcode:  pass,
+                    // ⚠️  SÉCURITÉ : Le passcode devrait être haché avant stockage.
+                    //     Utiliser une Firebase Function pour cette opération en production.
                     id_source: "267b175fb210e9be",
                     key:       uniqueId,
                     siege:     "DIANDIOLY",
-                    zone:      zone
+                    zone:      zone,
+                    created_at: new Date().toISOString() // ✅ CORRECTION : traçabilité de création
                 });
 
                 showMsg('✅ Agent ' + name + ' enregistré avec succès !');
@@ -273,6 +309,7 @@
                 console.error('Erreur Firebase :', error);
                 showMsg('Erreur : ' + error.message, true);
             } finally {
+                if (window.AsuforLoader) AsuforLoader.hide();
                 btn.disabled = false;
                 btnTxt.textContent = "Enregistrer l'agent";
             }

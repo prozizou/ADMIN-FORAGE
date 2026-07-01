@@ -469,28 +469,48 @@
     <div class="toast" id="toast"></div>
 
     <!-- FIREBASE -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
 
     <script>
         // ── AUTH ──
+        // ✅ CORRECTION : stopper l'exécution si la session est invalide
         const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
+        if (!session) throw new Error('Session invalide');
 
         // ── FIREBASE CONFIG ──
-        const firebaseConfig = {
-            apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-            authDomain: "asufor-67a06.firebaseapp.com",
-            databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-            projectId: "asufor-67a06"
-        };
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        // ✅ CORRECTION : utiliser la config centralisée
+        if (!firebase.apps.length) firebase.initializeApp(window.ASUFOR_FIREBASE_CONFIG);
         const db = firebase.database();
 
         // ── STATE ──
         let allAnomalies = [];
         let currentFilter = 'all';
+
+        // ✅ CORRECTION XSS : échapper toutes les valeurs dynamiques insérées dans innerHTML
+        const esc = (str) => {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        };
+
+        // ✅ CORRECTION XSS : stocker les données en mémoire, référencer par clé dans le HTML
+        const anomalyMap = new Map();
+
+        function openLightboxByKey(key) {
+            const a = anomalyMap.get(key);
+            if (a?.photo_url) openLightbox(a.photo_url);
+        }
         let searchQuery   = '';
         let sortDesc      = true; // plus récent en premier
 
@@ -539,19 +559,48 @@
         }
 
         // ── LOAD DATA ──
-        db.ref('asufor_db_diandioly').on('value', snap => {
-            const raw = snap.val() || {};
-            allAnomalies = [];
+        // ✅ CORRECTION : attendre la restauration du jeton Firebase avant de lire.
+        //    Sinon .on('value') part avec auth == null → permission_denied silencieux
+        //    (aucun callback d'erreur auparavant) → page vide.
+        if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
-            for (const [key, data] of Object.entries(raw)) {
-                // Anomalie = note présente OU photo_url présente
-                if (data.note || data.photo_url) {
-                    allAnomalies.push({ key, ...data });
+        let anomaliesSubscribed = false;
+        function subscribeAnomalies() {
+            if (window.AsuforLoader) AsuforLoader.update('Chargement des anomalies…');
+            db.ref('asufor_db_diandioly').on('value', snap => {
+                const raw = snap.val() || {};
+                allAnomalies = [];
+
+                for (const [key, data] of Object.entries(raw)) {
+                    // Anomalie = note présente OU photo_url présente
+                    if (data.note || data.photo_url) {
+                        const anomaly = { key, ...data };
+                        allAnomalies.push(anomaly);
+                        anomalyMap.set(key, anomaly);
+                    }
                 }
-            }
 
-            updateStats();
-            render();
+                updateStats();
+                render();
+                if (window.AsuforLoader) AsuforLoader.hide();
+            }, err => {
+                // ✅ Callback d'erreur (absent avant) : rend visible tout échec de lecture.
+                console.error('Firebase asufor_db_diandioly :', err.code, err.message);
+                if (window.AsuforLoader) {
+                    AsuforLoader.fail('Impossible de charger les données (' + err.code + '). Session peut-être expirée.', {
+                        retry: subscribeAnomalies
+                    });
+                }
+            });
+        }
+
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                if (!anomaliesSubscribed) { anomaliesSubscribed = true; subscribeAnomalies(); }
+            } else if (window.AsuforLoader) {
+                try { localStorage.removeItem('asufor_session'); } catch (_) {}
+                AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
+            }
         });
 
         // ── STATS ──
@@ -649,13 +698,16 @@
             const hasPhoto = !!a.photo_url;
             const resolved = !!a.anomaly_resolved;
             const dateTs   = a.anomaly_date || a.last_modified;
+            // ✅ CORRECTION XSS : la clé est utilisée pour les actions, jamais l'URL directement dans onclick
+            const safeKey  = esc(a.key);
 
-            const iconEmoji = hasNote && hasPhoto ? '🔴' : hasPhoto ? '📷' : '⚠️';
+            const iconEmoji  = hasNote && hasPhoto ? '🔴' : hasPhoto ? '📷' : '⚠️';
             const badgeClass = hasNote && hasPhoto ? 'badge-both' : hasPhoto ? 'badge-photo' : 'badge-anomaly';
             const dotClass   = hasNote && hasPhoto ? 'dot-red'    : hasPhoto ? 'dot-blue'   : 'dot-warn';
 
+            // ✅ CORRECTION XSS : src et onclick ne contiennent plus de données dynamiques non échappées
             const photoBlock = hasPhoto
-                ? `<img class="photo-thumb" src="${a.photo_url}" alt="Photo compteur" onclick="openLightbox('${a.photo_url}')">`
+                ? `<img class="photo-thumb" src="${esc(a.photo_url)}" alt="Photo compteur" onclick="openLightboxByKey('${safeKey}')">`
                 : `<div class="no-photo">📷 Aucune photo jointe</div>`;
 
             const resolvedBadge = resolved
@@ -663,13 +715,13 @@
                 : '';
 
             return `
-            <div class="anomaly-card" id="card-${a.key}">
+            <div class="anomaly-card" id="card-${safeKey}">
                 <div class="card-header">
                     <div class="badge-icon ${badgeClass}">${iconEmoji}</div>
                     <div class="card-info">
-                        <div class="name">${a.name || a.key}</div>
+                        <div class="name">${esc(a.name) || esc(a.key)}</div>
                         <div class="meta">
-                            <span>🔑 ${a.key}</span>
+                            <span>🔑 ${esc(a.key)}</span>
                             <span>📅 ${formatDate(dateTs)}</span>
                             ${resolvedBadge}
                         </div>
@@ -682,11 +734,11 @@
                     <div class="detail-grid">
                         <div class="detail-item">
                             <div class="d-lbl">Dernier index</div>
-                            <div class="d-val">${a.last_index ?? '—'}</div>
+                            <div class="d-val">${esc(a.last_index) || '—'}</div>
                         </div>
                         <div class="detail-item">
                             <div class="d-lbl">Nouvel index</div>
-                            <div class="d-val">${a.new_index ?? '—'}</div>
+                            <div class="d-val">${esc(a.new_index) || '—'}</div>
                         </div>
                         <div class="detail-item">
                             <div class="d-lbl">Statut relevé</div>
@@ -694,13 +746,13 @@
                         </div>
                         <div class="detail-item">
                             <div class="d-lbl">Note agent</div>
-                            <div class="d-val">${a.note || '—'}</div>
+                            <div class="d-val">${esc(a.note) || '—'}</div>
                         </div>
                     </div>
                     <div class="action-row">
-                        ${hasPhoto ? `<button class="btn-action btn-view" onclick="openLightbox('${a.photo_url}')">🔍 Voir photo</button>` : ''}
-                        ${!resolved ? `<button class="btn-action btn-resolve" onclick="resolveAnomaly('${a.key}')">✅ Résoudre</button>` : ''}
-                        <button class="btn-action btn-delete" onclick="deleteAnomaly('${a.key}')">🗑 Effacer</button>
+                        ${hasPhoto ? `<button class="btn-action btn-view" onclick="openLightboxByKey('${safeKey}')">🔍 Voir photo</button>` : ''}
+                        ${!resolved ? `<button class="btn-action btn-resolve" onclick="resolveAnomaly('${safeKey}')">✅ Résoudre</button>` : ''}
+                        <button class="btn-action btn-delete" onclick="deleteAnomaly('${safeKey}')">🗑 Effacer</button>
                     </div>
                 </div>
             </div>`;

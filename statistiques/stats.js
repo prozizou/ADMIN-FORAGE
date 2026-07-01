@@ -2,16 +2,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, onValue, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-    authDomain: "asufor-67a06.firebaseapp.com",
-    databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-    projectId: "asufor-67a06"
-};
+// ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
+const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+
+// ✅ Overlay visible dès le départ, pendant la restauration du jeton Firebase.
+if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
 let storeReleves = {};
 let storeAgents = {};
@@ -26,6 +25,21 @@ let chartBarInstance = null;
 let currentActivePath = ""; 
 
 let currentUser = 'Trésorier/Admin';
+
+// ✅ CORRECTION : Restaurer le thème enregistré dès le chargement
+(function restoreTheme() {
+    try {
+        const saved = localStorage.getItem('asufor-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', saved);
+        const icon = document.getElementById('theme-icon');
+        if (icon) {
+            if (saved === 'light') {
+                icon.classList.replace('fa-moon', 'fa-sun');
+            }
+        }
+    } catch(_) {}
+})();
+
 const sessionRaw = localStorage.getItem('asufor_session');
 
 if (sessionRaw) {
@@ -41,15 +55,26 @@ if (sessionRaw) {
 
 // --- FONCTIONS UTILITAIRES & THEME ---
 window.toggleTheme = function() {
-    document.body.classList.toggle('dark-theme');
+    // ✅ CORRECTION : utiliser data-theme sur html (cohérent avec le reste de l'app)
+    const html = document.documentElement;
+    const current = html.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('asufor-theme', next); } catch(_) {}
     const icon = document.getElementById('theme-icon');
-    if(document.body.classList.contains('dark-theme')) {
-        icon.classList.replace('fa-moon', 'fa-sun');
-    } else {
-        icon.classList.replace('fa-sun', 'fa-moon');
+    if (icon) {
+        if (next === 'light') {
+            icon.classList.replace('fa-moon', 'fa-sun');
+        } else {
+            icon.classList.replace('fa-sun', 'fa-moon');
+        }
     }
-    const paye = parseInt(document.getElementById('total-money').innerText.replace(/\D/g,'')) || 0;
-    const impaye = parseInt(document.getElementById('total-debt').innerText.replace(/\D/g,'')) || 0;
+    // ✅ CORRECTION : Recalcul depuis les données réelles plutôt que l'innerText
+    let paye = 0; let impaye = 0;
+    currentFilteredData.forEach(item => {
+        if (item.status === 'paye') paye += (item.calculatedAmount || 0);
+        else impaye += (item.calculatedAmount || 0);
+    });
     updateCharts(paye, impaye);
 };
 
@@ -206,7 +231,13 @@ function loadDataForMonth(selection) {
     unsubCurrentMonth = onValue(ref(db, dbPath), (snap) => {
         storeReleves = snap.val() || {};
         document.getElementById('skeleton-loader').style.display = "none";
+        if (window.AsuforLoader) AsuforLoader.hide();
         fetchPreviousMonthStats(monthForTrend);
+    }, (err) => {
+        console.error('Firebase relevés :', err.code, err.message);
+        if (window.AsuforLoader) {
+            AsuforLoader.fail('Impossible de charger les relevés (' + err.code + '). Session peut-être expirée.');
+        }
     });
 }
 
@@ -239,10 +270,13 @@ window.startSync = function() {
         const spinner = document.getElementById('agent-spinner');
         const active = spinner.value || "all";
         let html = '<option value="all">🟢 Tous les agents (Global)</option>';
+        // ✅ FIX XSS : échapper nom/zone d'agent injectés dans les <option>
+        const esc2 = window.escHtml || (s => String(s == null ? '' : s)
+            .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])));
         Object.entries(storeAgents).forEach(([key, a]) => {
             let name = (a.agent || "Inconnu").trim();
-            let zone = a.zone ? ` [${a.zone}]` : "";
-            html += `<option value="${key}">👤 ${name.toUpperCase()}${zone}</option>`;
+            let zone = a.zone ? ` [${esc2(a.zone)}]` : "";
+            html += `<option value="${esc2(key)}">👤 ${esc2(name.toUpperCase())}${zone}</option>`;
         });
         spinner.innerHTML = html;
         spinner.value = active;
@@ -366,6 +400,11 @@ window.applyFilter = function() {
     else if (sortOption === "min_amount") currentFilteredData.sort((a, b) => (a.calculatedAmount || 0) - (b.calculatedAmount || 0));
     else if (sortOption === "zone") currentFilteredData.sort((a, b) => (storeAgents[a.agent_id]?.zone || "Z").localeCompare(storeAgents[b.agent_id]?.zone || "Z"));
     else if (sortOption === "name") currentFilteredData.sort((a, b) => (a.name || "Z").localeCompare(b.name || "Z"));
+    else if (sortOption === "compteur") currentFilteredData.sort((a, b) => {
+        const na = String(a.numero_compteur || "").replace(/\D/g, "").padStart(10, "0");
+        const nb = String(b.numero_compteur || "").replace(/\D/g, "").padStart(10, "0");
+        return na.localeCompare(nb);
+    });
 
     document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
     document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
@@ -461,6 +500,10 @@ function updateRelevesProgress() {
 }
 
 function renderList() {
+    // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
+    // Utilise window.escHtml (security.js) ; fallback inline si non chargé.
+    const esc = window.escHtml || (s => String(s == null ? '' : s)
+        .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])));
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
     document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
@@ -473,7 +516,7 @@ function renderList() {
         
         const calculatedAmount = item.calculatedAmount || 0;
         const isPaid = item.status === 'paye';
-        const zoneName = storeAgents[item.agent_id]?.zone || "Sans Zone";
+        const zoneName = esc(storeAgents[item.agent_id]?.zone || "Sans Zone");
 
         let extraClass = ''; let anomalyHtml = '';
         if (realConso < 0) {
@@ -485,7 +528,7 @@ function renderList() {
         }
 
         let auditHtml = item.last_modified_by 
-            ? `<span class="audit-trail">Modifié par ${item.last_modified_by} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
+            ? `<span class="audit-trail">Modifié par ${esc(item.last_modified_by)} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
             : '';
 
         // Badge relevé affiché dans l'onglet Relevés
@@ -494,7 +537,8 @@ function renderList() {
             : '';
 
         const editBtn = (currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
+            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>
+               <button class="btn-edit" style="background:#f59e0b; margin-left:5px; color:#000;" onclick="openReplaceModal('${item.key}')" title="Remplacer le compteur"><i class="fa-solid fa-tools"></i></button>`
             : '';
 
         const statusBtn = !isPaid
@@ -506,8 +550,8 @@ function renderList() {
         
         div.innerHTML = `
             <div style="flex: 1;">
-                <b style="color:var(--text-main);">${item.name || 'Inconnu'}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
-                <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${item.numero_compteur || 'N/A'}</small><br>
+                <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
+                <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
                 <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
                     ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
                 </small>
@@ -600,7 +644,7 @@ window.submitEdit = function() {
             showToast("✅ Données du compteur mises à jour !");
             closeEditModal();
         })
-        .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
+        .catch(err => showToast("Erreur lors du mise à jour : " + err, true));
 };
 
 // Fermer le modal en cliquant sur l'overlay
@@ -630,9 +674,24 @@ document.addEventListener("DOMContentLoaded", () => {
 // Écouteur d'état d'authentification requis pour valider les droits de lecture Realtime Database
 onAuthStateChanged(auth, (user) => {
     if (user) {
+        if (window.AsuforLoader) AsuforLoader.update('Chargement des relevés…');
         window.startSync();
     } else {
-        console.error("Accès Firebase refusé : Session utilisateur non valide.");
+        // ✅ CORRECTION v4 : message visible (plus de redirection silencieuse)
+        // + nettoyage centralisé via security.js, cohérent avec les autres pages.
+        if (window.AsuforLoader) {
+            AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
+        }
+        if (typeof window.handleFirebaseSessionLoss === 'function') {
+            window.handleFirebaseSessionLoss(
+                'stats.js : onAuthStateChanged(user=null)',
+                (msg) => showToast(msg, true)
+            );
+        } else {
+            console.error("Accès Firebase refusé : Session utilisateur non valide.");
+            localStorage.removeItem('asufor_session');
+            window.location.replace('../index.html');
+        }
     }
 });
 
@@ -724,3 +783,89 @@ window.exportPDFImpayes = function() {
     doc.save(`ASUFOR_Impayes_${dateStr}.pdf`);
     showToast("✅ Fichier PDF des impayés généré avec succès !");
 };
+
+// --- GESTION DU REMPLACEMENT DE COMPTEUR ---
+
+window.openReplaceModal = function(key) {
+    const item = storeReleves[key];
+    if (!item) {
+        showToast("Relevé introuvable.", true);
+        return;
+    }
+    document.getElementById('replace-key').value = key;
+    document.getElementById('replace-compteur').value = '';
+    document.getElementById('replace-start-index').value = '0';
+    document.getElementById('replace-modal').style.display = 'flex';
+};
+
+window.closeReplaceModal = function() {
+    document.getElementById('replace-modal').style.display = 'none';
+};
+
+window.submitReplace = function() {
+    if (currentUser.toLowerCase() !== 'président') {
+        showToast("⛔ Accès refusé : Seul le président peut remplacer un compteur.", true);
+        closeReplaceModal();
+        return;
+    }
+
+    const key = document.getElementById('replace-key').value;
+    const newCompteur = document.getElementById('replace-compteur').value.trim();
+    const startIdx = parseFloat(document.getElementById('replace-start-index').value);
+
+    if (!key || !newCompteur || isNaN(startIdx)) {
+        showToast("Veuillez remplir correctement le numéro et l'index de départ.", true);
+        return;
+    }
+
+    const item = storeReleves[key];
+    const oldLastIdx = parseFloat(item.last_index || 0);
+    const oldNewIdx = parseFloat(item.new_index || 0);
+    const facteur = parseFloat(item.facteur || 250);
+
+    // 1. Calculer la consommation non facturée sur l'ancien compteur (avant qu'il ne soit enlevé)
+    let consoAncien = 0;
+    if (oldNewIdx > oldLastIdx) {
+        consoAncien = oldNewIdx - oldLastIdx;
+    }
+    const montantConsomme = consoAncien * facteur;
+
+    // 2. Récupérer l'ancienne dette du client (s'il en avait une)
+    const detteExistante = parseFloat(item.arrieres || item.apaid || 0);
+    
+    // 3. Fusionner : Ancienne dette + ce qu'il a consommé avec l'ancien compteur ce mois-ci
+    const nouvelleDette = detteExistante + montantConsomme;
+
+    // 4. Préparer les données pour Firebase
+    const updatedData = {
+        numero_compteur: newCompteur,
+        last_index: String(startIdx),
+        new_index: startIdx,        // Le nouveau compteur commence ici
+        arrieres: nouvelleDette,    // L'argent à payer est transféré et mis en sécurité
+        apaid: nouvelleDette,
+        last_modified_by: currentUser + " (Remplacement)",
+        last_modified_at: new Date().toISOString()
+    };
+
+    // Si la nouvelle dette est supérieure à 0, le compte passe en impayé
+    if (nouvelleDette > 0) {
+        updatedData.status = "impaye";
+        updatedData.statut = false;
+    }
+
+    const dbPath = `${currentActivePath}/${key}`;
+    update(ref(db, dbPath), updatedData)
+        .then(() => {
+            showToast("✅ Compteur remplacé ! L'argent dû a été transféré avec succès.");
+            closeReplaceModal();
+        })
+        .catch(err => showToast("Erreur lors du remplacement : " + err, true));
+};
+
+// Permet de fermer la fenêtre en cliquant dans le vide (comme pour l'édition)
+const replaceModal = document.getElementById('replace-modal');
+if (replaceModal) {
+    replaceModal.addEventListener('click', function(e) {
+        if (e.target === this) closeReplaceModal();
+    });
+}

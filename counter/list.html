@@ -8,6 +8,10 @@
     <title>ASUFOR Admin – Installation Compteur</title>
 
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
 
     <style>
         :root {
@@ -75,7 +79,7 @@
             position: absolute;
             top: -9px;
             left: 12px;
-            background: #151f32;
+            background: var(--bg-dark, #151f32);
             padding: 0 6px;
             font-size: 11px;
             text-transform: uppercase;
@@ -161,24 +165,24 @@
 
     <div class="input-layout" id="wrap-agent">
         <label>Agent Responsable</label>
-        <select id="agentSelect">
+        <select id="agentSelect" aria-label="Sélectionner un agent responsable">
             <option value="">Chargement des agents...</option>
         </select>
     </div>
 
     <div class="input-layout" id="wrap-owner">
         <label>Nom du propriétaire</label>
-        <input type="text" id="ownerName" placeholder="ex: Amadou Bâ" autocomplete="off">
+        <input type="text" id="ownerName" placeholder="ex: Amadou Bâ" autocomplete="off" maxlength="100">
     </div>
 
     <div class="input-layout" id="wrap-phone">
         <label>Numéro téléphone</label>
-        <input type="tel" id="ownerPhone" placeholder="ex: 77#######" inputmode="tel">
+        <input type="tel" id="ownerPhone" placeholder="ex: 77#######" inputmode="tel" maxlength="15">
     </div>
 
     <div class="input-layout" id="wrap-compteur">
         <label>Numéro de compteur</label>
-        <input type="text" id="numCompteur" placeholder="ex: 00123" autocomplete="off">
+        <input type="text" id="numCompteur" placeholder="ex: 00123" autocomplete="off" maxlength="20">
     </div>
 
     <div class="input-layout" id="wrap-index">
@@ -211,12 +215,7 @@
         if (!s) throw new Error('Accès refusé');
     }
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-        authDomain: "asufor-67a06.firebaseapp.com",
-        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-        projectId: "asufor-67a06"
-    };
+    const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
@@ -241,28 +240,55 @@
         if (el) el.classList.add('error');
     }
 
-    // Charger la liste des agents
-    onValue(ref(db, 'db_agents'), (snapshot) => {
-        const select = document.getElementById('agentSelect');
-        select.innerHTML = '<option value="">Choisir un agent</option>';
-        if (!snapshot.exists()) {
-            select.innerHTML = '<option value="">Aucun agent trouvé</option>';
-            return;
-        }
-        snapshot.forEach((child) => {
-            const d = child.val();
-            const opt = document.createElement('option');
-            // ✅ CORRECTION : Utiliser child.key comme id (cohérent avec le reste de l'app)
-            opt.value = JSON.stringify({
-                id:    child.key,
-                name:  d.agent || 'Agent',
-                tel:   d.agent_tel || '',
-                siege: d.siege || 'DIANDIOLY',
-                zone:  d.zone || ''
+    // ✅ CORRECTION : la lecture de 'db_agents' doit ATTENDRE la restauration du
+    //    jeton Firebase. Sinon elle part avec auth == null → permission_denied
+    //    (les règles exigent auth != null) et le menu reste bloqué sur
+    //    « Chargement des agents… » sans aucune erreur visible.
+    if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
+
+    function loadAgents() {
+        if (window.AsuforLoader) AsuforLoader.update('Chargement des agents…');
+        onValue(ref(db, 'db_agents'), (snapshot) => {
+            const select = document.getElementById('agentSelect');
+            select.innerHTML = '<option value="">Choisir un agent</option>';
+            if (!snapshot.exists()) {
+                select.innerHTML = '<option value="">Aucun agent trouvé</option>';
+                if (window.AsuforLoader) AsuforLoader.hide();
+                return;
+            }
+            snapshot.forEach((child) => {
+                const d = child.val();
+                const opt = document.createElement('option');
+                // ✅ CORRECTION : Utiliser child.key comme id (cohérent avec le reste de l'app)
+                opt.value = JSON.stringify({
+                    id:    child.key,
+                    name:  d.agent || 'Agent',
+                    tel:   d.agent_tel || '',
+                    siege: d.siege || 'DIANDIOLY',
+                    zone:  d.zone || ''
+                });
+                opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
+                select.appendChild(opt);
             });
-            opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
-            select.appendChild(opt);
+            if (window.AsuforLoader) AsuforLoader.hide();
+        }, (err) => {
+            // ✅ Callback d'erreur (absent avant) : rend visible tout échec de lecture.
+            console.error('Firebase db_agents :', err.code, err.message);
+            if (window.AsuforLoader) {
+                AsuforLoader.fail('Impossible de charger les agents (' + err.code + '). Session peut-être expirée.', {
+                    retry: loadAgents
+                });
+            }
         });
+    }
+
+    // On attend la confirmation du jeton Firebase avant toute lecture.
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loadAgents();
+        } else if (window.AsuforLoader) {
+            AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
+        }
     });
 
     window.enregistrer = async function () {
@@ -270,7 +296,7 @@
 
         const agentRaw  = document.getElementById('agentSelect').value;
         const owner     = document.getElementById('ownerName').value.trim();
-        const phone     = document.getElementById('ownerPhone').value.trim();
+        let   phone     = document.getElementById('ownerPhone').value.trim(); // ✅ FIX : let (réassigné plus bas, const provoquait un TypeError bloquant)
         const compteur  = document.getElementById('numCompteur').value.trim();
         const start     = document.getElementById('startIndex').value;
         const price     = document.getElementById('pricePerCube').value;
@@ -282,6 +308,15 @@
         if (!compteur)  { markError('wrap-compteur'); valid = false; }
 
         if (!valid) { showMsg('Veuillez remplir les champs obligatoires.', true); return; }
+
+        // ✅ CORRECTION : validation du format téléphone (facultatif mais vérifié si rempli)
+        // ✅ CORRECTION : normaliser avant validation (supprimer espaces/tirets)
+        phone = phone.replace(/[\s\-\.]/g, '');
+        if (phone && !/^\d{7,15}$/.test(phone)) {
+            markError('wrap-phone');
+            showMsg('Numéro de téléphone invalide (7 à 15 chiffres).', true);
+            return;
+        }
 
         let agent;
         try { agent = JSON.parse(agentRaw); }

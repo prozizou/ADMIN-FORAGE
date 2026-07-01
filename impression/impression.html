@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
-    <link rel="manifest" href="manifest.json">
-    <script src="pwa.js" defer></script>
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ASUFOR Diandioly - Impression v5</title>
     
     <!-- ✅ Sécurité centralisée -->
     <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -316,12 +320,7 @@
     }
 
     // ── Config Firebase ──
-    const firebaseConfig = {
-        apiKey:      "AIzaSyAKC7lrKSCFwfuoXASvX-yYIGneLXInvDk",
-        authDomain:  "asufor-67a06.firebaseapp.com",
-        databaseURL: "https://asufor-67a06-default-rtdb.firebaseio.com",
-        projectId:   "asufor-67a06"
-    };
+    const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
@@ -337,6 +336,17 @@
 
     // ── Formateurs ──
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(Math.round(val)) + " FCFA";
+
+    // ✅ CORRECTION XSS : échapper toutes les valeurs dynamiques insérées dans innerHTML
+    const esc = (str) => {
+        if (str == null) return '—';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
 
     function formatSmartDates(dateReleve, selectedMonthStr, isOnlyArrieres) {
         let dRef;
@@ -408,6 +418,7 @@
     // RENDU DE LA LISTE
     // ══════════════════════════════════════════
     function renderData(snap) {
+        if (window.AsuforLoader) AsuforLoader.hide();
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
         const sortedMonths     = Object.keys(allBackups).sort().reverse();
         const listContainer    = document.getElementById('list-container');
@@ -694,16 +705,16 @@
                 </div>
                 <div class="section-title">Détails du client</div>
                 <div class="info-box">
-                    <div class="p-row"><span>Numéro Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
-                    <div class="p-row"><span>Prénom/Nom</span><span>${d.name}</span></div>
-                    <div class="p-row"><span>Adresse</span><span>${d.zone || 'DIANDIOLY'}</span></div>
+                    <div class="p-row"><span>Numéro Compteur</span><span>Compteur N°${esc(d.numero_compteur) || "N/A"}</span></div>
+                    <div class="p-row"><span>Prénom/Nom</span><span>${esc(d.name)}</span></div>
+                    <div class="p-row"><span>Adresse</span><span>${esc(d.zone) || 'DIANDIOLY'}</span></div>
                 </div>
                 <div class="section-title">Détails consommation</div>
                 <div class="info-box">
-                    <div class="p-row"><span>Dernier index</span><span>${d.last_index} m³</span></div>
-                    <div class="p-row"><span>Nouvel index</span><span>${d.new_index} m³</span></div>
-                    <div class="p-row bold"><span>m³ vendus</span><span>${d.vol} m³</span></div>
-                    <div class="p-row"><span>Prix Unitaire</span><span>250 FCFA</span></div>
+                    <div class="p-row"><span>Dernier index</span><span>${esc(d.last_index)} m³</span></div>
+                    <div class="p-row"><span>Nouvel index</span><span>${esc(d.new_index)} m³</span></div>
+                    <div class="p-row bold"><span>m³ vendus</span><span>${esc(d.vol)} m³</span></div>
+                    <div class="p-row"><span>Prix Unitaire</span><span>${esc(d.facteur || 250)} FCFA</span></div>
                     <div class="p-row"><span>Montant du mois</span><span>${fPrice(d.montantMois)}</span></div>
                     <div class="p-row" style="color:#c53030">
                         <span>Solde antérieur impayé</span>
@@ -721,10 +732,10 @@
                     <i class="fas fa-scissors scissors sc-right"></i>
                 </div>
                 <div class="section-title" style="font-size:20px">Reçu de paiement</div>
-                <div class="p-row"><span>N° Compteur</span><span>Compteur N°${d.numero_compteur || "N/A"}</span></div>
-                <div class="p-row"><span>Prénom & Nom</span><span>${d.name}</span></div>
+                <div class="p-row"><span>N° Compteur</span><span>Compteur N°${esc(d.numero_compteur) || "N/A"}</span></div>
+                <div class="p-row"><span>Prénom & Nom</span><span>${esc(d.name)}</span></div>
                 <div class="footer-line">
-                    <div class="p-row"><span>Consommation (${d.vol} m³)</span><span>${fPrice(d.montantMois)}</span></div>
+                    <div class="p-row"><span>Consommation (${esc(d.vol)} m³)</span><span>${fPrice(d.montantMois)}</span></div>
                     <div class="p-row"><span>Arriérés</span><span>${fPrice(d.arrieres)}${isModified ? ' *' : ''}</span></div>
                     <div class="p-row bold" style="font-size:22px"><span>Total Reçu</span><span>${fPrice(d.total)}</span></div>
                     <div style="font-size:12px;margin-top:5px;opacity:0.7">Date du relevé : ${dates.date_edition}</div>
@@ -740,8 +751,16 @@
     // ══════════════════════════════════════════
     onAuthStateChanged(auth, (user) => {
         if (user) {
+            if (window.AsuforLoader) AsuforLoader.show('Chargement des factures…');
             initMonthFilter();
         } else {
+            // ✅ CORRECTION v4 : nettoyer aussi 'asufor_session' (sinon il reste
+            // valide en localStorage alors que le token Firebase a été perdu —
+            // désynchronisation à l'origine des écrans d'erreur incompris).
+            try { localStorage.removeItem('asufor_session'); } catch(_) {}
+            if (window.AsuforLoader) {
+                AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
+            }
             document.getElementById('list-container').innerHTML =
                 "<p style='text-align:center;color:#ef4444;'>⚠️ Session expirée. <a href='../index.html' style='color:#3b82f6'>Reconnectez-vous</a></p>";
         }

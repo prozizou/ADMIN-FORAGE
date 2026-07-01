@@ -119,11 +119,12 @@
             transition: background 0.3s;
         }
 
-        /* ✅ CORRECTION : .restricted utilise visibility:hidden + height:0 pour ne pas casser la grille */
+        /* ✅ CORRECTION : .restricted masque visuellement sans casser la grille */
         .restricted {
             visibility: hidden !important;
             pointer-events: none !important;
             opacity: 0 !important;
+            /* Note: on garde la place dans la grille pour l'alignement */
         }
 
         @media (min-width: 768px) {
@@ -135,14 +136,14 @@
     <div class="bg-blob" style="top: -50px; left: -50px;"></div>
     <div class="bg-blob" style="bottom: 50px; right: -50px; background: #60efff;"></div>
 
-    <button class="theme-switch" id="themeBtn" aria-label="Changer le thème">🌓</button>
+    <button class="theme-switch" id="themeBtn" aria-label="Changer le thème" title="Mode clair / sombre">🌓</button>
 
     <div class="header">
         <h1 id="welcomeTitle">ASUFOR Admin</h1>
         <div class="subtitle" id="userRoleDisplay">Chargement...</div>
     </div>
 
-    <div class="grid">
+    <nav class="grid" aria-label="Menu principal">
         <a href="../agents/agent.html" id="btn-agent" class="glass-btn">
             <div class="icon-box">
                 <svg viewBox="0 0 24 24"><path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
@@ -185,15 +186,16 @@
             <span class="btn-label" style="color: #fbbf24;">Anomalies</span>
         </a>
 
-        <a href="#" class="glass-btn" id="btn-logout">
+        <a href="#" class="glass-btn" id="btn-logout" role="button">
             <div class="icon-box" style="fill: #ff6b81;">
                 <svg viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
             </div>
             <span class="btn-label">Déconnexion</span>
         </a>
-    </div>
+    </nav>
 
     <script src="../security.js"></script>
+    <script src="../loader.js"></script>
     <script>
         // ✅ CORRECTION : checkAccess() avant tout
         const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
