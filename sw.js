@@ -1,6 +1,6 @@
-// sw.js - Service Worker ASUFOR v11.1 (Stratégie Network First robuste)
+// sw.js - Service Worker ASUFOR v11.2 (Stratégie Network First robuste)
 //
-// v11.1 : correctif getIndexPath (redirections /home/index.html 404) + bump de
+// v11.2 : correctif boucle de connexion (observer onAuthStateChanged inerte pendant login) + persistance LOCALE explicite.
 //         cache pour forcer la ré-activation du SW et purger l'ancien cache.
 // v11   : bump de version du cache (v10 → v11) pour PURGER automatiquement
 //       l'ancien cache au prochain déploiement. Indispensable : sans ce bump,

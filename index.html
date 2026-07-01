@@ -287,6 +287,9 @@
         try {
             firebase.initializeApp(firebaseConfig);
             auth = firebase.auth();
+            // ✅ Persistance LOCALE explicite (défaut, mais on lève tout doute) :
+            //    garantit que le jeton Firebase survit à la navigation entre pages.
+            auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
         } catch (e) {
             console.error('[ASUFOR] Échec initialisation Firebase :', e);
         }
@@ -323,16 +326,21 @@
     });
 
     // ✅ CORRECTION : Firebase = source de vérité pour l'accès aux données.
-    //  • user + session locale valide → accès confirmé, on entre dans l'app
-    //    (sauf pendant une connexion en cours : verify() gère alors la redirection
-    //     pour laisser s'afficher le message « Accès autorisé ✓ »).
+    //  • user + session locale valide → accès confirmé, on entre dans l'app.
     //  • user SANS session locale valide → état incohérent → on déconnecte Firebase.
-    //  • pas de user → on purge la session locale « fantôme » (sinon l'app croit
-    //    l'utilisateur connecté alors que Firebase le refuse), et on affiche le clavier.
+    //  • pas de user → on purge la session locale « fantôme ».
+    //
+    //  ⚠️ CORRECTION BOUCLE DE CONNEXION : pendant une connexion en cours
+    //     (isVerifying), on NE FAIT RIEN ici. Sinon une condition de course entre
+    //     onAuthStateChanged et le .then() de signInWithEmailAndPassword pouvait
+    //     déclencher auth.signOut() PUIS purger la session tout juste écrite →
+    //     l'accueil ne trouvait plus de session → retour au clavier de code (boucle).
+    //     verify() gère lui-même la redirection après une connexion réussie.
     if (auth) auth.onAuthStateChanged((user) => {
+        if (isVerifying) return; // connexion en cours : laisser verify() piloter
         if (user) {
             if (localSessionValid()) {
-                if (!isVerifying) window.location.replace('home/accueil.html');
+                window.location.replace('home/accueil.html');
             } else {
                 auth.signOut().catch(() => {});
             }
