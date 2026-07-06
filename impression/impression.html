@@ -473,7 +473,7 @@
             const div = document.createElement('div');
             div.className = 'facture-item' + (isModified ? ' is-modified' : '');
             div.setAttribute('data-id',       key);
-            div.setAttribute('data-search',   `${(d.name || '').toLowerCase()} ${currentNumCompteurStr}`);
+            div.setAttribute('data-search',   `${(d.name || '').toLowerCase()} ${String(d.numero_compteur || '').trim().toLowerCase()}`);
             div.setAttribute('data-releveur', d.agent_id || '');
 
             const badgeHtml = isModified
