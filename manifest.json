@@ -1,27 +1,87 @@
 {
-  "name": "ASUFOR Diandioly",
+  "id": "/asufor-diandioly",
+  "name": "ASUFOR Diandioly — Gestion de l'Eau",
   "short_name": "ASUFOR",
-  "description": "Gérance Rurale de l'Eau - ASUFOR Diandioly",
-  "start_url": "index.html",
+  "description": "Application de gérance rurale de l'eau ASUFOR Diandioly : relevés de compteurs, facturation, arriérés, statistiques et impression.",
+  "start_url": "index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
   "background_color": "#0f172a",
-  "theme_color": "#3b82f6",
+  "theme_color": "#0f172a",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["utilities", "productivity", "business"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "icons/icon-192.jpg",
-      "sizes": "192x192",
-      "type": "image/jpeg",
+      "src": "icons/favicon-16.png",
+      "sizes": "16x16",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.jpg",
+      "src": "icons/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
-  "orientation": "portrait",
-  "lang": "fr",
-  "categories": ["utilities", "productivity"]
+  "screenshots": [
+    {
+      "src": "icons/screenshot-mobile.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Accueil ASUFOR Diandioly"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Statistiques",
+      "short_name": "Stats",
+      "description": "Voir les statistiques de paiement",
+      "url": "statistiques/stats.html?source=pwa",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Impression factures",
+      "short_name": "Imprimer",
+      "description": "Imprimer les factures et arriérés",
+      "url": "impression/impression.html?source=pwa",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Compteurs",
+      "short_name": "Compteurs",
+      "description": "Liste des compteurs",
+      "url": "counter/list.html?source=pwa",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }

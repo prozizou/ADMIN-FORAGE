@@ -1,98 +1,121 @@
-// sw.js - Service Worker ASUFOR v11.2 (Stratégie Network First robuste)
+// sw.js — Service Worker ASUFOR Diandioly v12 (professionnel)
 //
-// v11.2 : correctif boucle de connexion (observer onAuthStateChanged inerte pendant login) + persistance LOCALE explicite.
-//         cache pour forcer la ré-activation du SW et purger l'ancien cache.
-// v11   : bump de version du cache (v10 → v11) pour PURGER automatiquement
-//       l'ancien cache au prochain déploiement. Indispensable : sans ce bump,
-//       le Service Worker continue de servir les anciens fichiers (stats.js,
-//       impression.html…) même après un redéploiement Vercel.
-//
-// CORRECTIONS v8 :
-// 1. Exclut les requêtes Firebase/CDN du cache local (évite des conflits d'auth)
-// 2. Gestion propre des erreurs de cache
-// 3. Mise à jour forcée fiable avec skipWaiting + clients.claim
-// 4. ✅ NOUVEAU : Exclusion des requêtes chrome-extension et non-http
-// 5. ✅ NOUVEAU : Vérification que la réponse est clonable avant mise en cache
-// 6. ✅ NOUVEAU : Timeout réseau pour basculer sur le cache plus vite hors ligne
+// Stratégie :
+//  • App shell (HTML/JS/CSS/icônes locaux) pré-cachés à l'installation.
+//  • Network-first pour la navigation et les ressources locales : on privilégie
+//    toujours la version en ligne (données Firebase à jour), le cache ne sert
+//    que de secours hors-ligne.
+//  • Firebase / CDN / Google Fonts : jamais mis en cache (évite conflits d'auth).
+//  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
+//  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v11.2';
+const CACHE_NAME = 'asufor-cache-v12';
 
-// Ressources à ne JAMAIS mettre en cache localement
+// App shell relatif à la racine du scope (le SW est à la racine admin/)
+const APP_SHELL = [
+    './',
+    './index.html',
+    './offline.html',
+    './manifest.json',
+    './pwa.js',
+    './loader.js',
+    './security.js',
+    './firebase-config.js',
+    './home/accueil.html',
+    './counter/list.html',
+    './statistiques/stats.html',
+    './statistiques/stats.css',
+    './statistiques/stats.js',
+    './impression/impression.html',
+    './reset/zero.html',
+    './agents/agent.html',
+    './anomalies/bugs.html',
+    './icons/icon-192.png',
+    './icons/icon-512.png',
+];
+
+// Domaines à ne JAMAIS mettre en cache localement
 const NEVER_CACHE = [
     'firebaseapp.com',
     'googleapis.com',
     'gstatic.com',
     'firebase.io',
+    'firebaseio.com',
     'cdnjs.cloudflare.com',
     'cdn.jsdelivr.net',
     'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'flaticon.com',
 ];
 
 function shouldCache(url) {
-    // ✅ CORRECTION : ignorer les URLs non-http (chrome-extension, data:, etc.)
     if (!url.startsWith('http://') && !url.startsWith('https://')) return false;
-    return !NEVER_CACHE.some(domain => url.includes(domain));
+    return !NEVER_CACHE.some(d => url.includes(d));
 }
 
-self.addEventListener('install', () => {
-    console.log('[SW] Installation v10');
-    self.skipWaiting();
+// ── INSTALL : pré-cache de l'app shell ──
+self.addEventListener('install', (e) => {
+    console.log('[SW] Installation v12');
+    e.waitUntil(
+        caches.open(CACHE_NAME).then(cache =>
+            // addAll échoue si un seul fichier manque → on tolère les absences
+            Promise.allSettled(APP_SHELL.map(u => cache.add(u)))
+        ).then(() => self.skipWaiting())
+    );
 });
 
+// ── ACTIVATE : purge des anciens caches ──
 self.addEventListener('activate', (e) => {
-    console.log('[SW] Activation v10');
+    console.log('[SW] Activation v12');
     e.waitUntil(
         caches.keys().then(keys =>
-            Promise.all(
-                keys.filter(k => k !== CACHE_NAME).map(k => {
-                    console.log('[SW] Suppression ancien cache :', k);
-                    return caches.delete(k);
-                })
-            )
+            Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => {
+                console.log('[SW] Suppression ancien cache :', k);
+                return caches.delete(k);
+            }))
         ).then(() => self.clients.claim())
     );
 });
 
-self.addEventListener('fetch', (e) => {
-    const url = e.request.url;
+// ── MESSAGE : mise à jour immédiate demandée par pwa.js ──
+self.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
 
-    // ✅ CORRECTION : Ignorer les requêtes non-GET et les domaines externes critiques
-    if (e.request.method !== 'GET' || !shouldCache(url)) {
-        return;
-    }
+// ── FETCH : network-first avec secours cache + page hors-ligne ──
+self.addEventListener('fetch', (e) => {
+    const req = e.request;
+    const url = req.url;
+
+    if (req.method !== 'GET' || !shouldCache(url)) return;
 
     e.respondWith(
-        fetch(e.request)
-            .then(response => {
-                // ✅ CORRECTION : Vérifier que la réponse est valide et clonable
-                if (
-                    response &&
-                    response.status === 200 &&
-                    (response.type === 'basic' || response.type === 'cors') &&
-                    !response.bodyUsed
-                ) {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(e.request, clone).catch(() => {});
-                    });
+        fetch(req).then(response => {
+            if (
+                response &&
+                response.status === 200 &&
+                (response.type === 'basic' || response.type === 'cors') &&
+                !response.bodyUsed
+            ) {
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then(c => c.put(req, clone).catch(() => {}));
+            }
+            return response;
+        }).catch(() =>
+            caches.match(req).then(cached => {
+                if (cached) return cached;
+                if (req.destination === 'document' || req.mode === 'navigate') {
+                    return caches.match('./offline.html').then(off =>
+                        off || new Response(
+                            '<!doctype html><meta charset="utf-8"><title>Hors ligne</title>' +
+                            '<body style="font-family:system-ui;text-align:center;padding:48px;background:#0f172a;color:#fff">' +
+                            '<h2>📡 Hors ligne</h2><p>Reconnectez-vous pour accéder à ASUFOR.</p></body>',
+                            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+                        )
+                    );
                 }
-                return response;
+                return new Response('', { status: 503 });
             })
-            .catch(() => {
-                // ✅ CORRECTION : Retourner une réponse de fallback si pas de cache
-                console.log('[SW] Hors-ligne, lecture cache :', url);
-                return caches.match(e.request).then(cached => {
-                    if (cached) return cached;
-                    // Page de fallback minimale si rien en cache
-                    if (e.request.destination === 'document') {
-                        return new Response(
-                            '<html><body style="font-family:sans-serif;text-align:center;padding:40px;background:#0f172a;color:white">' +
-                            '<h2>📡 Hors ligne</h2><p>Reconnectez-vous pour accéder à ASUFOR.</p></body></html>',
-                            { headers: { 'Content-Type': 'text/html' } }
-                        );
-                    }
-                    return new Response('', { status: 503 });
-                });
-            })
+        )
     );
 });

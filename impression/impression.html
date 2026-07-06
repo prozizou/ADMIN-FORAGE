@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="fr"> 
 <head>
+    <!-- PWA-META -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
+
     <link rel="manifest" href="../manifest.json">
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
@@ -431,17 +441,23 @@
             const key = child.key;
 
             const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
+            const currentZoneStr        = String(d.zone || "").trim().toLowerCase();
             const nIdx         = parseFloat(d.new_index  || 0);
             const lIdx         = parseFloat(d.last_index || 0);
             const vol          = Math.max(0, nIdx - lIdx);
             const montantMois  = vol * parseFloat(d.facteur || 250);
 
             // ── Recherche profonde des arriérés Firebase ──
+            // ⚠️ On matche numero_compteur + zone : les numéros de compteur ne sont
+            // uniques que PAR zone (ex: "Cpt: 321" existe potentiellement dans
+            // plusieurs zones). Matcher sur le seul numéro mélangeait les dettes
+            // de clients différents ayant le même numéro dans une autre zone.
             let arrieres = 0, historiqueTrouve = false;
             for (let m of sortedMonths) {
                 if (m < selectedMonthStr && allBackups[m]?.donnees) {
                     const oldRecord = Object.values(allBackups[m].donnees)
-                        .find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr);
+                        .find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr
+                                && String(r.zone || "").trim().toLowerCase() === currentZoneStr);
                     if (oldRecord) {
                         historiqueTrouve = true;
                         if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
