@@ -23,6 +23,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Moteur de facturation partagé (window.Billing) -->
+    <script src="../billing.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -430,53 +432,37 @@
     function renderData(snap) {
         if (window.AsuforLoader) AsuforLoader.hide();
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
-        const sortedMonths     = Object.keys(allBackups).sort().reverse();
         const listContainer    = document.getElementById('list-container');
         listContainer.innerHTML = "";
         dataCache = {};
         const agentsMap = new Map();
 
+        // ── Moteur de facturation partagé (billing.js) ──
+        // On indexe les backups UNE fois par rendu (perf), puis on délègue tout
+        // le calcul facture/arriérés/anomalies au module commun. Fini les
+        // divergences de logique entre impression et statistiques.
+        const indexedBackups = window.Billing.indexBackups(allBackups);
+        // Le cumul ne considère que les cycles STRICTEMENT antérieurs au mois affiché.
+        // "actuel" → selectedMonthStr vaut "9999-99" (déjà défini plus haut), donc
+        // tous les cycles archivés comptent.
+        const beforeCycle = selectedMonthStr;
+
         snap.forEach(child => {
             const d   = child.val();
             const key = child.key;
 
-            const currentNumCompteurStr = String(d.numero_compteur || "").trim().toLowerCase();
-            const currentZoneStr        = String(d.zone || "").trim().toLowerCase();
-            const nIdx         = parseFloat(d.new_index  || 0);
-            const lIdx         = parseFloat(d.last_index || 0);
-            const vol          = Math.max(0, nIdx - lIdx);
-            const montantMois  = vol * parseFloat(d.facteur || 250);
+            // Calcul complet via le moteur partagé
+            const stmt = window.Billing.computeStatement(d, indexedBackups, { beforeCycle });
+            const montantMois = stmt.facture_courante;
+            const arrieres    = stmt.arriere;
 
-            // ── Recherche profonde des arriérés Firebase ──
-            // ⚠️ On matche numero_compteur + zone : les numéros de compteur ne sont
-            // uniques que PAR zone (ex: "Cpt: 321" existe potentiellement dans
-            // plusieurs zones). Matcher sur le seul numéro mélangeait les dettes
-            // de clients différents ayant le même numéro dans une autre zone.
-            let arrieres = 0, historiqueTrouve = false;
-            for (let m of sortedMonths) {
-                if (m < selectedMonthStr && allBackups[m]?.donnees) {
-                    const oldRecord = Object.values(allBackups[m].donnees)
-                        .find(r => String(r.numero_compteur || "").trim().toLowerCase() === currentNumCompteurStr
-                                && String(r.zone || "").trim().toLowerCase() === currentZoneStr);
-                    if (oldRecord) {
-                        historiqueTrouve = true;
-                        if (String(oldRecord.status || "").trim().toLowerCase() !== 'paye') {
-                            const apaidExplicite = parseFloat(oldRecord.apaid);
-                            arrieres = (!isNaN(apaidExplicite) && apaidExplicite > 0)
-                                ? apaidExplicite
-                                : parseFloat(d.arrieres || d._impaye_anterieur || 0);
-                        }
-                        break;
-                    }
-                }
-            }
-            if (!historiqueTrouve) arrieres = parseFloat(d.arrieres || d._impaye_anterieur || 0);
-
-            d.vol        = vol;
+            d.vol        = stmt.conso;
             d.montantMois = montantMois;
-            // Applique l'override manuel s'il existe, sinon valeur Firebase
+            d.anomalie   = stmt.anomalie;         // mois courant en anomalie ?
+            d.anomalieRaison = stmt.raison || null;
+            // Applique l'override manuel s'il existe, sinon valeur calculée
             d.arrieres   = manualOverrides[key] !== undefined ? manualOverrides[key].arrieres : arrieres;
-            d.arrieresFB = arrieres;   // valeur Firebase d'origine (pour reset)
+            d.arrieresFB = arrieres;   // valeur calculée d'origine (pour reset)
             d.total      = montantMois + d.arrieres;
             dataCache[key] = d;
 

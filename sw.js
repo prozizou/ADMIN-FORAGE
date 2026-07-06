@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v12';
+const CACHE_NAME = 'asufor-cache-v13';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -18,6 +18,7 @@ const APP_SHELL = [
     './offline.html',
     './manifest.json',
     './pwa.js',
+    './billing.js',
     './loader.js',
     './security.js',
     './firebase-config.js',

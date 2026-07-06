@@ -29,6 +29,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Moteur de facturation partagé (window.Billing) -->
+    <script src="../billing.js"></script>
     <script>
         // ✅ CORRECTION : utiliser window.checkAccess (cohérent avec tous les autres fichiers)
         if (typeof window.checkAccess === 'function') {

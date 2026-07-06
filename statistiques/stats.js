@@ -24,6 +24,9 @@ let chartPieInstance = null;
 let chartBarInstance = null;
 let currentActivePath = ""; 
 
+// Cache de l'arbre complet asufor_backup (pour billing.js : arriérés + cascade paiement)
+let allBackupsCache = {};
+
 let currentUser = 'Trésorier/Admin';
 
 // ✅ CORRECTION : Restaurer le thème enregistré dès le chargement
@@ -116,23 +119,54 @@ window.confirmRevoke = function(key) {
 };
 
 window.updateStatus = function(key, newStatus) {
-    const now = new Date().toISOString();
-    
-    const updateData = { 
-        status: newStatus,
-        last_modified_by: currentUser,
-        last_modified_at: now
-    };
-
     if (!currentActivePath) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
     }
 
-    const dbPath = `${currentActivePath}/${key}`;
+    const now = new Date().toISOString();
+    const record = storeReleves[key] || {};
 
-    update(ref(db, dbPath), updateData)
-        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée !" : "⚠️ Facture révoquée !"))
+    // La cascade complète (nettoyage base active + historique backup) n'a de sens
+    // que sur la base ACTIVE. Sur une archive on se contente d'un simple flip.
+    const onActiveBase = (currentActivePath === 'asufor_db_diandioly');
+
+    let updates;
+    if (window.Billing && onActiveBase) {
+        const indexedBackups = window.Billing.indexBackups(allBackupsCache);
+        if (newStatus === 'paye') {
+            // §3 Régularisation : status→paye, arriere→0, + tous les cycles impayés de l'historique
+            updates = window.Billing.buildPaymentUpdates({
+                activePath: currentActivePath,
+                activeKey: key,
+                record,
+                indexedBackups,
+                paidBy: currentUser,
+                timestamp: now
+            }).updates;
+        } else {
+            // Révocation : repasse la base active en impayé (l'historique reste inchangé)
+            updates = window.Billing.buildRevokeUpdates({
+                activePath: currentActivePath,
+                activeKey: key,
+                paidBy: currentUser,
+                timestamp: now
+            }).updates;
+        }
+    } else {
+        // Repli : archive consultée, ou billing.js indisponible → flip minimal
+        const p = `${currentActivePath}/${key}`;
+        updates = {
+            [`${p}/status`]: newStatus,
+            [`${p}/statut`]: newStatus === 'paye',
+            [`${p}/last_modified_by`]: currentUser,
+            [`${p}/last_modified_at`]: now
+        };
+        if (newStatus === 'paye') updates[`${p}/date_paiement`] = now;
+    }
+
+    update(ref(db), updates)
+        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "⚠️ Facture révoquée !"))
         .catch(err => showToast("Erreur réseau : " + err, true));
 };
 
@@ -180,6 +214,7 @@ window.initMonthFilter = async function() {
         
         if (snapshot.exists()) {
             const backups = snapshot.val();
+            allBackupsCache = backups; // conservé pour billing.js (arriérés + cascade paiement)
             const sortedMonths = Object.keys(backups).sort().reverse();
             
             sortedMonths.forEach(month => {
@@ -819,30 +854,33 @@ window.submitReplace = function() {
     }
 
     const item = storeReleves[key];
-    const oldLastIdx = parseFloat(item.last_index || 0);
-    const oldNewIdx = parseFloat(item.new_index || 0);
-    const facteur = parseFloat(item.facteur || 250);
+    // Conversion fiable String/Number via le moteur partagé
+    const toInt = (window.Billing ? window.Billing.toInt : (v => parseFloat(v)||0));
+    const oldLastIdx = toInt(item.last_index) || 0;
+    const oldNewIdx  = toInt(item.new_index) || 0;
+    const fRaw       = toInt(item.facteur);
+    const facteur    = (fRaw && fRaw > 0) ? fRaw : 250;
 
-    // 1. Calculer la consommation non facturée sur l'ancien compteur (avant qu'il ne soit enlevé)
+    // 1. Consommation non facturée sur l'ancien compteur (avant retrait)
     let consoAncien = 0;
     if (oldNewIdx > oldLastIdx) {
         consoAncien = oldNewIdx - oldLastIdx;
     }
     const montantConsomme = consoAncien * facteur;
 
-    // 2. Récupérer l'ancienne dette du client (s'il en avait une)
-    const detteExistante = parseFloat(item.arrieres || item.apaid || 0);
-    
-    // 3. Fusionner : Ancienne dette + ce qu'il a consommé avec l'ancien compteur ce mois-ci
+    // 2. Dette déjà existante (arriéré courant + éventuelle facture du mois non réglée)
+    //    On lit le champ unifié `arriere` (schéma cible), avec repli sur anciens champs.
+    const detteExistante = toInt(item.arriere) || toInt(item.arrieres) || toInt(item.apaid) || 0;
+
+    // 3. Fusion : dette + consommation de l'ancien compteur ce mois-ci
     const nouvelleDette = detteExistante + montantConsomme;
 
-    // 4. Préparer les données pour Firebase
+    // 4. Données Firebase (schéma cible : champ `arriere`)
     const updatedData = {
         numero_compteur: newCompteur,
         last_index: String(startIdx),
-        new_index: startIdx,        // Le nouveau compteur commence ici
-        arrieres: nouvelleDette,    // L'argent à payer est transféré et mis en sécurité
-        apaid: nouvelleDette,
+        new_index: startIdx,        // Le nouveau compteur redémarre ici
+        arriere: nouvelleDette,     // Dette transférée et sécurisée sur le nouveau compteur
         last_modified_by: currentUser + " (Remplacement)",
         last_modified_at: new Date().toISOString()
     };
