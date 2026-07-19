@@ -70,7 +70,7 @@ vercel --prod
 ## Vérifier après déploiement (F12 → Console)
 
 - ✅ `[PWA] Service Worker enregistré : https://<ton-site>/`
-- ✅ `[SW] Installation v9`
+- ✅ `[SW] Installation v15`
 - ❌ Plus aucune erreur `404` ni `Firebase: Need to provide api options`
 
 Si un 404 persiste sur `firebase-config.js` : ouvre directement

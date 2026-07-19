@@ -6,8 +6,11 @@
     --danger: #ef4444; --border-color: rgba(0, 0, 0, 0.05);
 }
 
-body.dark-theme {
-    --bg: #0f172a; 
+/* ✅ FIX : le thème est piloté par [data-theme] sur <html> (cohérent avec le
+   reste de l'app). L'ancien sélecteur [data-theme="dark"] n'était jamais activé,
+   rendant tout le mode sombre inopérant sur cette page. */
+[data-theme="dark"] {
+    --bg: #0f172a;
     --card-bg: #1e293b;
     --text-main: #f1f5f9; 
     --text-sub: #94a3b8;
@@ -60,7 +63,7 @@ body {
     padding: 15px 25px; border-radius: 20px; margin-bottom: 20px;
     box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1); position: relative;
 }
-body.dark-theme .debt-card { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+[data-theme="dark"] .debt-card { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
 .debt-card h2 { margin: 5px 0 0 0; font-size: 1.5rem; font-weight: 800; }
 
 .trend-indicator { font-size: 0.8rem; margin-top: 5px; font-weight: bold; }
@@ -90,14 +93,14 @@ body.dark-theme .debt-card { background: rgba(239, 68, 68, 0.1); border-color: r
 .bg-paye { background-color: #dcfce7; border: 1px solid #bbf7d0; }
 .bg-impaye { background-color: #fee2e2; border: 1px solid #fecaca; }
 
-body.dark-theme .bg-paye { background-color: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
-body.dark-theme .bg-impaye { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+[data-theme="dark"] .bg-paye { background-color: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
+[data-theme="dark"] .bg-impaye { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
 
 .bg-alerte-index { background-color: #fef9c3 !important; border: 2px solid #eab308 !important; }
 .bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
 
-body.dark-theme .bg-alerte-index { background-color: rgba(234, 179, 8, 0.1) !important; border-color: rgba(234, 179, 8, 0.4) !important; }
-body.dark-theme .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
+[data-theme="dark"] .bg-alerte-index { background-color: rgba(234, 179, 8, 0.1) !important; border-color: rgba(234, 179, 8, 0.4) !important; }
+[data-theme="dark"] .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
 
 .amt { font-weight: 800; font-size: 1.1rem; }
 .action-btns button { border: none; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; margin-top: 8px; }
@@ -109,7 +112,7 @@ body.dark-theme .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !im
     background: #fbbf24; color: #1e293b; box-shadow: 0 2px 5px rgba(251, 191, 36, 0.4);
     margin-right: 5px;
 }
-body.dark-theme .btn-edit {
+[data-theme="dark"] .btn-edit {
     background: #f59e0b; color: #0f172a;
 }
 
@@ -118,7 +121,7 @@ body.dark-theme .btn-edit {
 
 .skeleton-item { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 15px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
 .skeleton-text { height: 12px; background: #e2e8f0; border-radius: 6px; animation: shimmer 1.5s infinite linear; }
-body.dark-theme .skeleton-text { background: #334155; }
+[data-theme="dark"] .skeleton-text { background: #334155; }
 
 @keyframes shimmer { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
@@ -237,7 +240,7 @@ body.dark-theme .skeleton-text { background: #334155; }
     border-radius: 20px;
     margin-left: 6px;
 }
-body.dark-theme .badge-releve {
+[data-theme="dark"] .badge-releve {
     background: rgba(167, 139, 250, 0.15);
     border-color: rgba(167, 139, 250, 0.3);
     color: #a78bfa;
