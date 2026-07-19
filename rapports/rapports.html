@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <!-- PWA-META -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASUFOR Diandioly – Rapports & Bilan</title>
+
+    <link rel="manifest" href="../manifest.json">
+
+    <!-- Versions CDN épinglées + crossorigin (cf. correctifs PR #1) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <!-- security.js AVANT le module (checkAccess + escHtml) -->
+    <script src="../security.js"></script>
+    <script src="../loader.js"></script>
+    <script src="../firebase-config.js"></script>
+    <script src="../billing.js"></script>
+    <script>
+        if (typeof window.checkAccess === 'function') {
+            window.checkAccess(['président', 'trésorier', 'secrétaire']);
+        }
+    </script>
+    <script src="../pwa.js" defer></script>
+
+    <style>
+        :root {
+            --bg: #f8fafc; --primary: #0052fe; --card: #ffffff;
+            --text: #1e293b; --sub: #64748b; --success: #22c55e;
+            --danger: #ef4444; --amber: #f59e0b; --border: rgba(0,0,0,0.06);
+        }
+        [data-theme="dark"] {
+            --bg: #0f172a; --card: #1e293b; --text: #f1f5f9;
+            --sub: #94a3b8; --border: rgba(255,255,255,0.1);
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            transition: background-color .3s, color .3s;
+        }
+        .wrap { max-width: 780px; margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        .topbar h1 { font-size: 1.25rem; margin: 0; }
+        .topbar small { color: var(--sub); font-weight: 600; }
+        .icon-btn {
+            background: var(--card); border: 1px solid var(--border); color: var(--text);
+            width: 42px; height: 42px; border-radius: 12px; cursor: pointer; font-size: 1.1rem;
+        }
+        .back-link { color: var(--sub); text-decoration: none; font-size: .9rem; font-weight: 600; }
+        .back-link:hover { color: var(--primary); }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+        @media (min-width: 620px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+        .kpi {
+            background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+            padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .kpi .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--sub); font-weight: 700; }
+        .kpi .value { font-size: 1.35rem; font-weight: 800; margin-top: 6px; word-break: break-word; }
+        .kpi.accent { background: var(--primary); color: #fff; border: none; }
+        .kpi.accent .label, .kpi.accent .value { color: #fff; }
+        .bar-bg { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.25); overflow: hidden; margin-top: 10px; }
+        .bar-fill { height: 100%; border-radius: 6px; width: 0; transition: width .6s ease, background .4s ease; background: #fff; }
+
+        .card-box {
+            background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+            padding: 18px; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .card-box h2 { font-size: 1rem; margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px; }
+        .muted { color: var(--sub); font-size: .9rem; text-align: center; padding: 10px 0; }
+
+        .row-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .row-item:last-child { border-bottom: none; }
+        .rank { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff;
+                display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 800; flex: 0 0 auto; }
+        .row-main { flex: 1; min-width: 0; }
+        .row-main b { display: block; font-size: .92rem; }
+        .row-main small { color: var(--sub); font-size: .78rem; }
+        .row-amt { font-weight: 800; color: var(--danger); white-space: nowrap; }
+        .tag { font-weight: 800; font-size: .82rem; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+        .tag-ok { background: rgba(34,197,94,0.15); color: var(--success); }
+        .tag-warn { background: rgba(245,158,11,0.15); color: var(--amber); }
+        .tag-bad { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+        /* Générateur de rapport */
+        .seg { display: flex; gap: 8px; margin-bottom: 14px; }
+        .seg label {
+            flex: 1; text-align: center; padding: 10px; border-radius: 12px; cursor: pointer;
+            border: 1px solid var(--border); background: var(--bg); font-weight: 700; font-size: .9rem;
+        }
+        .seg input { display: none; }
+        .seg input:checked + span { color: var(--primary); }
+        .seg label:has(input:checked) { border-color: var(--primary); background: rgba(0,82,254,0.08); }
+        .field { margin-bottom: 14px; }
+        .field > label { display: block; font-size: .78rem; font-weight: 700; color: var(--sub); margin-bottom: 6px; text-transform: uppercase; }
+        select, .exp-lib, .exp-mnt {
+            width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: .92rem; outline: none;
+        }
+        select:focus, .exp-lib:focus, .exp-mnt:focus { border-color: var(--primary); }
+
+        .expense-row { display: flex; gap: 8px; margin-bottom: 8px; }
+        .expense-row .exp-lib { flex: 2; }
+        .expense-row .exp-mnt { flex: 1; }
+        .exp-del { background: rgba(239,68,68,0.12); color: var(--danger); border: none; border-radius: 10px; width: 40px; cursor: pointer; font-size: 1rem; flex: 0 0 auto; }
+        .btn-ghost { background: transparent; border: 1px dashed var(--sub); color: var(--text); padding: 10px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: 700; margin-top: 4px; }
+
+        .btn-pdf {
+            width: 100%; margin-top: 16px; padding: 15px; border: none; border-radius: 14px;
+            background: var(--danger); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-pdf:active { transform: scale(.98); }
+        .hint { font-size: .78rem; color: var(--sub); margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <div>
+            <small>Assemblée Générale</small>
+            <h1>📊 Rapports &amp; Bilan</h1>
+        </div>
+        <button class="icon-btn" onclick="toggleTheme()" title="Changer le thème">🌓</button>
+    </div>
+    <a href="../home/accueil.html" class="back-link">← Retour à l'accueil</a>
+
+    <!-- KPIs -->
+    <div class="kpi-grid" style="margin-top:16px;">
+        <div class="kpi accent">
+            <div class="label">Taux de recouvrement</div>
+            <div class="value" id="kpi-taux">—</div>
+            <div class="bar-bg"><div class="bar-fill" id="kpi-taux-bar"></div></div>
+        </div>
+        <div class="kpi">
+            <div class="label">Recettes (mois)</div>
+            <div class="value" id="kpi-recettes" style="color:var(--success)">—</div>
+        </div>
+        <div class="kpi">
+            <div class="label">Impayés (mois)</div>
+            <div class="value" id="kpi-impayes" style="color:var(--danger)">—</div>
+        </div>
+        <div class="kpi">
+            <div class="label">Volume (mois)</div>
+            <div class="value" id="kpi-volume">—</div>
+        </div>
+    </div>
+
+    <!-- Évolution des recettes -->
+    <div class="card-box">
+        <canvas id="chart-recettes" height="150"></canvas>
+    </div>
+
+    <!-- Top débiteurs -->
+    <div class="card-box">
+        <h2>🔴 Top débiteurs</h2>
+        <div id="top-debiteurs"><p class="muted">Chargement…</p></div>
+    </div>
+
+    <!-- Zones à risque -->
+    <div class="card-box">
+        <h2>📍 Recouvrement par zone</h2>
+        <div id="zones-risque"><p class="muted">Chargement…</p></div>
+    </div>
+
+    <!-- Générateur de rapport AG -->
+    <div class="card-box">
+        <h2>📄 Rapport pour l'Assemblée Générale</h2>
+
+        <div class="seg" onchange="toggleReportMode()">
+            <label><input type="radio" name="report-mode" value="mensuel" checked><span>Mensuel</span></label>
+            <label><input type="radio" name="report-mode" value="annuel"><span>Annuel</span></label>
+        </div>
+
+        <div class="field" id="wrap-month">
+            <label>Mois</label>
+            <select id="report-month"></select>
+        </div>
+        <div class="field" id="wrap-year" style="display:none;">
+            <label>Année</label>
+            <select id="report-year"></select>
+        </div>
+
+        <div class="field">
+            <label>Dépenses de la période (saisie manuelle)</label>
+            <div id="expense-list"></div>
+            <button type="button" class="btn-ghost" onclick="addExpenseRow()">+ Ajouter une dépense</button>
+            <p class="hint">Les dépenses ne sont pas encore stockées en base : elles servent au calcul du solde de ce rapport uniquement.</p>
+        </div>
+
+        <button class="btn-pdf" onclick="genererRapport()">⬇️ Générer le PDF</button>
+    </div>
+</div>
+
+<script type="module" src="rapports.js"></script>
+</body>
+</html>
