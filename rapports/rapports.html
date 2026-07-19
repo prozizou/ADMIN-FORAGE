@@ -17,12 +17,10 @@
 
     <link rel="manifest" href="../manifest.json">
 
-    <!-- Versions CDN épinglées + crossorigin (cf. correctifs PR #1) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-    <!-- security.js AVANT le module (checkAccess + escHtml) -->
     <script src="../security.js"></script>
     <script src="../loader.js"></script>
     <script src="../firebase-config.js"></script>
@@ -50,42 +48,52 @@
             font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
             transition: background-color .3s, color .3s;
         }
-        .wrap { max-width: 780px; margin: 0 auto; padding: 16px; padding-bottom: 60px; }
+        .wrap { max-width: 820px; margin: 0 auto; padding: 16px; padding-bottom: 60px; }
 
-        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
         .topbar h1 { font-size: 1.25rem; margin: 0; }
         .topbar small { color: var(--sub); font-weight: 600; }
-        .icon-btn {
-            background: var(--card); border: 1px solid var(--border); color: var(--text);
-            width: 42px; height: 42px; border-radius: 12px; cursor: pointer; font-size: 1.1rem;
-        }
+        .icon-btn { background: var(--card); border: 1px solid var(--border); color: var(--text); width: 42px; height: 42px; border-radius: 12px; cursor: pointer; font-size: 1.1rem; }
         .back-link { color: var(--sub); text-decoration: none; font-size: .9rem; font-weight: 600; }
         .back-link:hover { color: var(--primary); }
 
-        .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
-        @media (min-width: 620px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
-        .kpi {
-            background: var(--card); border: 1px solid var(--border); border-radius: 18px;
-            padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        .period-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+        .period-row .field { flex: 1; min-width: 180px; }
+        .field > label { display: block; font-size: .72rem; font-weight: 700; color: var(--sub); margin-bottom: 6px; text-transform: uppercase; }
+        select, .exp-inp {
+            width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--bg); color: var(--text); font-size: .92rem; outline: none;
         }
+        select:focus, .exp-inp:focus { border-color: var(--primary); }
+
+        .section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--sub); font-weight: 700; margin: 4px 2px 10px; }
+        .section-title b { color: var(--text); }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+        @media (min-width: 640px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+        .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
         .kpi .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--sub); font-weight: 700; }
-        .kpi .value { font-size: 1.35rem; font-weight: 800; margin-top: 6px; word-break: break-word; }
+        .kpi .value { font-size: 1.3rem; font-weight: 800; margin-top: 6px; word-break: break-word; }
+        .kpi .delta { font-size: .72rem; font-weight: 700; margin-top: 6px; min-height: 14px; }
         .kpi.accent { background: var(--primary); color: #fff; border: none; }
         .kpi.accent .label, .kpi.accent .value { color: #fff; }
         .bar-bg { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.25); overflow: hidden; margin-top: 10px; }
         .bar-fill { height: 100%; border-radius: 6px; width: 0; transition: width .6s ease, background .4s ease; background: #fff; }
 
-        .card-box {
-            background: var(--card); border: 1px solid var(--border); border-radius: 20px;
-            padding: 18px; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-        }
+        .card-box { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 18px; margin-bottom: 18px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
         .card-box h2 { font-size: 1rem; margin: 0 0 14px 0; display: flex; align-items: center; gap: 8px; }
         .muted { color: var(--sub); font-size: .9rem; text-align: center; padding: 10px 0; }
 
+        /* Caisse */
+        .caisse-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .caisse-cell { text-align: center; }
+        .caisse-cell .c-label { font-size: .72rem; color: var(--sub); font-weight: 700; text-transform: uppercase; }
+        .caisse-cell .c-val { font-size: 1.15rem; font-weight: 800; margin-top: 4px; }
+        .caisse-detail { margin-top: 14px; font-size: .82rem; color: var(--sub); text-align: center; }
+
         .row-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
         .row-item:last-child { border-bottom: none; }
-        .rank { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff;
-                display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 800; flex: 0 0 auto; }
+        .rank { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .78rem; font-weight: 800; flex: 0 0 auto; }
         .row-main { flex: 1; min-width: 0; }
         .row-main b { display: block; font-size: .92rem; }
         .row-main small { color: var(--sub); font-size: .78rem; }
@@ -95,36 +103,23 @@
         .tag-warn { background: rgba(245,158,11,0.15); color: var(--amber); }
         .tag-bad { background: rgba(239,68,68,0.15); color: var(--danger); }
 
+        /* Dépenses */
+        .expense-add { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .expense-add .exp-inp.lib { flex: 2; min-width: 150px; }
+        .expense-add .exp-inp.mnt { flex: 1; min-width: 100px; }
+        .btn-add { background: var(--primary); color: #fff; border: none; border-radius: 12px; padding: 0 18px; font-weight: 700; cursor: pointer; }
+        .exp-del { background: rgba(239,68,68,0.12); color: var(--danger); border: none; border-radius: 10px; width: 34px; height: 34px; cursor: pointer; font-size: .95rem; flex: 0 0 auto; }
+        .exp-total { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 2px solid var(--border); font-weight: 800; }
+        .exp-total .amber { color: var(--amber); }
+
         /* Générateur de rapport */
         .seg { display: flex; gap: 8px; margin-bottom: 14px; }
-        .seg label {
-            flex: 1; text-align: center; padding: 10px; border-radius: 12px; cursor: pointer;
-            border: 1px solid var(--border); background: var(--bg); font-weight: 700; font-size: .9rem;
-        }
+        .seg label { flex: 1; text-align: center; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); font-weight: 700; font-size: .9rem; }
         .seg input { display: none; }
-        .seg input:checked + span { color: var(--primary); }
-        .seg label:has(input:checked) { border-color: var(--primary); background: rgba(0,82,254,0.08); }
-        .field { margin-bottom: 14px; }
-        .field > label { display: block; font-size: .78rem; font-weight: 700; color: var(--sub); margin-bottom: 6px; text-transform: uppercase; }
-        select, .exp-lib, .exp-mnt {
-            width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border);
-            background: var(--bg); color: var(--text); font-size: .92rem; outline: none;
-        }
-        select:focus, .exp-lib:focus, .exp-mnt:focus { border-color: var(--primary); }
-
-        .expense-row { display: flex; gap: 8px; margin-bottom: 8px; }
-        .expense-row .exp-lib { flex: 2; }
-        .expense-row .exp-mnt { flex: 1; }
-        .exp-del { background: rgba(239,68,68,0.12); color: var(--danger); border: none; border-radius: 10px; width: 40px; cursor: pointer; font-size: 1rem; flex: 0 0 auto; }
-        .btn-ghost { background: transparent; border: 1px dashed var(--sub); color: var(--text); padding: 10px; border-radius: 12px; width: 100%; cursor: pointer; font-weight: 700; margin-top: 4px; }
-
-        .btn-pdf {
-            width: 100%; margin-top: 16px; padding: 15px; border: none; border-radius: 14px;
-            background: var(--danger); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
+        .seg label:has(input:checked) { border-color: var(--primary); background: rgba(0,82,254,0.08); color: var(--primary); }
+        .btn-pdf { width: 100%; margin-top: 8px; padding: 15px; border: none; border-radius: 14px; background: var(--danger); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .btn-pdf:active { transform: scale(.98); }
-        .hint { font-size: .78rem; color: var(--sub); margin-top: 8px; }
+        .hint { font-size: .78rem; color: var(--sub); margin: 8px 0; }
     </style>
 </head>
 <body>
@@ -138,69 +133,95 @@
     </div>
     <a href="../home/accueil.html" class="back-link">← Retour à l'accueil</a>
 
+    <!-- Sélecteur de période + comparaison -->
+    <div class="period-row">
+        <div class="field">
+            <label>Période affichée</label>
+            <select id="dash-period" onchange="onPeriodChange()"></select>
+        </div>
+        <div class="field">
+            <label>Comparer avec</label>
+            <select id="dash-compare" onchange="onCompareChange()"></select>
+        </div>
+    </div>
+
+    <div class="section-title">Indicateurs — <b id="period-label">…</b></div>
+
     <!-- KPIs -->
-    <div class="kpi-grid" style="margin-top:16px;">
+    <div class="kpi-grid">
         <div class="kpi accent">
             <div class="label">Taux de recouvrement</div>
             <div class="value" id="kpi-taux">—</div>
             <div class="bar-bg"><div class="bar-fill" id="kpi-taux-bar"></div></div>
+            <div class="delta" id="d-taux"></div>
         </div>
         <div class="kpi">
-            <div class="label">Recettes (mois)</div>
+            <div class="label">Recettes</div>
             <div class="value" id="kpi-recettes" style="color:var(--success)">—</div>
+            <div class="delta" id="d-recettes"></div>
         </div>
         <div class="kpi">
-            <div class="label">Impayés (mois)</div>
+            <div class="label">Impayés</div>
             <div class="value" id="kpi-impayes" style="color:var(--danger)">—</div>
+            <div class="delta" id="d-impayes"></div>
         </div>
         <div class="kpi">
-            <div class="label">Volume (mois)</div>
+            <div class="label">Volume</div>
             <div class="value" id="kpi-volume">—</div>
+            <div class="delta" id="d-volume"></div>
         </div>
+    </div>
+
+    <!-- Caisse -->
+    <div class="card-box">
+        <h2>💰 Caisse</h2>
+        <div class="caisse-grid">
+            <div class="caisse-cell"><div class="c-label">Encaissé (cumul)</div><div class="c-val" id="caisse-encaisse" style="color:var(--success)">—</div></div>
+            <div class="caisse-cell"><div class="c-label">Dépenses (cumul)</div><div class="c-val" id="caisse-depenses" style="color:var(--amber)">—</div></div>
+            <div class="caisse-cell"><div class="c-label">Solde en caisse</div><div class="c-val" id="caisse-solde">—</div></div>
+        </div>
+        <div class="caisse-detail" id="caisse-mois-detail">—</div>
     </div>
 
     <!-- Évolution des recettes -->
-    <div class="card-box">
-        <canvas id="chart-recettes" height="150"></canvas>
-    </div>
+    <div class="card-box"><canvas id="chart-recettes" height="150"></canvas></div>
 
     <!-- Top débiteurs -->
     <div class="card-box">
-        <h2>🔴 Top débiteurs</h2>
+        <h2>🔴 Top débiteurs <small style="font-weight:600;color:var(--sub);">(situation actuelle)</small></h2>
         <div id="top-debiteurs"><p class="muted">Chargement…</p></div>
     </div>
 
-    <!-- Zones à risque -->
+    <!-- Zones -->
     <div class="card-box">
         <h2>📍 Recouvrement par zone</h2>
         <div id="zones-risque"><p class="muted">Chargement…</p></div>
     </div>
 
+    <!-- Dépenses (persistées Firebase) -->
+    <div class="card-box">
+        <h2>🧾 Dépenses — <span id="expense-period" style="font-weight:600;color:var(--sub);">…</span></h2>
+        <div class="expense-add" id="expense-add">
+            <input type="text" class="exp-inp lib" id="exp-new-lib" placeholder="Libellé (ex: carburant groupe)" maxlength="120">
+            <input type="number" class="exp-inp mnt" id="exp-new-mnt" placeholder="Montant" min="0">
+            <button class="btn-add" onclick="addExpense()">Ajouter</button>
+        </div>
+        <div id="expense-list"><p class="muted">Chargement…</p></div>
+        <div class="exp-total"><span>Total dépenses du mois</span><span class="amber" id="expense-total">—</span></div>
+    </div>
+
     <!-- Générateur de rapport AG -->
     <div class="card-box">
         <h2>📄 Rapport pour l'Assemblée Générale</h2>
-
         <div class="seg" onchange="toggleReportMode()">
-            <label><input type="radio" name="report-mode" value="mensuel" checked><span>Mensuel</span></label>
-            <label><input type="radio" name="report-mode" value="annuel"><span>Annuel</span></label>
+            <label><input type="radio" name="report-mode" value="mensuel" checked>Mensuel</label>
+            <label><input type="radio" name="report-mode" value="annuel">Annuel</label>
         </div>
-
-        <div class="field" id="wrap-month">
-            <label>Mois</label>
-            <select id="report-month"></select>
-        </div>
+        <p class="hint" id="report-mensuel-note">Le rapport mensuel porte sur la <b>période affichée</b> ci-dessus, avec ses dépenses réelles.</p>
         <div class="field" id="wrap-year" style="display:none;">
-            <label>Année</label>
+            <label>Année de l'exercice</label>
             <select id="report-year"></select>
         </div>
-
-        <div class="field">
-            <label>Dépenses de la période (saisie manuelle)</label>
-            <div id="expense-list"></div>
-            <button type="button" class="btn-ghost" onclick="addExpenseRow()">+ Ajouter une dépense</button>
-            <p class="hint">Les dépenses ne sont pas encore stockées en base : elles servent au calcul du solde de ce rapport uniquement.</p>
-        </div>
-
         <button class="btn-pdf" onclick="genererRapport()">⬇️ Générer le PDF</button>
     </div>
 </div>
