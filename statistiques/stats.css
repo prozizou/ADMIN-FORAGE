@@ -39,6 +39,15 @@ body {
 .btn-export:active { transform: scale(0.95); }
 .btn-theme { background: none; border: none; color: var(--text-sub); font-size: 1.3rem; cursor: pointer; }
 
+/* Retour accueil (cohérent avec les autres pages) */
+.btn-back {
+    display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+    color: var(--text-sub); background: var(--card-bg); border: 1px solid var(--border-color);
+    padding: 8px 14px; border-radius: 12px; font-weight: 600; font-size: .85rem;
+    margin-bottom: 12px; transition: .2s;
+}
+.btn-back:hover { color: var(--primary); border-color: var(--primary); transform: translateX(-2px); }
+
 .select-wrapper { position: relative; margin-bottom: 15px; }
 #agent-spinner, input[type="month"] {
     appearance: none; -webkit-appearance: none; width: 100%;

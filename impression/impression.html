@@ -69,6 +69,26 @@
         .master-selection { background:#2d3748; padding:12px 20px; border-radius:20px; display:flex; align-items:center; gap:10px; font-weight:bold; }
         .master-selection input { width:22px; height:22px; cursor:pointer; accent-color:var(--accent-green); }
 
+        /* ── En-tête de page : titre + retour accueil (donne une hiérarchie
+              claire sur PC ; masqué à l'impression via body * { visibility:hidden }) ── */
+        .page-head {
+            max-width:1000px; margin:0 auto 16px auto;
+            display:flex; align-items:center; gap:14px;
+        }
+        .page-head .page-title { font-size:1.35rem; margin:0; font-weight:700; }
+        .page-head .spacer { flex:1; }
+        .btn-back {
+            display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+            color:#cbd5e1; background:#1a2235; border:1px solid rgba(255,255,255,0.08);
+            padding:10px 16px; border-radius:14px; font-weight:600; font-size:.9rem;
+            transition:.2s; white-space:nowrap;
+        }
+        .btn-back:hover { color:#fff; border-color:var(--accent-blue); transform:translateX(-2px); }
+        @media (max-width:768px) {
+            .page-head { flex-wrap:wrap; gap:10px; }
+            .page-head .page-title { font-size:1.1rem; order:2; width:100%; }
+        }
+
         /* ── Bannière modifications en attente ── */
         #banner-modifs {
             display:none; max-width:900px; margin:-10px auto 20px auto;
@@ -236,6 +256,13 @@
         navigator.serviceWorker.getRegistrations().then(regs => { for(let r of regs) r.update(); });
     }
 </script>
+
+<!-- ── En-tête de page ── -->
+<header class="page-head">
+    <a href="../home/accueil.html" class="btn-back"><i class="fas fa-arrow-left"></i> Accueil</a>
+    <h1 class="page-title">🖨️ Impression des factures</h1>
+    <span class="spacer"></span>
+</header>
 
 <!-- ── Barre de navigation ── -->
 <div class="top-bar">
