@@ -29,6 +29,11 @@ let allBackupsCache = {};
 
 let currentUser = 'Trésorier/Admin';
 
+// ✅ Échappement HTML partagé (security.js), avec un repli local UNIQUE
+//   (évite la double définition qui traînait dans startSync et renderList).
+const escHtml = window.escHtml || (s => String(s == null ? '' : s)
+    .replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])));
+
 // ✅ CORRECTION : Restaurer le thème enregistré dès le chargement
 (function restoreTheme() {
     try {
@@ -76,7 +81,7 @@ window.toggleTheme = function() {
     let paye = 0; let impaye = 0;
     currentFilteredData.forEach(item => {
         if (item.status === 'paye') paye += (item.calculatedAmount || 0);
-        else impaye += (item.calculatedAmount || 0);
+        else impaye += (item.totalDu != null ? item.totalDu : (item.calculatedAmount || 0));
     });
     updateCharts(paye, impaye);
 };
@@ -177,23 +182,26 @@ window.exportCSV = function() {
         return;
     }
     let csvContent = "\uFEFF"; 
-    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant (CFA);Statut;Dernière Modif;Par\n";
-    
+    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant Mois (CFA);Arriérés (CFA);Total dû (CFA);Statut;Dernière Modif;Par\n";
+
     currentFilteredData.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
         const lIdx = parseFloat(item.last_index || 0);
-        const conso = Math.max(0, nIdx - lIdx); 
+        const conso = Math.max(0, nIdx - lIdx);
         const facteur = parseFloat(item.facteur || 0);
-        const calculatedAmount = conso * facteur;
-        
+        // ✅ Valeurs issues de billing.js (calculées dans applyFilter), pas d'un recalcul divergent
+        const calculatedAmount = item.calculatedAmount || 0;
+        const arriere = item.arriere || 0;
+        const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
+
         const isPaid = item.status === 'paye' ? 'Paye' : 'Impaye';
         const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
-        const clientName = (item.name || "Client Inconnu").replace(/;/g, ' '); 
+        const clientName = (item.name || "Client Inconnu").replace(/;/g, ' ');
         const numCompteur = (item.numero_compteur || "").replace(/;/g, ' ');
         const lastModif = item.last_modified_at ? new Date(item.last_modified_at).toLocaleString() : 'N/A';
         const par = item.last_modified_by || 'N/A';
-        
-        csvContent += `${clientName};${numCompteur};${zoneName};${lIdx};${nIdx};${conso};${facteur};${calculatedAmount};${isPaid};${lastModif};${par}\n`;
+
+        csvContent += `${clientName};${numCompteur};${zoneName};${lIdx};${nIdx};${conso};${facteur};${calculatedAmount};${arriere};${totalDu};${isPaid};${lastModif};${par}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -306,8 +314,7 @@ window.startSync = function() {
         const active = spinner.value || "all";
         let html = '<option value="all">🟢 Tous les agents (Global)</option>';
         // ✅ FIX XSS : échapper nom/zone d'agent injectés dans les <option>
-        const esc2 = window.escHtml || (s => String(s == null ? '' : s)
-            .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])));
+        const esc2 = escHtml;
         Object.entries(storeAgents).forEach(([key, a]) => {
             let name = (a.agent || "Inconnu").trim();
             let zone = a.zone ? ` [${esc2(a.zone)}]` : "";
@@ -393,31 +400,49 @@ window.applyFilter = function() {
         if (selectedId !== "all" && item.agent_id !== selectedId) return false;
         const rawName = item.name || "";
         const rawCompteur = String(item.numero_compteur || "");
-        const queryDigits = searchQuery.replace(/\D/g, ''); 
+        const queryDigits = searchQuery.replace(/\D/g, '');
         const compteurDigits = rawCompteur.replace(/\D/g, '');
         let isCompteurMatch = (queryDigits.length > 0 && compteurDigits.includes(queryDigits));
         let isNameMatch = isFuzzyMatch(searchQuery, rawName);
         return isNameMatch || isCompteurMatch;
     });
 
-    currentFilteredData = filteredBase.filter(item => {
-        const nIdx = parseFloat(item.new_index || 0);
-        const lIdx = parseFloat(item.last_index || 0);
-        const facteur = parseFloat(item.facteur || 0);
-        
-        const conso = Math.max(0, nIdx - lIdx);
-        const calculatedAmount = conso * facteur;
-        
-        item.calculatedAmount = calculatedAmount;
+    // ✅ FIX : brancher les totaux sur billing.js (source unique de vérité) afin
+    //   d'inclure les ARRIÉRÉS, exactement comme le fait déjà l'impression.
+    //   Avant, le total « impayés » ne comptait que la facture du mois courant,
+    //   d'où une divergence avec les factures imprimées.
+    const monthSel = (document.getElementById('month-filter') || {}).value || 'actuel';
+    const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
+    const useBilling = !!(window.Billing && window.Billing.computeStatement);
+    const indexedBackups = useBilling ? window.Billing.indexBackups(allBackupsCache) : [];
 
-        if (isNaN(calculatedAmount)) return false; 
-        
+    currentFilteredData = filteredBase.filter(item => {
+        let calculatedAmount, arriere = 0, totalDu;
+        if (useBilling) {
+            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle });
+            calculatedAmount = stmt.facture_courante; // facture du mois courant
+            arriere = stmt.arriere;                   // arriérés cumulés
+            totalDu = stmt.total;                     // facture + arriérés
+        } else {
+            const nIdx = parseFloat(item.new_index || 0);
+            const lIdx = parseFloat(item.last_index || 0);
+            const facteur = parseFloat(item.facteur || 0);
+            calculatedAmount = Math.max(0, nIdx - lIdx) * facteur;
+            totalDu = calculatedAmount;
+        }
+
+        item.calculatedAmount = calculatedAmount;
+        item.arriere = arriere;
+        item.totalDu = totalDu;
+
+        if (isNaN(totalDu)) return false;
+
         const isPaid = item.status === 'paye';
 
         if (isPaid) {
             tCFA_Paye += calculatedAmount;
         } else {
-            tCFA_Impaye += calculatedAmount;
+            tCFA_Impaye += totalDu; // ✅ inclut désormais les arriérés
         }
 
         if (currentTab === 'paye' && !isPaid) return false;
@@ -463,7 +488,10 @@ window.applyFilter = function() {
 }
 
 function updateCharts(paye, impaye) {
-    const isDark = document.body.classList.contains('dark-theme');
+    // ✅ FIX : le thème est porté par [data-theme] sur <html>, pas par une classe
+    //   body.dark-theme (qui n'existait jamais → texte des graphiques toujours en
+    //   couleur claire, illisible en mode sombre).
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#f1f5f9' : '#1e293b';
 
     const ctxPie = document.getElementById('pieChart');
@@ -536,9 +564,7 @@ function updateRelevesProgress() {
 
 function renderList() {
     // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
-    // Utilise window.escHtml (security.js) ; fallback inline si non chargé.
-    const esc = window.escHtml || (s => String(s == null ? '' : s)
-        .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])));
+    const esc = escHtml;
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
     document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
@@ -550,8 +576,14 @@ function renderList() {
         const realConso = nIdx - lIdx; 
         
         const calculatedAmount = item.calculatedAmount || 0;
+        const arriere = item.arriere || 0;
+        const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
         const isPaid = item.status === 'paye';
         const zoneName = esc(storeAgents[item.agent_id]?.zone || "Sans Zone");
+        // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
+        const arriereHtml = (!isPaid && arriere > 0)
+            ? `<div style="margin-top:4px;font-size:0.68rem;color:var(--danger);font-weight:600;">Mois: ${calculatedAmount.toLocaleString()} F + Arriérés: ${arriere.toLocaleString()} F</div>`
+            : '';
 
         let extraClass = ''; let anomalyHtml = '';
         if (realConso < 0) {
@@ -590,11 +622,12 @@ function renderList() {
                 <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
                     ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
                 </small>
+                ${arriereHtml}
                 ${auditHtml}
                 ${anomalyHtml}
             </div>
             <div style="text-align:right; align-self: flex-start; margin-left: 10px;">
-                <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${calculatedAmount.toLocaleString()} F</span>
+                <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${totalDu.toLocaleString()} F</span>
                 <div class="action-btns">
                     ${editBtn}
                     ${statusBtn}
@@ -758,8 +791,11 @@ window.exportPDFImpayes = function() {
         periodLabel = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
     }
 
-    // Exclure les payés ET les montants à 0
-    const impayes = currentFilteredData.filter(item => item.status !== 'paye' && (item.calculatedAmount || 0) > 0);
+    // Exclure les payés ET les montants à 0 (total dû = facture du mois + arriérés)
+    const impayes = currentFilteredData.filter(item => {
+        const du = (item.totalDu != null) ? item.totalDu : (item.calculatedAmount || 0);
+        return item.status !== 'paye' && du > 0;
+    });
 
     if (impayes.length === 0) {
         showToast("Aucun impayé trouvé pour cette sélection.", true);
@@ -787,8 +823,8 @@ window.exportPDFImpayes = function() {
         const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
         const clientName = item.name || "Inconnu";
         const numCompteur = item.numero_compteur || "N/A";
-        const montant = item.calculatedAmount || 0;
-        
+        const montant = (item.totalDu != null) ? item.totalDu : (item.calculatedAmount || 0);
+
         totalImpaye += montant;
 
         tableRows.push([

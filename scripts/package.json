@@ -5,6 +5,7 @@
   "description": "Scripts de maintenance ASUFOR (migration des arriérés)",
   "type": "commonjs",
   "scripts": {
+    "test": "node billing.test.js",
     "dry-run": "node migrate-arrears.js --dry-run --active ./active.json --backup ./backup.json --report ./rapport-arrieres.csv",
     "apply": "node migrate-arrears.js --apply --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com"
   },
