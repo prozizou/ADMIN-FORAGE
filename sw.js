@@ -1,4 +1,4 @@
-// sw.js — Service Worker ASUFOR Diandioly v15 (professionnel)
+// sw.js — Service Worker ASUFOR Diandioly v16 (professionnel)
 //
 // Stratégie :
 //  • App shell (HTML/JS/CSS/icônes locaux) pré-cachés à l'installation.
@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v15';
+const CACHE_NAME = 'asufor-cache-v16';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -27,6 +27,8 @@ const APP_SHELL = [
     './statistiques/stats.html',
     './statistiques/stats.css',
     './statistiques/stats.js',
+    './rapports/rapports.html',
+    './rapports/rapports.js',
     './impression/impression.html',
     './reset/zero.html',
     './agents/agent.html',
@@ -56,7 +58,7 @@ function shouldCache(url) {
 
 // ── INSTALL : pré-cache de l'app shell ──
 self.addEventListener('install', (e) => {
-    console.log('[SW] Installation v15');
+    console.log('[SW] Installation v16');
     e.waitUntil(
         caches.open(CACHE_NAME).then(cache =>
             // addAll échoue si un seul fichier manque → on tolère les absences
@@ -67,7 +69,7 @@ self.addEventListener('install', (e) => {
 
 // ── ACTIVATE : purge des anciens caches ──
 self.addEventListener('activate', (e) => {
-    console.log('[SW] Activation v15');
+    console.log('[SW] Activation v16');
     e.waitUntil(
         caches.keys().then(keys =>
             Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => {
