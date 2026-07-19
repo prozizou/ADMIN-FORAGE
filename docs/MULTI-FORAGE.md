@@ -63,9 +63,9 @@ propre session pendant qu'il crée le compte d'un tiers.
 
 | Phase | Contenu | État |
 |-------|---------|------|
-| **1. Fondations** | `forage-context.js` (résolution key + construction des chemins, mode LEGACY) ; `billing.js` déparamétré (`backupPath`) ; tests ; ce document. **Aucun changement de comportement.** | ✅ cette PR |
-| **2. Adoption + règles** | Les pages consomment `ForageContext.paths()` (toujours en LEGACY) ; règles de sécurité généralisées `forages/{forageKey}` + `users/{uid}` + super-admin. | à venir |
-| **3. Identité & écrans admin** | Login résout la `forageKey` depuis `users/{uid}` ; écran super-admin (créer/lister forages & présidents) ; écran président (créer son équipe) via instance secondaire. | à venir |
+| **1. Fondations** | `forage-context.js` (résolution key + construction des chemins, mode LEGACY) ; `billing.js` déparamétré (`backupPath`) ; tests ; ce document. **Aucun changement de comportement.** | ✅ PR #4 |
+| **2. Adoption** | Toutes les pages consomment `ForageContext.paths()` au lieu des chemins en dur (toujours en LEGACY → comportement identique). **Aucun changement de comportement.** | ✅ cette PR |
+| **3. Identité & règles & écrans admin** | Login résout la `forageKey` depuis `users/{uid}` ; règles de sécurité généralisées `forages/{forageKey}` + `users/{uid}` + super-admin ; écran super-admin (créer/lister forages & présidents) ; écran président (créer son équipe) via instance secondaire. *(Règles et identité sont couplées → traitées ensemble.)* | à venir |
 | **4. Migration** | Bascule `ForageContext.LEGACY = false` ; script **dry-run** puis migration des données Diandioly vers `forages/{keyDiandioly}/…`. | à venir |
 
 ### Bascule LEGACY

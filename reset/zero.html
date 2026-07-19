@@ -22,6 +22,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
 
     <style>
         :root {
@@ -333,6 +335,8 @@
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
+        // ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly / asufor_backup)
+        const P = window.ForageContext.paths();
 
         // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
         const esc = window.escHtml || ((s) => String(s == null ? '' : s)
@@ -393,7 +397,7 @@
                 return;
             }
             try {
-                const backupRef = ref(db, `asufor_backup/${cycleKey}`);
+                const backupRef = ref(db, `${P.backup}/${cycleKey}`);
                 const snap      = await get(backupRef);
 
                 if (snap.exists()) {
@@ -404,7 +408,7 @@
                     btnVerify.style.display = 'none';
                     log.textContent = "Le backup du cycle en cours existe déjà.";
                 } else {
-                    const srcSnap = await get(ref(db, 'asufor_db_diandioly'));
+                    const srcSnap = await get(ref(db, P.compteurs));
                     const count = srcSnap.exists() ? Object.keys(srcSnap.val()).length : 0;
                     countDisp.textContent = count + ' entrée(s)';
 
@@ -444,7 +448,7 @@
             
             try {
                 // Lecture depuis l'archive du mois précédent !
-                const snap = await get(ref(db, `asufor_backup/${prevCycleKey}/donnees`));
+                const snap = await get(ref(db, `${P.backup}/${prevCycleKey}/donnees`));
                 if (!snap.exists()) {
                     contentDiv.innerHTML = `<div style="padding:10px; text-align:center; color:var(--text-dim)">Aucune archive trouvée pour ${prevCycleKey}.</div>`;
                     return;
@@ -534,12 +538,12 @@
             try {
                 const updates = {};
                 // 1. Mise à jour dans le backup du mois précédent
-                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/new_index`] = Number(newIdx);
-                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/status`] = newStat;
-                updates[`asufor_backup/${prevCycleKey}/donnees/${key}/statut`] = newStat === 'paye' ? true : false; // Booléen corrigé
+                updates[`${P.backup}/${prevCycleKey}/donnees/${key}/new_index`] = Number(newIdx);
+                updates[`${P.backup}/${prevCycleKey}/donnees/${key}/status`] = newStat;
+                updates[`${P.backup}/${prevCycleKey}/donnees/${key}/statut`] = newStat === 'paye' ? true : false; // Booléen corrigé
 
                 // 2. Synchronisation: On met à jour le last_index de la base active pour éviter un saut d'index ce mois-ci
-                updates[`asufor_db_diandioly/${key}/last_index`] = String(newIdx);
+                updates[`${P.compteurs}/${key}/last_index`] = String(newIdx);
 
                 await update(ref(db), updates);
                 
@@ -621,7 +625,7 @@
             log.textContent = "Ne fermez pas la page, communication avec Firebase...";
 
             try {
-                const sourceSnap = await get(ref(db, 'asufor_db_diandioly'));
+                const sourceSnap = await get(ref(db, P.compteurs));
 
                 if (!sourceSnap.exists()) {
                     throw new Error("La base de données est vide. Rien à archiver.");
@@ -631,7 +635,7 @@
                 const keys    = Object.keys(data);
                 const updates = {};
 
-                updates[`asufor_backup/${cycleKey}`] = {
+                updates[`${P.backup}/${cycleKey}`] = {
                     info: {
                         date_sauvegarde: now.toLocaleString('fr-FR'),
                         total_entrees:   keys.length,
@@ -668,17 +672,17 @@
                     //  • Conforme aux règles Firebase : new_index doit être un nombre >= 0.
                     //  • stats.js considère "non relevé" tant que new_index <= 0 → correct.
                     //  • indexConserve() : 0 < last_index ⇒ retombe sur last_index, aucune régression.
-                    updates[`asufor_db_diandioly/${key}/last_index`]       = String(nIdx);
-                    updates[`asufor_db_diandioly/${key}/new_index`]        = 0;
-                    updates[`asufor_db_diandioly/${key}/status`]           = "impaye";
-                    updates[`asufor_db_diandioly/${key}/statut`]           = false; // Booléen corrigé
-                    updates[`asufor_db_diandioly/${key}/apaid`]            = nouvelApaid;
-                    updates[`asufor_db_diandioly/${key}/arrieres`]         = 0;
-                    updates[`asufor_db_diandioly/${key}/facture`]          = "false";
-                    updates[`asufor_db_diandioly/${key}/print`]            = "false";
-                    updates[`asufor_db_diandioly/${key}/last_modified_by`] = null;
-                    updates[`asufor_db_diandioly/${key}/last_modified_at`] = null;
-                    updates[`asufor_db_diandioly/${key}/date_paiement`]    = null;
+                    updates[`${P.compteurs}/${key}/last_index`]       = String(nIdx);
+                    updates[`${P.compteurs}/${key}/new_index`]        = 0;
+                    updates[`${P.compteurs}/${key}/status`]           = "impaye";
+                    updates[`${P.compteurs}/${key}/statut`]           = false; // Booléen corrigé
+                    updates[`${P.compteurs}/${key}/apaid`]            = nouvelApaid;
+                    updates[`${P.compteurs}/${key}/arrieres`]         = 0;
+                    updates[`${P.compteurs}/${key}/facture`]          = "false";
+                    updates[`${P.compteurs}/${key}/print`]            = "false";
+                    updates[`${P.compteurs}/${key}/last_modified_by`] = null;
+                    updates[`${P.compteurs}/${key}/last_modified_at`] = null;
+                    updates[`${P.compteurs}/${key}/date_paiement`]    = null;
                 });
 
                 await update(ref(db), updates);

@@ -20,6 +20,8 @@ const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 const app  = initializeApp(firebaseConfig);
 const db   = getDatabase(app);
 const auth = getAuth(app);
+// ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly, etc.)
+const P = window.ForageContext.paths();
 
 if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
@@ -303,7 +305,7 @@ window.addExpense = async function () {
 
     const ck = cycleKey(selCycle);
     try {
-        await push(ref(db, 'asufor_depenses/' + ck), {
+        await push(ref(db, P.depenses + '/' + ck), {
             libelle, montant,
             date: new Date().toISOString().slice(0, 10),
             created_by: currentUser,
@@ -319,7 +321,7 @@ window.addExpense = async function () {
 window.deleteExpense = async function (ck, key) {
     if (!canEditExpenses) return;
     if (!confirm('Supprimer cette dépense ?')) return;
-    try { await remove(ref(db, 'asufor_depenses/' + ck + '/' + key)); }
+    try { await remove(ref(db, P.depenses + '/' + ck + '/' + key)); }
     catch (e) { alert('Erreur suppression : ' + (e.code || e.message)); }
 };
 
@@ -511,9 +513,9 @@ window.toggleTheme = function () {
 async function loadAll() {
     if (window.AsuforLoader) AsuforLoader.update('Chargement des données…');
     const [agentsSnap, activeSnap, backupSnap] = await Promise.all([
-        get(ref(db, 'db_agents')),
-        get(ref(db, 'asufor_db_diandioly')),
-        get(ref(db, 'asufor_backup'))
+        get(ref(db, P.agents)),
+        get(ref(db, P.compteurs)),
+        get(ref(db, P.backup))
     ]);
     agents = agentsSnap.val() || {};
     activeRecords = Object.values(activeSnap.val() || {});
@@ -524,7 +526,7 @@ async function loadAll() {
     window.toggleReportMode();
 
     // Dépenses en temps réel (mutées par cette page) → re-render à chaque changement
-    onValue(ref(db, 'asufor_depenses'), (snap) => {
+    onValue(ref(db, P.depenses), (snap) => {
         expensesRaw = snap.val() || {};
         renderDashboard();
         if (window.AsuforLoader) AsuforLoader.hide();

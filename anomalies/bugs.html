@@ -487,6 +487,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
 
     <script>
         // ── AUTH ──
@@ -498,6 +500,8 @@
         // ✅ CORRECTION : utiliser la config centralisée
         if (!firebase.apps.length) firebase.initializeApp(window.ASUFOR_FIREBASE_CONFIG);
         const db = firebase.database();
+        // ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly)
+        const P = window.ForageContext.paths();
 
         // ── STATE ──
         let allAnomalies = [];
@@ -577,7 +581,7 @@
         let anomaliesSubscribed = false;
         function subscribeAnomalies() {
             if (window.AsuforLoader) AsuforLoader.update('Chargement des anomalies…');
-            db.ref('asufor_db_diandioly').on('value', snap => {
+            db.ref(P.compteurs).on('value', snap => {
                 const raw = snap.val() || {};
                 allAnomalies = [];
 
@@ -772,7 +776,7 @@
         async function resolveAnomaly(key) {
             if (!confirm('Marquer cette anomalie comme résolue ?')) return;
             try {
-                await db.ref(`asufor_db_diandioly/${key}`).update({ anomaly_resolved: true, last_modified: Date.now() });
+                await db.ref(`${P.compteurs}/${key}`).update({ anomaly_resolved: true, last_modified: Date.now() });
                 showToast('✅ Anomalie marquée comme résolue');
             } catch (e) {
                 showToast('❌ Erreur de mise à jour');
@@ -782,7 +786,7 @@
         async function deleteAnomaly(key) {
             if (!confirm('Effacer cette anomalie ? (note et photo supprimées)')) return;
             try {
-                await db.ref(`asufor_db_diandioly/${key}`).update({
+                await db.ref(`${P.compteurs}/${key}`).update({
                     note: null, photo_url: null,
                     anomaly_date: null, anomaly_resolved: null,
                     last_modified: Date.now()
