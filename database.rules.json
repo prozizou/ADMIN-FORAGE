@@ -100,6 +100,99 @@
           "$other":     { ".validate": false }
         }
       }
+    },
+
+    // ══════════════════════════════════════════════════════════════
+    //  MULTI-FORAGE (Phase 3) — ADDITIF : les noeuds legacy ci-dessus
+    //  restent actifs pour la connexion actuelle. Ces noeuds préparent
+    //  la bascule (voir docs/MULTI-FORAGE.md).
+    //
+    //  Super-admin       : auth.token.email == 'prozizou298@gmail.com'
+    //  Forage de l'appelant : root.child('users').child(auth.uid).child('forageKey').val()
+    //  Rôle de l'appelant   : root.child('users').child(auth.uid).child('role').val()
+    // ══════════════════════════════════════════════════════════════
+
+    // ============ ANNUAIRE DES UTILISATEURS ============
+    "users": {
+      "$uid": {
+        // Lecture : soi-même ; super-admin ; ou président du même forage (voit son équipe).
+        ".read": "auth != null && ( auth.uid == $uid || auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('role').val() == 'président' && root.child('users').child(auth.uid).child('forageKey').val() == data.child('forageKey').val()) )",
+
+        // Écriture : super-admin (tout) ; ou président qui crée/gère un membre de SON forage
+        // (jamais un super-admin, jamais un autre président).
+        ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('role').val() == 'président' && newData.child('forageKey').val() == root.child('users').child(auth.uid).child('forageKey').val() && newData.child('role').val() != 'superadmin' && newData.child('role').val() != 'président' ) )",
+
+        ".validate": "newData.hasChildren(['role', 'forageKey'])",
+        "role":       { ".validate": "newData.isString() && (newData.val() == 'président' || newData.val() == 'secrétaire' || newData.val() == 'trésorier' || newData.val() == 'agent')" },
+        "forageKey":  { ".validate": "newData.isString() && newData.val().length > 0" },
+        "login":      { ".validate": "newData.isString()" },
+        "nom":        { ".validate": "newData.isString()" },
+        "created_by": { ".validate": "newData.isString()" },
+        "created_at": { ".validate": "newData.isString()" },
+        "$other":     { ".validate": false }
+      }
+    },
+
+    // ============ FORAGES (données namespacées par forageKey) ============
+    "forages": {
+      "$forageKey": {
+        // Lecture de tout le sous-arbre du forage : membre du forage ou super-admin.
+        ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == $forageKey )",
+
+        // ── Config / branding : président du forage ou super-admin ──
+        "config": {
+          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )"
+        },
+
+        // ── Agents (relevés terrain) ──
+        "agents": {
+          ".indexOn": ["agent_tel"],
+          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'secrétaire')) )",
+          "$agentId": {
+            ".validate": "newData.hasChildren(['agent', 'agent_tel', 'zone'])",
+            "agent":     { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 100" },
+            "agent_tel": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{7,15}$/)" },
+            "zone":      { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "$other":    { ".validate": true }
+          }
+        },
+
+        // ── Compteurs / relevés (cycle courant) ──
+        "compteurs": {
+          "$recordId": {
+            // Création : président/secrétaire du forage ou super-admin.
+            // Mise à jour : + trésorier du forage.
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && ( (!data.exists() && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'secrétaire')) || (data.exists() && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'secrétaire' || root.child('users').child(auth.uid).child('role').val() == 'trésorier')) ) ) )",
+            "name":            { ".validate": "newData.isString() && newData.val().length <= 100" },
+            "numero_compteur": { ".validate": "newData.isString()" },
+            "new_index":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "last_index":      { ".validate": "newData.isString() || newData.isNumber()" },
+            "facteur":         { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "$other":          { ".validate": true }
+          }
+        },
+
+        // ── Archives de cycle (clôture / reset) : président du forage ou super-admin ──
+        "backup": {
+          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )",
+          "$cycle": {
+            ".validate": "newData.hasChildren(['donnees'])"
+          }
+        },
+
+        // ── Dépenses / caisse : président ou trésorier du forage, ou super-admin ──
+        "depenses": {
+          "$cycle": {
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier')) )",
+            "$depId": {
+              ".validate": "newData.hasChildren(['libelle', 'montant'])",
+              "libelle": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+              "montant": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+              "$other":  { ".validate": true }
+            }
+          }
+        }
+      }
     }
   }
 }

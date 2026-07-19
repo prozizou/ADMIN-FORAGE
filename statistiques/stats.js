@@ -8,6 +8,8 @@ const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+// ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly / asufor_backup / db_agents)
+const P = window.ForageContext.paths();
 
 // ✅ Overlay visible dès le départ, pendant la restauration du jeton Firebase.
 if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
@@ -134,7 +136,7 @@ window.updateStatus = function(key, newStatus) {
 
     // La cascade complète (nettoyage base active + historique backup) n'a de sens
     // que sur la base ACTIVE. Sur une archive on se contente d'un simple flip.
-    const onActiveBase = (currentActivePath === 'asufor_db_diandioly');
+    const onActiveBase = (currentActivePath === P.compteurs);
 
     let updates;
     if (window.Billing && onActiveBase) {
@@ -146,6 +148,7 @@ window.updateStatus = function(key, newStatus) {
                 activeKey: key,
                 record,
                 indexedBackups,
+                backupPath: P.backup,
                 paidBy: currentUser,
                 timestamp: now
             }).updates;
@@ -217,7 +220,7 @@ window.initMonthFilter = async function() {
     const monthSelect = document.getElementById('month-filter');
     
     try {
-        const snapshot = await get(ref(db, 'asufor_backup'));
+        const snapshot = await get(ref(db, P.backup));
         let optionsHtml = '<option value="actuel">🌟 Données Actuelles</option>';
         
         if (snapshot.exists()) {
@@ -261,12 +264,12 @@ function loadDataForMonth(selection) {
     let monthForTrend = "";
 
     if (selection === "actuel") {
-        dbPath = "asufor_db_diandioly";
+        dbPath = P.compteurs;
         const now = new Date();
         monthForTrend = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     } else {
-        dbPath = `asufor_backup/${selection}/donnees`;
-        monthForTrend = selection; 
+        dbPath = `${P.backup}/${selection}/donnees`;
+        monthForTrend = selection;
     }
 
     currentActivePath = dbPath;
@@ -297,7 +300,7 @@ function fetchPreviousMonthStats(baseMonthStr) {
     let prevDate = new Date(parseInt(yyyy), parseInt(mm) - 2, 1);
     let prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
     
-    get(ref(db, `asufor_backup/${prevMonthStr}/donnees`)).then((snap) => {
+    get(ref(db, `${P.backup}/${prevMonthStr}/donnees`)).then((snap) => {
         prevMonthData = snap.val() || {};
         window.applyFilter();
     }).catch(() => {
@@ -308,7 +311,7 @@ function fetchPreviousMonthStats(baseMonthStr) {
 
 // --- SYNCHRONISATION INITIALE ---
 window.startSync = function() {
-    onValue(ref(db, 'db_agents'), (snap) => {
+    onValue(ref(db, P.agents), (snap) => {
         storeAgents = snap.val() || {};
         const spinner = document.getElementById('agent-spinner');
         const active = spinner.value || "all";

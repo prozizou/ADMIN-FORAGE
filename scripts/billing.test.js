@@ -11,6 +11,7 @@
 const assert = require('assert');
 const path = require('path');
 const Billing = require(path.join(__dirname, '..', 'billing.js'));
+const ForageContext = require(path.join(__dirname, '..', 'forage-context.js'));
 
 let passed = 0;
 const failures = [];
@@ -148,6 +149,61 @@ test('buildRevokeUpdates : repasse la base active en impayé', () => {
     assert.strictEqual(updates['asufor_db_diandioly/ACT1/status'], 'impaye');
     assert.strictEqual(updates['asufor_db_diandioly/ACT1/statut'], false);
     assert.strictEqual(updates['asufor_db_diandioly/ACT1/date_paiement'], null);
+});
+
+test('buildPaymentUpdates : backupPath paramétrable (multi-forage)', () => {
+    const idx = Billing.indexBackups(backupRoot);
+    const record = { numero_compteur: '001', zone: 'N' };
+    const { updates } = Billing.buildPaymentUpdates({
+        activePath: 'forages/x/compteurs', activeKey: 'ACT1', record,
+        indexedBackups: idx, backupPath: 'forages/x/backup', timestamp: '2026-07-01T00:00:00Z'
+    });
+    assert.strictEqual(updates['forages/x/compteurs/ACT1/status'], 'paye');
+    // le cycle impayé est régularisé sous le chemin d'archives fourni
+    assert.strictEqual(updates['forages/x/backup/2026-05/donnees/k1/status'], 'paye');
+    // et PAS sous l'ancien chemin en dur
+    assert.strictEqual(updates['asufor_backup/2026-05/donnees/k1/status'], undefined);
+});
+
+test('buildPaymentUpdates : backupPath par défaut = asufor_backup (rétro-compat)', () => {
+    const idx = Billing.indexBackups(backupRoot);
+    const { updates } = Billing.buildPaymentUpdates({
+        activePath: 'asufor_db_diandioly', activeKey: 'ACT1',
+        record: { numero_compteur: '001', zone: 'N' }, indexedBackups: idx
+    });
+    assert.strictEqual(updates['asufor_backup/2026-05/donnees/k1/status'], 'paye');
+});
+
+// ── forage-context.js ────────────────────────────────────────
+test('ForageContext : mode legacy → chemins historiques', () => {
+    const p = ForageContext.paths('diandioly', { legacy: true });
+    assert.strictEqual(p.compteurs, 'asufor_db_diandioly');
+    assert.strictEqual(p.backup, 'asufor_backup');
+    assert.strictEqual(p.agents, 'db_agents');
+    assert.strictEqual(p.depenses, 'asufor_depenses');
+    assert.strictEqual(p.forageKey, 'diandioly');
+});
+
+test('ForageContext : mode namespacé → forages/{key}/…', () => {
+    const p = ForageContext.paths('abc123', { legacy: false });
+    assert.strictEqual(p.compteurs, 'forages/abc123/compteurs');
+    assert.strictEqual(p.backup, 'forages/abc123/backup');
+    assert.strictEqual(p.agents, 'forages/abc123/agents');
+    assert.strictEqual(p.depenses, 'forages/abc123/depenses');
+    assert.strictEqual(p.config, 'forages/abc123/config');
+});
+
+test('ForageContext : LEGACY actif par défaut (aucune bascule prématurée)', () => {
+    assert.strictEqual(ForageContext.LEGACY, true);
+    // sans opts, on est en legacy → chemin historique
+    assert.strictEqual(ForageContext.paths('diandioly').compteurs, 'asufor_db_diandioly');
+});
+
+test('ForageContext : détection du super-admin', () => {
+    assert.strictEqual(ForageContext.isSuperadmin('prozizou298@gmail.com'), true);
+    assert.strictEqual(ForageContext.isSuperadmin('  Prozizou298@Gmail.com '), true);
+    assert.strictEqual(ForageContext.isSuperadmin('president@diandioly.com'), false);
+    assert.strictEqual(ForageContext.isSuperadmin(null), false);
 });
 
 // ── Bilan ────────────────────────────────────────────────────

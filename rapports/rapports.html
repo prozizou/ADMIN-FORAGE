@@ -25,6 +25,8 @@
     <script src="../loader.js"></script>
     <script src="../firebase-config.js"></script>
     <script src="../billing.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
     <script>
         if (typeof window.checkAccess === 'function') {
             window.checkAccess(['président', 'trésorier', 'secrétaire']);

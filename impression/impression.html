@@ -25,6 +25,8 @@
     <script src="../firebase-config.js"></script>
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
     <script src="../billing.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -364,6 +366,8 @@
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
+    // ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly / asufor_backup)
+    const P = window.ForageContext.paths();
 
     // ── Variables globales ──
     let dataCache           = {};   // données Firebase brutes + calculées
@@ -419,7 +423,7 @@
     async function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
         try {
-            const snapshot = await get(ref(db, 'asufor_backup'));
+            const snapshot = await get(ref(db, P.backup));
             let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
             if (snapshot.exists()) {
                 allBackups = snapshot.val();
@@ -444,8 +448,8 @@
         document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
         const path = currentSelectedMonth === "actuel"
-            ? "asufor_db_diandioly"
-            : `asufor_backup/${currentSelectedMonth}/donnees`;
+            ? P.compteurs
+            : `${P.backup}/${currentSelectedMonth}/donnees`;
         unsubCurrentMonth = onValue(ref(db, path), renderData, (err) => {
             console.error("Firebase:", err.code, err.message);
             document.getElementById('list-container').innerHTML =

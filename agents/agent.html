@@ -22,6 +22,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
 
     <style>
         :root {
@@ -201,6 +203,8 @@
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
+        // ✅ Chemins Firebase du forage courant (legacy → db_agents, etc.)
+        const P = window.ForageContext.paths();
 
         const msgEl  = document.getElementById('msg');
         const btn    = document.getElementById('btnEnreg');
@@ -265,7 +269,7 @@
             // ✅ CORRECTION : Vérification doublon par téléphone avant insertion
             try {
                 const existing = await get(
-                    query(ref(db, 'db_agents'), orderByChild('agent_tel'), equalTo(tel))
+                    query(ref(db, P.agents), orderByChild('agent_tel'), equalTo(tel))
                 );
                 if (existing.exists()) {
                     markError('agent_tel');
@@ -291,7 +295,7 @@
             });
 
             try {
-                const agentsRef   = ref(db, 'db_agents');
+                const agentsRef   = ref(db, P.agents);
                 const newAgentRef = push(agentsRef);
                 const uniqueId    = newAgentRef.key;
 

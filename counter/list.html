@@ -22,6 +22,8 @@
     <script src="../loader.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
 
     <style>
         :root {
@@ -230,6 +232,8 @@
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
+    // ✅ Chemins Firebase du forage courant (legacy → db_agents / asufor_db_diandioly)
+    const P = window.ForageContext.paths();
 
     const msgEl  = document.getElementById('msg');
     const btn    = document.getElementById('btnSubmit');
@@ -258,7 +262,7 @@
 
     function loadAgents() {
         if (window.AsuforLoader) AsuforLoader.update('Chargement des agents…');
-        onValue(ref(db, 'db_agents'), (snapshot) => {
+        onValue(ref(db, P.agents), (snapshot) => {
             const select = document.getElementById('agentSelect');
             select.innerHTML = '<option value="">Choisir un agent</option>';
             if (!snapshot.exists()) {
@@ -363,7 +367,7 @@
         };
 
         try {
-            await push(ref(db, 'asufor_db_diandioly'), payload);
+            await push(ref(db, P.compteurs), payload);
             showMsg('✅ Compteur enregistré avec succès !');
             document.getElementById('ownerName').value  = '';
             document.getElementById('ownerPhone').value = '';

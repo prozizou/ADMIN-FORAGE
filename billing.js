@@ -262,6 +262,8 @@
      * @param {Array}  params.indexedBackups - sortie de indexBackups().
      * @param {string} [params.paidBy]     - auteur (audit).
      * @param {string} [params.timestamp]  - ISO ; défaut : maintenant.
+     * @param {string} [params.backupPath] - chemin du noeud d'archives (défaut: 'asufor_backup').
+     *                                        Multi-forage : passer forages/{key}/backup.
      * @returns {{updates:object, cyclesRegularises:Array}}
      */
     function buildPaymentUpdates(params) {
@@ -271,6 +273,9 @@
         var indexedBackups = params.indexedBackups || [];
         var paidBy = params.paidBy || 'système';
         var ts = params.timestamp || new Date().toISOString();
+        // ✅ Multi-forage : chemin du noeud d'archives paramétrable (défaut = chemin
+        //    historique mono-forage, donc 100 % rétro-compatible).
+        var backupPath = params.backupPath || 'asufor_backup';
 
         var updates = {};
         var cyclesRegularises = [];
@@ -292,7 +297,7 @@
             if (!old) continue;
             if (isPaid(old)) continue;
 
-            var oldPrefix = 'asufor_backup/' + entry.cycle + '/donnees/' + old.__fbkey;
+            var oldPrefix = backupPath + '/' + entry.cycle + '/donnees/' + old.__fbkey;
             updates[oldPrefix + '/status'] = 'paye';
             updates[oldPrefix + '/statut'] = true;
             updates[oldPrefix + '/date_paiement'] = ts;
