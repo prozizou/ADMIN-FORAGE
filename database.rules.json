@@ -79,6 +79,27 @@
       "$cycle": {
         ".validate": "newData.hasChildren(['donnees'])"
       }
+    },
+
+    // ============ DÉPENSES / CAISSE (par cycle "YYYY-MM") ============
+    "asufor_depenses": {
+      // Lecture : tous les rôles authentifiés (le bilan/caisse est consultable).
+      ".read": "auth != null",
+      "$cycle": {
+        // Écriture (ajout/suppression) : président et trésorier uniquement (finance).
+        ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
+        "$depId": {
+          ".validate": "newData.hasChildren(['libelle', 'montant'])",
+          "libelle":    { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+          "montant":    { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "date":       { ".validate": "newData.isString()" },
+          "categorie":  { ".validate": "newData.isString()" },
+          "created_by": { ".validate": "newData.isString()" },
+          "created_at": { ".validate": "newData.isString()" },
+          // Verrouille le schéma : tout autre champ est refusé.
+          "$other":     { ".validate": false }
+        }
+      }
     }
   }
 }
