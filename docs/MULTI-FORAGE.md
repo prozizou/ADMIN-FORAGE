@@ -77,11 +77,83 @@ l'application vers `forages/{key}/…` en une seule modification.
 
 ---
 
-## 4. Décision en attente
+## 4. Connexion (Option A retenue) — identifiant + code PIN
 
-**Mécanique de connexion** (à trancher en phase 3) : conserver l'esprit **code
-PIN mais par utilisateur** (identifiant + code), ou passer à **e-mail + mot de
-passe** classique. Le modèle de données ci-dessus est compatible avec les deux.
+Chaque utilisateur a un **compte individuel**. Firebase Auth reste en
+**e-mail + mot de passe** sous le capot :
+
+- L'**identifiant** saisi (ex. nom d'utilisateur, ou téléphone) est mappé vers un
+  **e-mail interne synthétisé** : `{identifiant}@asufor.local`.
+- Le **PIN** (6 chiffres) sert de **mot de passe**.
+- Connexion : `signInWithEmailAndPassword('{identifiant}@asufor.local', pin)`.
+- Après connexion : on lit `users/{auth.uid}` → `{ role, forageKey }`, qu'on écrit
+  dans la session locale (`asufor_session`) pour que `ForageContext` résolve les
+  chemins du bon forage.
+
+> L'identifiant doit être **unique globalement** (tous forages confondus), puisque
+> l'e-mail synthétisé l'est. Il est attribué à la création du compte.
+
+## 5. Provisioning (rappel) — via instance Firebase secondaire
+
+- **Super-admin** (`prozizou298@gmail.com`) crée un **président** :
+  1. génère une `forageKey` (ex. `push().key`) ;
+  2. crée le compte Auth du président (instance secondaire, sans perdre sa session) ;
+  3. écrit `users/{uidPrésident} = { role:'président', forageKey, login, nom }` ;
+  4. initialise `forages/{forageKey}/config`.
+- **Président** crée son **équipe** (secrétaire, trésorier, agents) : même procédé,
+  `users/{uid}` avec **sa** `forageKey` (héritage) et un rôle ≠ président/superadmin.
+
+## 6. Runbook de déploiement (ordre impératif)
+
+La Phase 3 est un **basculement**, à exécuter dans cet ordre :
+
+1. **Déployer les règles** de cette PR (`firebase deploy --only database`) — elles
+   sont **additives** : la connexion actuelle (comptes partagés + noeuds legacy)
+   continue de fonctionner.
+2. **Créer le compte super-admin** (`prozizou298@gmail.com`) dans Firebase Auth.
+3. **Provisionner** le forage Diandioly : une `forageKey`, un compte président, son
+   équipe, et `forages/{key}/config`.
+4. **Migrer les données** legacy → `forages/{keyDiandioly}/…` (Phase 4, script
+   dry-run d'abord) puis passer `ForageContext.LEGACY = false`.
+5. **Basculer la page de connexion** vers l'Option A (identifiant + PIN).
+6. Une fois validé, **retirer** les noeuds/règles legacy et les comptes partagés.
+
+> ⚠️ Les règles de sécurité **n'ont pas pu être testées dans ce dépôt** (pas
+> d'accès Firebase). **Valider chaque cas ci-dessous dans le simulateur de règles**
+> (Firebase Console → Realtime Database → Règles → Simulateur) avant l'étape 3.
+
+### Cas de test à valider (simulateur de règles)
+
+| Auth | Opération | Attendu |
+|------|-----------|---------|
+| non authentifié | lire `forages/K/compteurs` | **refusé** |
+| `users/U.forageKey=K`, role=secrétaire | lire `forages/K/compteurs` | autorisé |
+| membre de `K` | lire `forages/AUTRE/compteurs` | **refusé** |
+| président de `K` | créer `forages/K/compteurs/x` | autorisé |
+| trésorier de `K` | créer `forages/K/compteurs/x` (nouveau) | **refusé** |
+| trésorier de `K` | mettre à jour `forages/K/compteurs/x` (paiement) | autorisé |
+| trésorier de `K` | écrire `forages/K/backup/...` | **refusé** |
+| président de `K` | écrire `forages/K/backup/2026-07` | autorisé |
+| trésorier de `K` | écrire `forages/K/depenses/2026-07/d1` | autorisé |
+| président de `K` | écrire `users/newUid` avec `forageKey=K, role=agent` | autorisé |
+| président de `K` | écrire `users/x` avec `forageKey=AUTRE` | **refusé** |
+| président de `K` | écrire `users/x` avec `role=président` | **refusé** |
+| `prozizou298@gmail.com` | lire/écrire n'importe quel `forages/*` et `users/*` | autorisé |
+| utilisateur lambda | lire `users/autreUid` | **refusé** |
+
+---
+
+## 7. Points d'attention
+
+- **billing.js** : `buildPaymentUpdates({ backupPath })` reçoit déjà `P.backup`
+  (adopté en Phase 2) ; en mode namespacé ce sera `forages/{key}/backup`.
+- **Branding** : `forages/{key}/config.nom` remplacera les « ASUFOR Diandioly » en
+  dur ; repli sur la valeur par défaut si `config` absent.
+- **Comptes partagés actuels** (`president@diandioly.com`…) : conservés jusqu'à
+  l'étape 6 du runbook, puis retirés.
+- **Règles legacy** (`db_agents`, `asufor_db_diandioly`, `asufor_backup`,
+  `asufor_depenses`) : conservées tant que `LEGACY = true` ; à retirer après la
+  migration (Phase 4).
 
 ---
 
