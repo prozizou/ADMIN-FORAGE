@@ -153,8 +153,14 @@ function renderDashboard() {
     renderDelta('d-impayes', cur.impayes, cmp && cmp.impayes, false);
     renderDelta('d-volume', cur.volume, cmp && cmp.volume, true, ' m³');
 
+    const soldeMoisNet = cur.encaisse - expensesTotalOfCycle(selCycle);
+    setText('kpi-solde', fMoney(soldeMoisNet));
+    const soldeKpiEl = document.getElementById('kpi-solde');
+    if (soldeKpiEl) soldeKpiEl.style.color = soldeMoisNet >= 0 ? 'var(--success)' : 'var(--danger)';
+    renderDelta('d-solde', soldeMoisNet, cmp ? (cmp.encaisse - expensesTotalOfCycle(cmpCycle)) : null, true);
+
     renderCaisse(cur);
-    renderRecettesChart();
+    renderFinanceChart();
     renderTopDebiteurs();
     renderZonesRisque(cur.zones);
     renderExpenses();
@@ -200,10 +206,12 @@ function renderCaisse(curMetrics) {
         `solde ${fMoney(soldeMois)}`);
 }
 
-function renderRecettesChart() {
+function renderFinanceChart() {
     const cycles = allCyclesAsc().slice(-12);
     const labels = cycles.map(monthLabelShort);
-    const data = cycles.map(c => cycleMetrics(recordsOfCycle(c)).encaisse);
+    const dataEnc = cycles.map(c => cycleMetrics(recordsOfCycle(c)).encaisse);
+    const dataDep = cycles.map(c => expensesTotalOfCycle(c));
+    const dataSolde = dataEnc.map((v, i) => v - dataDep[i]);
 
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#f1f5f9' : '#1e293b';
@@ -211,19 +219,25 @@ function renderRecettesChart() {
 
     // Met en évidence la période sélectionnée
     const selKey = cycleKey(selCycle);
-    const colors = cycles.map(c => c === selKey ? '#38bdf8' : '#0052fe');
+    const colorsEnc = cycles.map(c => c === selKey ? '#38bdf8' : '#0052fe');
 
     const ctx = document.getElementById('chart-recettes');
     if (!ctx || typeof Chart === 'undefined') return;
     if (chartRecettes) chartRecettes.destroy();
     chartRecettes = new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets: [{ label: 'Recettes (FCFA)', data, backgroundColor: colors, borderRadius: 5 }] },
+        data: {
+            labels,
+            datasets: [
+                { type: 'bar', label: 'Encaissé', data: dataEnc, backgroundColor: colorsEnc, borderRadius: 5, order: 2 },
+                { type: 'bar', label: 'Dépenses', data: dataDep, backgroundColor: '#f59e0b', borderRadius: 5, order: 2 },
+                { type: 'line', label: 'Solde net', data: dataSolde, borderColor: '#a855f7', backgroundColor: '#a855f7', tension: .3, order: 1 }
+            ]
+        },
         options: {
             responsive: true,
             plugins: {
-                legend: { display: false },
-                title: { display: true, text: 'Recettes encaissées — 12 derniers cycles', color: textColor }
+                legend: { display: true, labels: { color: textColor } },
+                title: { display: true, text: 'Encaissé, dépenses & solde net — 12 derniers cycles', color: textColor }
             },
             scales: {
                 x: { ticks: { color: textColor }, grid: { color: gridColor } },
@@ -497,13 +511,98 @@ function genererAnnuel() {
     doc.save(`ASUFOR_Rapport_Annuel_${year}.pdf`);
 }
 
+// ── Génération CSV ───────────────────────────────────────────
+function csvCell(v) {
+    const s = String(v == null ? '' : v);
+    return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCsv(rows) {
+    return rows.map(r => r.map(csvCell).join(';')).join('\r\n');
+}
+function downloadCsv(filename, rows) {
+    const blob = new Blob(['﻿' + toCsv(rows)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+window.exporterCSV = function () {
+    const mode = document.querySelector('input[name="report-mode"]:checked').value;
+    if (mode === 'mensuel') exporterMensuelCSV();
+    else exporterAnnuelCSV();
+};
+
+function exporterMensuelCSV() {
+    const cycle = selCycle;
+    const m = cycleMetrics(recordsOfCycle(cycle));
+    const expenses = expensesOfCycle(cycle);
+    const depTotal = expensesTotalOfCycle(cycle);
+
+    const rows = [
+        ['Rapport mensuel', monthLabel(cycle)],
+        [],
+        ['Indicateur', 'Valeur'],
+        ['Compteurs suivis', m.nbCompteurs],
+        ['Relevés effectués', `${m.nbReleves}/${m.nbCompteurs}`],
+        ['Volume consommé (m3)', Math.round(m.volume)],
+        ['Montant facturé (FCFA)', Math.round(m.facture)],
+        ['Montant encaissé (FCFA)', Math.round(m.encaisse)],
+        ['Impayés du mois (FCFA)', Math.round(m.impayes)],
+        ['Taux de recouvrement (%)', m.taux.toFixed(1)],
+        ['Anomalies signalées', m.anomalies],
+        [],
+        ['Zone', 'Compteurs', 'Volume (m3)', 'Facturé (FCFA)', 'Encaissé (FCFA)', 'Taux (%)']
+    ];
+    Object.entries(m.zones).forEach(([zone, z]) => {
+        const taux = z.facture > 0 ? (z.encaisse / z.facture * 100) : 0;
+        rows.push([zone, z.nb, Math.round(z.volume), Math.round(z.facture), Math.round(z.encaisse), taux.toFixed(1)]);
+    });
+    rows.push([]);
+    rows.push(['Dépenses', 'Montant (FCFA)', 'Date', 'Saisi par']);
+    expenses.forEach(e => rows.push([e.libelle || 'Dépense', Math.round(e.montant) || 0, e.date || '', e.created_by || '']));
+    rows.push(['TOTAL DÉPENSES', Math.round(depTotal), '', '']);
+    rows.push(['SOLDE (encaissé − dépenses)', Math.round(m.encaisse - depTotal), '', '']);
+
+    downloadCsv(`ASUFOR_Rapport_Mensuel_${cycleKey(cycle)}.csv`, rows);
+}
+
+function exporterAnnuelCSV() {
+    const year = document.getElementById('report-year').value;
+    const rows = [['Rapport annuel', year], [], ['Mois', 'Compteurs', 'Volume (m3)', 'Facturé (FCFA)', 'Encaissé (FCFA)', 'Taux (%)']];
+    let tFacture = 0, tEncaisse = 0, tVolume = 0, any = false;
+    for (let mm = 1; mm <= 12; mm++) {
+        const cycle = `${year}-${String(mm).padStart(2, '0')}`;
+        const recs = recordsOfCycle(cycle);
+        if (!recs.length) continue;
+        any = true;
+        const m = cycleMetrics(recs);
+        tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
+        rows.push([monthLabel(cycle).replace(' ' + year, ''), m.nbCompteurs, Math.round(m.volume), Math.round(m.facture), Math.round(m.encaisse), m.taux.toFixed(1)]);
+    }
+    if (!any) { alert("Aucune donnée pour l'année " + year + "."); return; }
+    const tauxAnnuel = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
+    rows.push(['TOTAL', '', Math.round(tVolume), Math.round(tFacture), Math.round(tEncaisse), tauxAnnuel.toFixed(1)]);
+
+    const expenses = expensesOfYear(year);
+    const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
+    rows.push([]);
+    rows.push(['Dépenses', 'Montant (FCFA)', 'Date', 'Saisi par']);
+    expenses.forEach(e => rows.push([`${e.cycle} — ${e.libelle || 'Dépense'}`, Math.round(e.montant) || 0, e.date || '', e.created_by || '']));
+    rows.push(['TOTAL DÉPENSES ANNUELLES', Math.round(depTotal), '', '']);
+    rows.push(['SOLDE (encaissé − dépenses)', Math.round(tEncaisse - depTotal), '', '']);
+
+    downloadCsv(`ASUFOR_Rapport_Annuel_${year}.csv`, rows);
+}
+
 // ── Thème ────────────────────────────────────────────────────
 window.toggleTheme = function () {
     const html = document.documentElement;
     const next = (html.getAttribute('data-theme') === 'dark') ? 'light' : 'dark';
     html.setAttribute('data-theme', next);
     try { localStorage.setItem('asufor-theme', next); } catch (_) {}
-    renderRecettesChart();
+    renderFinanceChart();
 };
 (function restoreTheme() {
     try { document.documentElement.setAttribute('data-theme', localStorage.getItem('asufor-theme') || 'dark'); } catch (_) {}
