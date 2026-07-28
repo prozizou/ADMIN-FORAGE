@@ -28,6 +28,7 @@ if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 const B = window.Billing; // moteur de facturation partagé
 const esc = window.escHtml || (s => String(s == null ? '' : s)
     .replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])));
+function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
 
 // ── État global ──────────────────────────────────────────────
 let agents = {};
@@ -627,12 +628,22 @@ async function loadAll() {
     // Dépenses en temps réel (mutées par cette page) → re-render à chaque changement
     onValue(ref(db, P.depenses), (snap) => {
         expensesRaw = snap.val() || {};
-        renderDashboard();
-        if (window.AsuforLoader) AsuforLoader.hide();
+        try {
+            renderDashboard();
+            if (window.AsuforLoader) AsuforLoader.hide();
+        } catch (err) {
+            console.error('Rapports (rendu) :', err);
+            if (window.AsuforLoader) AsuforLoader.fail('Erreur d\'affichage du tableau de bord (' + err.message + ').', { retry: () => loadAll() });
+        }
     }, (err) => {
         console.error('Dépenses :', err.code, err.message);
-        renderDashboard(); // le tableau de bord s'affiche même sans dépenses
-        if (window.AsuforLoader) AsuforLoader.hide();
+        try {
+            renderDashboard(); // le tableau de bord s'affiche même sans dépenses
+            if (window.AsuforLoader) AsuforLoader.hide();
+        } catch (renderErr) {
+            console.error('Rapports (rendu) :', renderErr);
+            if (window.AsuforLoader) AsuforLoader.fail('Erreur d\'affichage du tableau de bord (' + renderErr.message + ').', { retry: () => loadAll() });
+        }
     });
 }
 
