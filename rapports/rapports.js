@@ -53,8 +53,11 @@ function currentMonthStr() {
 /** Clé de cycle réelle "YYYY-MM" (résout "actuel"). */
 function cycleKey(cycle) { return (cycle === 'actuel') ? currentMonthStr() : cycle; }
 
-function fMoney(n) { return Math.round(n || 0).toLocaleString('fr-FR') + ' FCFA'; }
-function fMoneyPdf(n) { return Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA'; }
+// Regroupement manuel par espace normale (et non toLocaleString) : le PDF (police
+// standard de jsPDF) n'affiche pas l'espace fine insécable U+202F utilisée par
+// Intl pour 'fr-FR', ce qui corrompait l'affichage (ex. "8/455" au lieu de "8 455").
+function fNumber(n) { return Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function fMoney(n) { return fNumber(n) + ' FCFA'; }
 
 function monthLabel(cycle) {
     const c = cycleKey(cycle);
@@ -93,12 +96,24 @@ function expensesOfCycle(cycle) {
 function expensesTotalOfCycle(cycle) {
     return expensesOfCycle(cycle).reduce((s, d) => s + (Number(d.montant) || 0), 0);
 }
-function expensesOfYear(year) {
+function expensesOfCycles(cycles) {
+    const set = new Set(cycles);
     const out = [];
-    Object.keys(expensesRaw).filter(k => k.startsWith(year + '-')).sort().forEach(k => {
+    Object.keys(expensesRaw).filter(k => set.has(k)).sort().forEach(k => {
         Object.entries(expensesRaw[k]).forEach(([key, d]) => out.push({ cycle: k, key, ...d }));
     });
     return out;
+}
+function expensesOfYear(year) {
+    return expensesOfCycles(Object.keys(expensesRaw).filter(k => k.startsWith(year + '-')));
+}
+/** Code de confirmation de suppression : "YEAR-N" = N-ième dépense de l'année, triée par date. */
+function expenseCode(cycle, key) {
+    const year = cycle.split('-')[0];
+    const list = expensesOfYear(year).sort((a, b) =>
+        (a.date || '').localeCompare(b.date || '') || (a.created_at || '').localeCompare(b.created_at || ''));
+    const idx = list.findIndex(d => d.cycle === cycle && d.key === key);
+    return `${year}-${idx + 1}`;
 }
 function totalEncaisseAllTime() {
     return allCyclesAsc().reduce((s, c) => s + cycleMetrics(recordsOfCycle(c)).encaisse, 0);
@@ -140,7 +155,7 @@ function renderDashboard() {
     setText('kpi-taux', cur.taux.toFixed(1) + ' %');
     setText('kpi-recettes', fMoney(cur.encaisse));
     setText('kpi-impayes', fMoney(cur.impayes));
-    setText('kpi-volume', Math.round(cur.volume).toLocaleString('fr-FR') + ' m³');
+    setText('kpi-volume', fNumber(cur.volume) + ' m³');
 
     const bar = document.getElementById('kpi-taux-bar');
     if (bar) {
@@ -175,8 +190,7 @@ function renderDelta(id, cur, prev, goodWhenUp, suffix = ' FCFA') {
     const arrow = diff > 0 ? '▲' : diff < 0 ? '▼' : '=';
     const good = diff === 0 ? null : (goodWhenUp ? diff > 0 : diff < 0);
     el.style.color = good === null ? 'var(--sub)' : good ? 'var(--success)' : 'var(--danger)';
-    const val = suffix === ' m³' ? Math.round(Math.abs(diff)).toLocaleString('fr-FR') : Math.abs(diff).toLocaleString('fr-FR');
-    el.textContent = `${arrow} ${val}${suffix} vs ${monthLabelShort(cmpCycle)}`;
+    el.textContent = `${arrow} ${fNumber(Math.abs(diff))}${suffix} vs ${monthLabelShort(cmpCycle)}`;
 }
 function renderDeltaPct(id, cur, prev, goodWhenUp) {
     const el = document.getElementById(id);
@@ -299,7 +313,7 @@ function renderExpenses() {
             <div class="row-item">
                 <div class="row-main">
                     <b>${esc(d.libelle || 'Dépense')}</b>
-                    <small>${esc(d.date || '')}${d.created_by ? ' · ' + esc(d.created_by) : ''}</small>
+                    <small>N° ${esc(expenseCode(ck, d.key))} · ${esc(d.date || '')}${d.created_by ? ' · ' + esc(d.created_by) : ''}</small>
                 </div>
                 <span class="row-amt" style="color:var(--amber)">${fMoney(d.montant)}</span>
                 ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteExpense('${ck}','${d.key}')">✕</button>` : ''}
@@ -335,7 +349,10 @@ window.addExpense = async function () {
 
 window.deleteExpense = async function (ck, key) {
     if (!canEditExpenses) return;
-    if (!confirm('Supprimer cette dépense ?')) return;
+    const code = expenseCode(ck, key);
+    const saisie = prompt(`Pour confirmer la suppression, tapez le code de la dépense : ${code}`);
+    if (saisie === null) return;
+    if (saisie.trim() !== code) { alert('Code incorrect — suppression annulée.'); return; }
     try { await remove(ref(db, P.depenses + '/' + ck + '/' + key)); }
     catch (e) { alert('Erreur suppression : ' + (e.code || e.message)); }
 };
@@ -372,7 +389,8 @@ window.onCompareChange = function () {
 
 window.toggleReportMode = function () {
     const mode = document.querySelector('input[name="report-mode"]:checked').value;
-    document.getElementById('wrap-year').style.display = (mode === 'annuel') ? 'block' : 'none';
+    document.getElementById('wrap-year').style.display = (mode === 'annuel' || mode === 'trimestriel') ? 'block' : 'none';
+    document.getElementById('wrap-quarter').style.display = (mode === 'trimestriel') ? 'block' : 'none';
     document.getElementById('report-mensuel-note').style.display = (mode === 'mensuel') ? 'block' : 'none';
 };
 
@@ -381,17 +399,48 @@ window.genererRapport = function () {
     if (typeof window.jspdf === 'undefined') { alert("Bibliothèque PDF non chargée."); return; }
     const mode = document.querySelector('input[name="report-mode"]:checked').value;
     if (mode === 'mensuel') genererMensuel();
+    else if (mode === 'trimestriel') genererTrimestriel();
     else genererAnnuel();
 };
 
+// Logo chargé une seule fois, en parallèle du reste (utilisé en entête PDF).
+let logoDataUrl = null;
+(async function loadLogo() {
+    try {
+        const res = await fetch(new URL('../icons/icon-192.png', import.meta.url));
+        const blob = await res.blob();
+        logoDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) { console.warn('Logo PDF non chargé :', e); }
+})();
+
 function pdfHeader(doc, titre, sousTitre) {
+    let x = 14;
+    if (logoDataUrl) {
+        try { doc.addImage(logoDataUrl, 'PNG', 14, 8, 16, 16); x = 34; } catch (_) {}
+    }
     doc.setFontSize(16); doc.setTextColor(0, 82, 254);
-    doc.text("ASUFOR Diandioly — Gestion de l'eau", 14, 16);
+    doc.text("ASUFOR Diandioly — Gestion de l'eau", x, 16);
     doc.setFontSize(13); doc.setTextColor(30, 41, 59);
-    doc.text(titre, 14, 25);
+    doc.text(titre, x, 25);
     doc.setFontSize(10); doc.setTextColor(100);
-    doc.text(sousTitre, 14, 31);
-    doc.text("Édité le " + new Date().toLocaleDateString('fr-FR'), 14, 36);
+    doc.text(sousTitre, x, 31);
+    doc.text("Édité le " + new Date().toLocaleDateString('fr-FR'), x, 36);
+}
+function pdfFooter(doc) {
+    const pages = doc.internal.getNumberOfPages();
+    const w = doc.internal.pageSize.getWidth();
+    const h = doc.internal.pageSize.getHeight();
+    for (let i = 1; i <= pages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8); doc.setTextColor(120);
+        doc.text("Application créée par prozizou298@gmail.com — Besoin d'assistance : +221 77 350 05 95", w / 2, h - 10, { align: 'center' });
+        doc.text(`Page ${i}/${pages}`, w - 14, h - 10, { align: 'right' });
+    }
 }
 function pdfSignatures(doc, y) {
     doc.setFontSize(10); doc.setTextColor(30, 41, 59);
@@ -401,13 +450,13 @@ function pdfSignatures(doc, y) {
 }
 function depensesTable(doc, expenses, total, encaisse, labelTotal) {
     const body = expenses.length
-        ? expenses.map(e => [e.libelle || 'Dépense', fMoneyPdf(e.montant)])
-        : [['Aucune dépense enregistrée', fMoneyPdf(0)]];
+        ? expenses.map(e => [e.libelle || 'Dépense', fMoney(e.montant)])
+        : [['Aucune dépense enregistrée', fMoney(0)]];
     const solde = encaisse - total;
-    body.push([{ content: labelTotal, styles: { fontStyle: 'bold' } }, { content: fMoneyPdf(total), styles: { fontStyle: 'bold' } }]);
+    body.push([{ content: labelTotal, styles: { fontStyle: 'bold' } }, { content: fMoney(total), styles: { fontStyle: 'bold' } }]);
     body.push([
         { content: 'SOLDE (encaissé − dépenses)', styles: { fontStyle: 'bold', textColor: solde >= 0 ? [22, 163, 74] : [239, 68, 68] } },
-        { content: fMoneyPdf(solde), styles: { fontStyle: 'bold', textColor: solde >= 0 ? [22, 163, 74] : [239, 68, 68] } }
+        { content: fMoney(solde), styles: { fontStyle: 'bold', textColor: solde >= 0 ? [22, 163, 74] : [239, 68, 68] } }
     ]);
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 8,
@@ -432,10 +481,10 @@ function genererMensuel() {
         body: [
             ['Compteurs suivis', String(m.nbCompteurs)],
             ['Relevés effectués', `${m.nbReleves} / ${m.nbCompteurs}`],
-            ['Volume consommé', Math.round(m.volume).toLocaleString('fr-FR') + ' m³'],
-            ['Montant facturé', fMoneyPdf(m.facture)],
-            ['Montant encaissé', fMoneyPdf(m.encaisse)],
-            ['Impayés du mois', fMoneyPdf(m.impayes)],
+            ['Volume consommé', fNumber(m.volume) + ' m³'],
+            ['Montant facturé', fMoney(m.facture)],
+            ['Montant encaissé', fMoney(m.encaisse)],
+            ['Impayés du mois', fMoney(m.impayes)],
             ['Taux de recouvrement', m.taux.toFixed(1) + ' %'],
             ['Anomalies signalées', String(m.anomalies)]
         ],
@@ -444,8 +493,8 @@ function genererMensuel() {
 
     const zoneRows = Object.entries(m.zones).map(([zone, z]) => {
         const taux = z.facture > 0 ? (z.encaisse / z.facture * 100) : 0;
-        return [zone, String(z.nb), Math.round(z.volume).toLocaleString('fr-FR'),
-                fMoneyPdf(z.facture), fMoneyPdf(z.encaisse), taux.toFixed(0) + ' %'];
+        return [zone, String(z.nb), fNumber(z.volume),
+                fMoney(z.facture), fMoney(z.encaisse), taux.toFixed(0) + ' %'];
     });
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 8,
@@ -459,42 +508,41 @@ function genererMensuel() {
     let y = doc.lastAutoTable.finalY + 20;
     if (y > 250) { doc.addPage(); y = 30; }
     pdfSignatures(doc, y);
+    pdfFooter(doc);
     doc.save(`ASUFOR_Rapport_Mensuel_${cycleKey(cycle)}.pdf`);
 }
 
-function genererAnnuel() {
-    const year = document.getElementById('report-year').value;
+// Rapport multi-mois (annuel ou trimestriel) : tableau mensuel + dépenses + signatures.
+function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses }) {
     const rows = [];
     let tFacture = 0, tEncaisse = 0, tVolume = 0;
-    for (let mm = 1; mm <= 12; mm++) {
-        const cycle = `${year}-${String(mm).padStart(2, '0')}`;
+    cycles.forEach(cycle => {
         const recs = recordsOfCycle(cycle);
-        if (!recs.length) continue;
+        if (!recs.length) return;
         const m = cycleMetrics(recs);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
         rows.push([
             monthLabel(cycle).replace(' ' + year, ''),
             String(m.nbCompteurs),
-            Math.round(m.volume).toLocaleString('fr-FR'),
-            fMoneyPdf(m.facture), fMoneyPdf(m.encaisse), m.taux.toFixed(0) + ' %'
+            fNumber(m.volume),
+            fMoney(m.facture), fMoney(m.encaisse), m.taux.toFixed(0) + ' %'
         ]);
-    }
-    if (!rows.length) { alert("Aucune donnée pour l'année " + year + "."); return; }
+    });
+    if (!rows.length) { alert("Aucune donnée pour cette période."); return; }
 
-    const expenses = expensesOfYear(year);
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
-    const tauxAnnuel = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
+    const tauxPeriode = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    pdfHeader(doc, "Rapport annuel — Assemblée Générale", "Exercice : " + year);
+    pdfHeader(doc, titre, sousTitre);
 
     rows.push([
         { content: 'TOTAL', styles: { fontStyle: 'bold' } }, '',
-        { content: Math.round(tVolume).toLocaleString('fr-FR'), styles: { fontStyle: 'bold' } },
-        { content: fMoneyPdf(tFacture), styles: { fontStyle: 'bold' } },
-        { content: fMoneyPdf(tEncaisse), styles: { fontStyle: 'bold' } },
-        { content: tauxAnnuel.toFixed(0) + ' %', styles: { fontStyle: 'bold' } }
+        { content: fNumber(tVolume), styles: { fontStyle: 'bold' } },
+        { content: fMoney(tFacture), styles: { fontStyle: 'bold' } },
+        { content: fMoney(tEncaisse), styles: { fontStyle: 'bold' } },
+        { content: tauxPeriode.toFixed(0) + ' %', styles: { fontStyle: 'bold' } }
     ]);
     doc.autoTable({
         startY: 42,
@@ -502,14 +550,46 @@ function genererAnnuel() {
         body: rows, theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 9 }
     });
 
-    // Dépenses agrégées par mois pour l'exercice
     const expForPdf = expenses.map(e => ({ libelle: `${e.cycle} — ${e.libelle || 'Dépense'}`, montant: e.montant }));
-    depensesTable(doc, expForPdf, depTotal, tEncaisse, 'TOTAL DÉPENSES ANNUELLES');
+    depensesTable(doc, expForPdf, depTotal, tEncaisse, 'TOTAL DÉPENSES');
 
     let y = doc.lastAutoTable.finalY + 20;
     if (y > 250) { doc.addPage(); y = 30; }
     pdfSignatures(doc, y);
-    doc.save(`ASUFOR_Rapport_Annuel_${year}.pdf`);
+    pdfFooter(doc);
+    doc.save(filename);
+}
+
+function cyclesOfYear(year) {
+    return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+}
+function cyclesOfQuarter(year, q) {
+    const startMonth = (q - 1) * 3 + 1;
+    return [0, 1, 2].map(i => `${year}-${String(startMonth + i).padStart(2, '0')}`);
+}
+
+function genererAnnuel() {
+    const year = document.getElementById('report-year').value;
+    genererPeriode({
+        cycles: cyclesOfYear(year), year,
+        titre: "Rapport annuel — Assemblée Générale",
+        sousTitre: "Exercice : " + year,
+        filename: `ASUFOR_Rapport_Annuel_${year}.pdf`,
+        expenses: expensesOfYear(year)
+    });
+}
+
+function genererTrimestriel() {
+    const year = document.getElementById('report-year').value;
+    const q = parseInt(document.getElementById('report-quarter').value, 10);
+    const cycles = cyclesOfQuarter(year, q);
+    genererPeriode({
+        cycles, year,
+        titre: "Rapport trimestriel — Assemblée Générale",
+        sousTitre: `Trimestre : T${q} ${year}`,
+        filename: `ASUFOR_Rapport_T${q}_${year}.pdf`,
+        expenses: expensesOfCycles(cycles)
+    });
 }
 
 // ── Génération CSV ───────────────────────────────────────────
@@ -532,6 +612,7 @@ function downloadCsv(filename, rows) {
 window.exporterCSV = function () {
     const mode = document.querySelector('input[name="report-mode"]:checked').value;
     if (mode === 'mensuel') exporterMensuelCSV();
+    else if (mode === 'trimestriel') exporterTrimestrielCSV();
     else exporterAnnuelCSV();
 };
 
@@ -569,32 +650,51 @@ function exporterMensuelCSV() {
     downloadCsv(`ASUFOR_Rapport_Mensuel_${cycleKey(cycle)}.csv`, rows);
 }
 
-function exporterAnnuelCSV() {
-    const year = document.getElementById('report-year').value;
-    const rows = [['Rapport annuel', year], [], ['Mois', 'Compteurs', 'Volume (m3)', 'Facturé (FCFA)', 'Encaissé (FCFA)', 'Taux (%)']];
+function exporterPeriodeCSV({ cycles, year, titre, sousTitre, filename, expenses }) {
+    const rows = [[titre, sousTitre], [], ['Mois', 'Compteurs', 'Volume (m3)', 'Facturé (FCFA)', 'Encaissé (FCFA)', 'Taux (%)']];
     let tFacture = 0, tEncaisse = 0, tVolume = 0, any = false;
-    for (let mm = 1; mm <= 12; mm++) {
-        const cycle = `${year}-${String(mm).padStart(2, '0')}`;
+    cycles.forEach(cycle => {
         const recs = recordsOfCycle(cycle);
-        if (!recs.length) continue;
+        if (!recs.length) return;
         any = true;
         const m = cycleMetrics(recs);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
         rows.push([monthLabel(cycle).replace(' ' + year, ''), m.nbCompteurs, Math.round(m.volume), Math.round(m.facture), Math.round(m.encaisse), m.taux.toFixed(1)]);
-    }
-    if (!any) { alert("Aucune donnée pour l'année " + year + "."); return; }
-    const tauxAnnuel = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
-    rows.push(['TOTAL', '', Math.round(tVolume), Math.round(tFacture), Math.round(tEncaisse), tauxAnnuel.toFixed(1)]);
+    });
+    if (!any) { alert("Aucune donnée pour cette période."); return; }
+    const tauxPeriode = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
+    rows.push(['TOTAL', '', Math.round(tVolume), Math.round(tFacture), Math.round(tEncaisse), tauxPeriode.toFixed(1)]);
 
-    const expenses = expensesOfYear(year);
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
     rows.push([]);
     rows.push(['Dépenses', 'Montant (FCFA)', 'Date', 'Saisi par']);
     expenses.forEach(e => rows.push([`${e.cycle} — ${e.libelle || 'Dépense'}`, Math.round(e.montant) || 0, e.date || '', e.created_by || '']));
-    rows.push(['TOTAL DÉPENSES ANNUELLES', Math.round(depTotal), '', '']);
+    rows.push(['TOTAL DÉPENSES', Math.round(depTotal), '', '']);
     rows.push(['SOLDE (encaissé − dépenses)', Math.round(tEncaisse - depTotal), '', '']);
 
-    downloadCsv(`ASUFOR_Rapport_Annuel_${year}.csv`, rows);
+    downloadCsv(filename, rows);
+}
+
+function exporterAnnuelCSV() {
+    const year = document.getElementById('report-year').value;
+    exporterPeriodeCSV({
+        cycles: cyclesOfYear(year), year,
+        titre: 'Rapport annuel', sousTitre: year,
+        filename: `ASUFOR_Rapport_Annuel_${year}.csv`,
+        expenses: expensesOfYear(year)
+    });
+}
+
+function exporterTrimestrielCSV() {
+    const year = document.getElementById('report-year').value;
+    const q = parseInt(document.getElementById('report-quarter').value, 10);
+    const cycles = cyclesOfQuarter(year, q);
+    exporterPeriodeCSV({
+        cycles, year,
+        titre: 'Rapport trimestriel', sousTitre: `T${q} ${year}`,
+        filename: `ASUFOR_Rapport_T${q}_${year}.csv`,
+        expenses: expensesOfCycles(cycles)
+    });
 }
 
 // ── Thème ────────────────────────────────────────────────────

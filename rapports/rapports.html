@@ -223,12 +223,22 @@
         <h2>📄 Rapport pour l'Assemblée Générale</h2>
         <div class="seg" onchange="toggleReportMode()">
             <label><input type="radio" name="report-mode" value="mensuel" checked>Mensuel</label>
+            <label><input type="radio" name="report-mode" value="trimestriel">Trimestriel</label>
             <label><input type="radio" name="report-mode" value="annuel">Annuel</label>
         </div>
         <p class="hint" id="report-mensuel-note">Le rapport mensuel porte sur la <b>période affichée</b> ci-dessus, avec ses dépenses réelles.</p>
         <div class="field" id="wrap-year" style="display:none;">
             <label>Année de l'exercice</label>
             <select id="report-year"></select>
+        </div>
+        <div class="field" id="wrap-quarter" style="display:none;">
+            <label>Trimestre</label>
+            <select id="report-quarter">
+                <option value="1">T1 — Janvier à Mars</option>
+                <option value="2">T2 — Avril à Juin</option>
+                <option value="3">T3 — Juillet à Septembre</option>
+                <option value="4">T4 — Octobre à Décembre</option>
+            </select>
         </div>
         <button class="btn-pdf" onclick="genererRapport()">⬇️ Générer le PDF</button>
         <button class="btn-pdf btn-csv" onclick="exporterCSV()">⬇️ Exporter en CSV</button>
