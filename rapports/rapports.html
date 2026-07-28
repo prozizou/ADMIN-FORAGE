@@ -121,6 +121,7 @@
         .seg label:has(input:checked) { border-color: var(--primary); background: rgba(0,82,254,0.08); color: var(--primary); }
         .btn-pdf { width: 100%; margin-top: 8px; padding: 15px; border: none; border-radius: 14px; background: var(--danger); color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .btn-pdf:active { transform: scale(.98); }
+        .btn-csv { background: var(--success); }
         .hint { font-size: .78rem; color: var(--sub); margin: 8px 0; }
     </style>
 </head>
@@ -171,6 +172,11 @@
             <div class="label">Volume</div>
             <div class="value" id="kpi-volume">—</div>
             <div class="delta" id="d-volume"></div>
+        </div>
+        <div class="kpi">
+            <div class="label">Solde net (mois)</div>
+            <div class="value" id="kpi-solde">—</div>
+            <div class="delta" id="d-solde"></div>
         </div>
     </div>
 
@@ -225,6 +231,7 @@
             <select id="report-year"></select>
         </div>
         <button class="btn-pdf" onclick="genererRapport()">⬇️ Générer le PDF</button>
+        <button class="btn-pdf btn-csv" onclick="exporterCSV()">⬇️ Exporter en CSV</button>
     </div>
 </div>
 
