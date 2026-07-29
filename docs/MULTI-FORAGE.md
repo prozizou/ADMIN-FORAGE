@@ -80,19 +80,22 @@ propre session pendant qu'il crée le compte d'un tiers.
 | **3b. Identité & écrans admin** | Login résout `role`/`forageKey` depuis `users/{uid}` (onglet « Identifiant » en plus du sélecteur de rôle legacy) ; écran super-admin `admin/admin.html` ; écran président `equipe/equipe.html` via instance Firebase secondaire (`provisioning.js`). | ✅ PR #11 |
 | **3c. Isolation multi-forage** | **Correctif critique** : `LEGACY` ne s'applique désormais qu'au forage `Asufor_diandioly` — tout autre forage utilise `Asufor/{key}/…` dès sa création, jamais les chemins historiques. Identifiant = numéro de téléphone (sans indicatif) pour président/secrétaire/trésorier. | ✅ cette PR |
 | **3d. Racine `Asufor/` par village** | **Changement de paradigme** (décision explicite de l'utilisateur) : la racine namespacée passe de `forages/{forageKey}` à `Asufor/{forageKey}`, avec `forageKey` au format lisible `Asufor_<village>` dérivé du siège (plus de clé opaque générée). Sous-noeuds génériques et identiques pour chaque village (`config`, `compteurs`, `backup`, `agents`, `depenses`, `team`). ⚠️ Nécessite un redéploiement des règles Firebase (§8). | ✅ cette PR |
-| **4. Migration** | Script `scripts/migrate-multi-forage.js` (**dry-run** par défaut, copie non-destructive) ; bascule `ForageContext.LEGACY = false` **après vérification manuelle**, pour Diandioly uniquement (les autres forages n'en ont pas besoin, cf. 3c). | ⚙️ outil prêt — exécution manuelle à venir |
+| **4. Migration** | Script `scripts/migrate-multi-forage.js` (**dry-run** par défaut, copie non-destructive) ; bascule `ForageContext.LEGACY = false` **après vérification manuelle**, pour Diandioly uniquement (les autres forages n'en ont pas besoin, cf. 3c). | ✅ données migrées, vérifiées en console Firebase, `LEGACY = false` |
 | **5. Retrait du login legacy** | Code prêt (onglet « Compte du forage » + sélecteur de rôle supprimés d'`index.html`, seul « Identifiant » subsiste). **⚠️ Ne pas déployer avant que le président/secrétaire/trésorier de Diandioly aient chacun un compte individuel** (téléphone + PIN) créé via `equipe/equipe.html`, sans quoi ils perdent tout accès (cf. §8). | ⚙️ code prêt — déploiement conditionné |
 
 ### Bascule LEGACY (précision post-bug isolation)
 
-`forage-context.js` expose `LEGACY = true`, mais **uniquement pour le forage
-`Asufor_diandioly`** (voir `paths()`) : c'est le seul dont les données réelles
-sont encore aux chemins historiques. Tout autre forage (Ogo, etc.) utilise
-`Asufor/{key}/…` dès sa création, quel que soit l'état de `LEGACY` — sinon
-ses données se mélangent avec celles de Diandioly (bug constaté et corrigé
-dans cette PR). `LEGACY` ne passe à `false` qu'**après** avoir migré et
-vérifié les données de Diandioly (§8), en éditant `forage-context.js` à la
-main — jamais automatiquement.
+`forage-context.js` expose `LEGACY`, applicable **uniquement au forage
+`Asufor_diandioly`** (voir `paths()`) — c'était le seul dont les données
+réelles vivaient encore aux chemins historiques. Tout autre forage (Ogo,
+etc.) utilise `Asufor/{key}/…` dès sa création, quel que soit l'état de
+`LEGACY` — sinon ses données se mélangent avec celles de Diandioly (bug
+constaté et corrigé dans une PR précédente). Les données de Diandioly ont
+depuis été migrées et vérifiées (§7) : `LEGACY = false` est désormais commité.
+Les nœuds legacy (`db_agents`, `asufor_db_diandioly`, `asufor_backup`,
+`asufor_depenses`) restent en base jusqu'à l'étape 6 du runbook (retrait
+manuel, après période de validation en production) ; `legacyPaths()` reste
+disponible via `paths(key, { legacy: true })` en attendant.
 
 ---
 

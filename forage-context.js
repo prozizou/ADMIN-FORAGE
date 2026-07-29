@@ -14,14 +14,12 @@
  *   • Super-admin (prozizou298@gmail.com) : accès à tous les forages.
  *
  * ⚠️ mode LEGACY (scopé à Diandioly UNIQUEMENT, voir paths()) :
- *   Les données de Diandioly sont ENCORE aux chemins historiques (asufor_db_diandioly,
- *   asufor_backup, db_agents, asufor_depenses) : c'est le SEUL forage qui utilise
- *   legacyPaths(), tant que sa migration (Phase 4) n'a pas eu lieu. Tout AUTRE
- *   forage (créé via admin/admin.html après la mise en place du multi-forage) n'a
- *   jamais eu de données aux chemins historiques : il utilise TOUJOURS
- *   Asufor/{forageKey}/… dès sa création, même si LEGACY reste à true pour
- *   Diandioly. Sans cette distinction, un président d'un AUTRE forage se
- *   retrouvait à lire/écrire les données de Diandioly (bug constaté en prod).
+ *   Les données de Diandioly ont été migrées (Phase 4, scripts/migrate-multi-forage.js)
+ *   vers Asufor/Asufor_diandioly/{compteurs,backup,agents,depenses} et vérifiées en
+ *   console Firebase : LEGACY est donc désormais à false, Diandioly utilise le même
+ *   schéma namespacé que tout autre forage. legacyPaths() reste disponible (chemins
+ *   historiques encore présents en base jusqu'au retrait, §6/§8 du runbook) et peut
+ *   être forcé via paths(key, { legacy: true }) si besoin ponctuel (audit, secours).
  *
  * Double usage :
  *   • Navigateur : <script src="../forage-context.js"></script> → window.ForageContext
@@ -35,9 +33,8 @@
     'use strict';
 
     // Bascule legacy ↔ namespacé, applicable UNIQUEMENT au forage Diandioly
-    // (voir paths()). Reste à true tant que sa migration n'a pas eu lieu.
-    // Passera à false une fois les données de Diandioly migrées (Phase 4).
-    var LEGACY = true;
+    // (voir paths()). Passée à false : données migrées et vérifiées (Phase 4).
+    var LEGACY = false;
 
     // Forage par défaut tant que l'identité n'est pas encore résolue au login
     // (l'unique forage historique est Diandioly). Format Asufor_<village>,
