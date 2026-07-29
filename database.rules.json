@@ -114,8 +114,12 @@
 
     // ============ ANNUAIRE DES UTILISATEURS ============
     "users": {
+      // Lecture du noeud entier (listing) : super-admin uniquement — nécessaire pour
+      // l'écran super-admin (lister forages & présidents). Cascade vers tous les $uid.
+      ".read": "auth != null && auth.token.email == 'prozizou298@gmail.com'",
       "$uid": {
-        // Lecture : soi-même ; super-admin ; ou président du même forage (voit son équipe).
+        // Lecture individuelle : soi-même ; super-admin (déjà couvert ci-dessus) ; ou
+        // président du même forage (voit son équipe).
         ".read": "auth != null && ( auth.uid == $uid || auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('role').val() == 'président' && root.child('users').child(auth.uid).child('forageKey').val() == data.child('forageKey').val()) )",
 
         // Écriture : super-admin (tout) ; ou président qui crée/gère un membre de SON forage
@@ -135,8 +139,12 @@
 
     // ============ FORAGES (données namespacées par forageKey) ============
     "forages": {
+      // Lecture du noeud entier (listing) : super-admin uniquement — nécessaire pour
+      // l'écran super-admin (lister les forages existants). Cascade vers tous les $forageKey.
+      ".read": "auth != null && auth.token.email == 'prozizou298@gmail.com'",
       "$forageKey": {
-        // Lecture de tout le sous-arbre du forage : membre du forage ou super-admin.
+        // Lecture de tout le sous-arbre du forage : membre du forage ou super-admin
+        // (déjà couvert ci-dessus).
         ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == $forageKey )",
 
         // ── Config / branding : président du forage ou super-admin ──
@@ -190,6 +198,23 @@
               "montant": { ".validate": "newData.isNumber() && newData.val() >= 0" },
               "$other":  { ".validate": true }
             }
+          }
+        },
+
+        // ── Annuaire de l'équipe (index léger, miroir de users/{uid}) ──
+        // Nécessaire car les règles de "users" ne permettent PAS à un président de
+        // lister le noeud entier (seul le super-admin le peut) : ce sous-noeud,
+        // enfant de forages/{forageKey}, hérite du .read déjà accordé aux membres
+        // du forage (cf. .read ci-dessus sur $forageKey), sans exposer les autres
+        // forages. Écrit en même temps que users/{uid} par provisioning.js.
+        "team": {
+          "$uid": {
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )",
+            ".validate": "newData.hasChildren(['role', 'nom'])",
+            "role":  { ".validate": "newData.isString() && (newData.val() == 'président' || newData.val() == 'secrétaire' || newData.val() == 'trésorier')" },
+            "nom":   { ".validate": "newData.isString()" },
+            "login": { ".validate": "newData.isString()" },
+            "$other": { ".validate": false }
           }
         }
       }

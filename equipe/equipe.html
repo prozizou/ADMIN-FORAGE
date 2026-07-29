@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <!-- PWA-META -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
+
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon équipe – ASUFOR</title>
+
+    <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../forage-context.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #38bdf8;
+            --text-white: #f8fafc;
+            --error: #ef4444;
+            --success: #22c55e;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            color: var(--text-white);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .wrap { max-width: 640px; margin: 0 auto; }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .top-nav a { color: var(--accent-blue); text-decoration: none; font-size: 0.85rem; }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 30px 25px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+            margin-bottom: 25px;
+        }
+
+        h2 { margin: 0 0 25px 0; font-weight: 600; color: var(--accent-blue); font-size: 1.25rem; }
+
+        .field { margin-bottom: 18px; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.6;
+        }
+        input, select {
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus { border-color: var(--accent-blue); }
+        input.error, select.error { border-color: var(--error); }
+        select option { background: #1e293b; color: white; }
+
+        .btn-submit {
+            width: 100%;
+            padding: 16px;
+            margin-top: 6px;
+            background: var(--accent-blue);
+            border: none;
+            border-radius: 12px;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 1rem;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #msg { text-align: center; font-size: 0.85rem; margin-top: 12px; min-height: 20px; font-weight: 600; }
+        .msg-success { color: var(--success); }
+        .msg-error { color: var(--error); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); }
+        th { opacity: 0.6; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.5px; }
+        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="wrap">
+    <div class="top-nav">
+        <a href="../home/accueil.html">← Accueil</a>
+        <a href="#" id="btn-logout">Déconnexion</a>
+    </div>
+
+    <div class="glass-card">
+        <h2>➕ Ajouter un membre</h2>
+
+        <div class="field" id="forageSelectorField" style="display:none;">
+            <label for="forageSelect">Forage</label>
+            <select id="forageSelect"></select>
+        </div>
+
+        <div class="field">
+            <label for="m_nom">Nom complet</label>
+            <input type="text" id="m_nom" placeholder="Ex: Fatou Ndiaye" autocomplete="off" maxlength="100">
+        </div>
+
+        <div class="field">
+            <label for="m_login">Identifiant</label>
+            <input type="text" id="m_login" placeholder="Ex: fatou.ndiaye" autocomplete="off" maxlength="60">
+        </div>
+
+        <div class="field">
+            <label for="m_role">Rôle</label>
+            <select id="m_role">
+                <option value="secrétaire">Secrétaire</option>
+                <option value="trésorier">Trésorier</option>
+            </select>
+        </div>
+
+        <div class="field">
+            <label for="m_pin">PIN (6 chiffres)</label>
+            <input type="password" id="m_pin" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+        </div>
+
+        <div class="field">
+            <label for="m_pin2">Confirmer le PIN</label>
+            <input type="password" id="m_pin2" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+        </div>
+
+        <button class="btn-submit" id="btnCreate">Créer le compte</button>
+        <div id="msg" role="alert"></div>
+    </div>
+
+    <div class="glass-card">
+        <h2>👥 Mon équipe</h2>
+        <table>
+            <thead>
+                <tr><th>Nom</th><th>Identifiant</th><th>Rôle</th></tr>
+            </thead>
+            <tbody id="teamList">
+                <tr class="empty-row"><td colspan="3">Chargement…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { createAccount } from "../provisioning.js";
+
+    // ✅ Accessible au président (son propre forage) et au super-admin (forage au choix).
+    const session = window.checkAccess(['président']);
+    if (!session) throw new Error('Accès refusé');
+
+    const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
+    const auth = getAuth(app);
+
+    const msgEl      = document.getElementById('msg');
+    const btn        = document.getElementById('btnCreate');
+    const teamList   = document.getElementById('teamList');
+    const forageSel  = document.getElementById('forageSelect');
+    const forageField = document.getElementById('forageSelectorField');
+
+    function showMsg(text, isError) {
+        msgEl.textContent = text;
+        msgEl.className = isError ? 'msg-error' : 'msg-success';
+    }
+    function clearErrors() {
+        document.querySelectorAll('input.error, select.error').forEach(i => i.classList.remove('error'));
+    }
+    function markError(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('error');
+    }
+
+    function currentForageKey() {
+        if (session.isSuperadmin) return forageSel.value || '';
+        return session.forageKey || (window.ForageContext ? window.ForageContext.DEFAULT_FORAGE_KEY : 'diandioly');
+    }
+
+    async function loadTeam() {
+        const forageKey = currentForageKey();
+        if (!forageKey) {
+            teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Sélectionnez un forage.</td></tr>';
+            return;
+        }
+        teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Chargement…</td></tr>';
+        try {
+            const snap = await get(ref(db, 'forages/' + forageKey + '/team'));
+            const team = snap.val() || {};
+            const uids = Object.keys(team);
+            if (uids.length === 0) {
+                teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Aucun membre pour l\'instant.</td></tr>';
+                return;
+            }
+            teamList.innerHTML = uids
+                .map(uid => team[uid])
+                .filter(m => m && m.role !== 'président')
+                .sort((a, b) => String(a.nom || '').localeCompare(String(b.nom || '')))
+                .map(m => '<tr><td>' + escHtml(m.nom || '—') + '</td><td>' + escHtml(m.login || '—') + '</td><td>' + escHtml(m.role || '—') + '</td></tr>')
+                .join('') || '<tr class="empty-row"><td colspan="3">Aucun membre pour l\'instant.</td></tr>';
+        } catch (e) {
+            console.error('Chargement équipe échoué :', e);
+            teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Erreur de chargement.</td></tr>';
+        }
+    }
+
+    async function initForageSelector() {
+        if (!session.isSuperadmin) return;
+        forageField.style.display = '';
+        try {
+            const snap = await get(ref(db, 'forages'));
+            const forages = snap.val() || {};
+            const keys = Object.keys(forages);
+            if (keys.length === 0) {
+                forageSel.innerHTML = '<option value="">Aucun forage</option>';
+                return;
+            }
+            forageSel.innerHTML = keys
+                .map(key => '<option value="' + key + '">' + escHtml((forages[key].config && forages[key].config.nom) || key) + '</option>')
+                .join('');
+            forageSel.addEventListener('change', loadTeam);
+        } catch (e) {
+            console.error('Chargement forages échoué :', e);
+        }
+    }
+
+    btn.addEventListener('click', async () => {
+        clearErrors();
+        const forageKey = currentForageKey();
+        const nom   = document.getElementById('m_nom').value.trim();
+        const login = document.getElementById('m_login').value.trim();
+        const role  = document.getElementById('m_role').value;
+        const pin   = document.getElementById('m_pin').value;
+        const pin2  = document.getElementById('m_pin2').value;
+
+        let valid = true;
+        if (!forageKey) { if (session.isSuperadmin) markError('forageSelect'); valid = false; }
+        if (!nom)   { markError('m_nom');   valid = false; }
+        if (!login) { markError('m_login'); valid = false; }
+        if (!/^\d{6}$/.test(pin)) { markError('m_pin'); valid = false; }
+        if (pin !== pin2) { markError('m_pin2'); valid = false; }
+
+        if (!valid) { showMsg('Veuillez corriger les champs en rouge.', true); return; }
+
+        btn.disabled = true;
+        if (window.AsuforLoader) AsuforLoader.show('Création du compte…');
+
+        try {
+            await createAccount({
+                firebaseConfig,
+                db,
+                identifiant: login,
+                pin,
+                role,
+                forageKey,
+                nom,
+                createdByUid: auth.currentUser ? auth.currentUser.uid : ''
+            });
+
+            showMsg('✅ Compte de ' + nom + ' créé.', false);
+            ['m_nom', 'm_login', 'm_pin', 'm_pin2'].forEach(id => document.getElementById(id).value = '');
+            loadTeam();
+        } catch (e) {
+            console.error('Création membre échouée :', e);
+            let msg = e && e.message ? e.message : 'Erreur inconnue.';
+            if (e && e.code === 'auth/email-already-in-use') msg = 'Cet identifiant est déjà utilisé.';
+            showMsg('Erreur : ' + msg, true);
+        } finally {
+            if (window.AsuforLoader) AsuforLoader.hide();
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (confirm('Voulez-vous vraiment vous déconnecter ?')) window.logout();
+    });
+
+    (async function init() {
+        await initForageSelector();
+        loadTeam();
+    })();
+</script>
+</body>
+</html>

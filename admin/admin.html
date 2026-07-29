@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <!-- PWA-META -->
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
+
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super-admin – ASUFOR</title>
+
+    <script src="../security.js"></script>
+    <!-- ✅ Overlay de chargement partagé -->
+    <script src="../loader.js"></script>
+    <!-- ✅ Config Firebase centralisée -->
+    <script src="../firebase-config.js"></script>
+    <!-- ✅ Multi-forage : résolution des chemins + constantes (super-admin, forage par défaut) -->
+    <script src="../forage-context.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-blue: #38bdf8;
+            --text-white: #f8fafc;
+            --error: #ef4444;
+            --success: #22c55e;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            color: var(--text-white);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .wrap { max-width: 720px; margin: 0 auto; }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .top-nav a { color: var(--accent-blue); text-decoration: none; font-size: 0.85rem; }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 30px 25px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+            margin-bottom: 25px;
+        }
+
+        h2 { margin: 0 0 25px 0; font-weight: 600; color: var(--accent-blue); font-size: 1.25rem; }
+        h3 { margin: 0 0 6px 0; font-weight: 600; font-size: 0.95rem; opacity: 0.85; }
+
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 520px) { .row { grid-template-columns: 1fr; } }
+
+        .field { margin-bottom: 16px; }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.6;
+        }
+        input {
+            width: 100%;
+            padding: 13px 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            color: white;
+            font-size: 0.95rem;
+            outline: none;
+            box-sizing: border-box;
+        }
+        input:focus { border-color: var(--accent-blue); }
+        input.error { border-color: var(--error); }
+
+        .btn-submit {
+            width: 100%;
+            padding: 15px;
+            margin-top: 6px;
+            background: var(--accent-blue);
+            border: none;
+            border-radius: 12px;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        #msg { text-align: center; font-size: 0.85rem; margin-top: 12px; min-height: 20px; font-weight: 600; }
+        .msg-success { color: var(--success); }
+        .msg-error { color: var(--error); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); }
+        .key-cell { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem; opacity: 0.85; user-select: all; }
+        th { opacity: 0.6; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.5px; }
+        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; }
+
+        .denied {
+            text-align: center;
+            padding: 60px 20px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+
+<div class="wrap">
+    <div class="top-nav">
+        <a href="../home/accueil.html">← Accueil</a>
+        <a href="#" id="btn-logout">Déconnexion</a>
+    </div>
+
+    <div id="deniedBox" class="denied" style="display:none;">
+        🔒 Accès réservé au super-administrateur.
+    </div>
+
+    <div id="content" style="display:none;">
+        <div class="glass-card">
+            <h2>➕ Créer un forage</h2>
+
+            <h3>Forage</h3>
+            <div class="row">
+                <div class="field">
+                    <label for="f_nom">Nom du forage</label>
+                    <input type="text" id="f_nom" placeholder="Ex: ASUFOR Keur Massar" maxlength="100">
+                </div>
+                <div class="field">
+                    <label for="f_siege">Siège</label>
+                    <input type="text" id="f_siege" placeholder="Ex: Keur Massar" maxlength="100">
+                </div>
+            </div>
+
+            <h3>Président</h3>
+            <div class="row">
+                <div class="field">
+                    <label for="p_nom">Nom complet</label>
+                    <input type="text" id="p_nom" placeholder="Ex: Moussa Fall" maxlength="100">
+                </div>
+                <div class="field">
+                    <label for="p_login">Identifiant</label>
+                    <input type="text" id="p_login" placeholder="Ex: moussa.fall" autocomplete="off" maxlength="60">
+                </div>
+            </div>
+            <div class="row">
+                <div class="field">
+                    <label for="p_pin">PIN (6 chiffres)</label>
+                    <input type="password" id="p_pin" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+                </div>
+                <div class="field">
+                    <label for="p_pin2">Confirmer le PIN</label>
+                    <input type="password" id="p_pin2" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+                </div>
+            </div>
+
+            <button class="btn-submit" id="btnCreate">Créer le forage + président</button>
+            <div id="msg" role="alert"></div>
+        </div>
+
+        <div class="glass-card">
+            <h2>📋 Forages existants</h2>
+            <table>
+                <thead>
+                    <tr><th>Forage</th><th>Clé</th><th>Siège</th><th>Président(s)</th></tr>
+                </thead>
+                <tbody id="forageList">
+                    <tr class="empty-row"><td colspan="4">Chargement…</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size: 0.72rem; opacity: 0.5; margin: 10px 2px 0;">
+                La « Clé » identifie le forage dans Firebase (utilisée par le script
+                <code>scripts/migrate-multi-forage.js --forage-key</code> lors de la migration).
+            </p>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, get, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { createAccount } from "../provisioning.js";
+
+    // ✅ checkAccess : le super-admin obtient une session role='président' (accès complet
+    // aux pages existantes) + isSuperadmin=true (voir index.html). On exige les deux ici.
+    const session = window.checkAccess(['président']);
+    if (!session) throw new Error('Accès refusé');
+
+    const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+    const app  = initializeApp(firebaseConfig);
+    const db   = getDatabase(app);
+    const auth = getAuth(app);
+
+    const deniedBox = document.getElementById('deniedBox');
+    const content    = document.getElementById('content');
+    const msgEl      = document.getElementById('msg');
+    const btn        = document.getElementById('btnCreate');
+    const forageList = document.getElementById('forageList');
+
+    function showMsg(text, isError) {
+        msgEl.textContent = text;
+        msgEl.className = isError ? 'msg-error' : 'msg-success';
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('input.error').forEach(i => i.classList.remove('error'));
+    }
+    function markError(id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('error');
+    }
+
+    async function loadForages() {
+        try {
+            const [forageSnap, usersSnap] = await Promise.all([
+                get(ref(db, 'forages')),
+                get(ref(db, 'users'))
+            ]);
+            const forages = forageSnap.val() || {};
+            const users   = usersSnap.val() || {};
+
+            const presidentsByForage = {};
+            Object.keys(users).forEach((uid) => {
+                const u = users[uid];
+                if (u && u.role === 'président' && u.forageKey) {
+                    (presidentsByForage[u.forageKey] = presidentsByForage[u.forageKey] || []).push(u.nom || u.login || uid);
+                }
+            });
+
+            const keys = Object.keys(forages);
+            if (keys.length === 0) {
+                forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Aucun forage créé pour l\'instant.</td></tr>';
+                return;
+            }
+
+            forageList.innerHTML = keys.map((key) => {
+                const cfg = forages[key].config || {};
+                const presidents = (presidentsByForage[key] || []).map(escHtml).join(', ') || '—';
+                return '<tr><td>' + escHtml(cfg.nom || key) + '</td><td class="key-cell">' + escHtml(key) + '</td><td>' + escHtml(cfg.siege || '—') + '</td><td>' + presidents + '</td></tr>';
+            }).join('');
+        } catch (e) {
+            console.error('Chargement forages échoué :', e);
+            forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Erreur de chargement.</td></tr>';
+        }
+    }
+
+    btn.addEventListener('click', async () => {
+        clearErrors();
+        const fNom   = document.getElementById('f_nom').value.trim();
+        const fSiege = document.getElementById('f_siege').value.trim();
+        const pNom   = document.getElementById('p_nom').value.trim();
+        const pLogin = document.getElementById('p_login').value.trim();
+        const pPin   = document.getElementById('p_pin').value;
+        const pPin2  = document.getElementById('p_pin2').value;
+
+        let valid = true;
+        if (!fNom)   { markError('f_nom');   valid = false; }
+        if (!pNom)   { markError('p_nom');   valid = false; }
+        if (!pLogin) { markError('p_login'); valid = false; }
+        if (!/^\d{6}$/.test(pPin)) { markError('p_pin'); valid = false; }
+        if (pPin !== pPin2) { markError('p_pin2'); valid = false; }
+
+        if (!valid) { showMsg('Veuillez corriger les champs en rouge.', true); return; }
+
+        btn.disabled = true;
+        if (window.AsuforLoader) AsuforLoader.show('Création du forage…');
+
+        try {
+            const forageKey = push(ref(db, 'forages')).key;
+
+            await createAccount({
+                firebaseConfig,
+                db,
+                identifiant: pLogin,
+                pin: pPin,
+                role: 'président',
+                forageKey,
+                nom: pNom,
+                createdByUid: auth.currentUser ? auth.currentUser.uid : ''
+            });
+
+            await set(ref(db, 'forages/' + forageKey + '/config'), {
+                nom: fNom,
+                siege: fSiege,
+                created_at: new Date().toISOString()
+            });
+
+            showMsg('✅ Forage « ' + fNom + ' » et président créés.', false);
+            ['f_nom', 'f_siege', 'p_nom', 'p_login', 'p_pin', 'p_pin2'].forEach(id => document.getElementById(id).value = '');
+            loadForages();
+        } catch (e) {
+            console.error('Création forage échouée :', e);
+            let msg = e && e.message ? e.message : 'Erreur inconnue.';
+            if (e && e.code === 'auth/email-already-in-use') msg = 'Cet identifiant est déjà utilisé.';
+            showMsg('Erreur : ' + msg, true);
+        } finally {
+            if (window.AsuforLoader) AsuforLoader.hide();
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (confirm('Voulez-vous vraiment vous déconnecter ?')) window.logout();
+    });
+
+    // ✅ Vérification stricte de l'identité super-admin côté client (l'UX seulement —
+    //    l'application réelle des droits reste dans les règles Firebase).
+    onAuthStateChanged(auth, (user) => {
+        const isSuper = !!(user && session.isSuperadmin && window.ForageContext && window.ForageContext.isSuperadmin(user.email));
+        if (isSuper) {
+            content.style.display = '';
+            loadForages();
+        } else {
+            deniedBox.style.display = '';
+        }
+    });
+</script>
+</body>
+</html>
