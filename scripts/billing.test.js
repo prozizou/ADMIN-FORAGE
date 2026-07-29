@@ -84,6 +84,33 @@ test('computeCurrent : anomalie si index décroissant', () => {
     assert.strictEqual(r.conso, 0);
 });
 
+test('computeCurrent : consommation à la limite du seuil reste facturée normalement', () => {
+    const r = Billing.computeCurrent({ last_index: 0, new_index: Billing.CONSO_ANOMALIE_MAX, facteur: 250 });
+    assert.strictEqual(r.anomalie, false);
+    assert.strictEqual(r.conso, Billing.CONSO_ANOMALIE_MAX);
+    assert.strictEqual(r.montant, Billing.CONSO_ANOMALIE_MAX * 250);
+});
+
+test('computeCurrent : anomalie si consommation invraisemblable (> seuil, ex. erreur de saisie d\'index)', () => {
+    const r = Billing.computeCurrent({ last_index: 0, new_index: 771234567, facteur: 250 });
+    assert.strictEqual(r.anomalie, true);
+    assert.strictEqual(r.montant, 0);
+    assert.strictEqual(r.conso, 0);
+    assert.ok(/invraisemblable/i.test(r.raison));
+});
+
+test('computeArrears : exclut du cumul les cycles à consommation invraisemblable', () => {
+    const backup = {
+        '2026-05': { donnees: {
+            k1: { numero_compteur: '099', zone: 'N', last_index: '0', new_index: '999999', facteur: '250', status: 'impaye' }
+        }}
+    };
+    const idx = Billing.indexBackups(backup);
+    const res = Billing.computeArrears({ numero_compteur: '099', zone: 'N' }, idx);
+    assert.strictEqual(res.arriere, 0);
+    assert.strictEqual(res.anomalies.length, 1);
+});
+
 // ── Arriérés ─────────────────────────────────────────────────
 const backupRoot = {
     '2026-05': { donnees: {
