@@ -369,16 +369,24 @@
     // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
     const P = window.ForageContext.paths();
 
-    // ✅ Branding par forage : nom du village imprimé sur les factures, résolu
-    // depuis Asufor/{forageKey}/config, jamais "DIANDIOLY" en dur — chaque village
-    // doit voir son propre nom sur ses propres factures.
+    // ✅ Branding par forage : nom du village + numéro de contact (téléphone du
+    // président, saisi obligatoirement à la création du forage) imprimés sur les
+    // factures, résolus depuis Asufor/{forageKey}/config — jamais "DIANDIOLY" /
+    // un numéro en dur, chaque village doit voir SES propres informations.
     let forageVillage = 'ASUFOR';
+    let forageTelephone = '';
     async function loadForageBranding() {
         try {
             const snap = await get(ref(db, P.config));
             const cfg = snap.exists() ? snap.val() : {};
             forageVillage = (cfg.siege || cfg.nom || 'ASUFOR').toUpperCase();
             document.title = 'ASUFOR ' + forageVillage + ' - Impression v5';
+            // ⚠️ Repli historique : seul Diandioly (créé avant l'ajout de ce champ)
+            // peut ne pas avoir de config.telephone — on garde alors son ancien
+            // numéro en dur pour ne rien casser. Tout AUTRE forage sans numéro
+            // configuré n'affiche simplement pas de ligne de contact.
+            forageTelephone = cfg.telephone ||
+                (P.forageKey === window.ForageContext.DEFAULT_FORAGE_KEY ? '77 624 70 30' : '');
         } catch (_) { /* garde le repli générique */ }
     }
 
@@ -744,7 +752,7 @@
 
             html += `
             <div class="invoice-page">
-                <div class="p-header">Forage ${forageVillage} 🚰<br>77 624 70 30</div>
+                <div class="p-header">Forage ${forageVillage} 🚰${forageTelephone ? '<br>' + esc(forageTelephone) : ''}</div>
                 <div class="section-title">Période de consommation</div>
                 <div class="info-box">
                     <div class="p-row"><span>DU : <strong>${dates.debut}</strong></span><span>AU : <strong>${dates.fin}</strong></span></div>
