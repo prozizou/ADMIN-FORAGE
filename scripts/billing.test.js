@@ -193,15 +193,15 @@ test('ForageContext : mode namespacé → Asufor/{key}/…', () => {
     assert.strictEqual(p.config, 'Asufor/Asufor_abc123/config');
 });
 
-test('ForageContext : LEGACY actif par défaut (aucune bascule prématurée)', () => {
-    assert.strictEqual(ForageContext.LEGACY, true);
-    // sans opts, on est en legacy → chemin historique
-    assert.strictEqual(ForageContext.paths('Asufor_diandioly').compteurs, 'asufor_db_diandioly');
+test('ForageContext : LEGACY désactivé après migration de Diandioly (Phase 4)', () => {
+    assert.strictEqual(ForageContext.LEGACY, false);
+    // sans opts, Diandioly est désormais namespacé comme tout autre forage
+    assert.strictEqual(ForageContext.paths('Asufor_diandioly').compteurs, 'Asufor/Asufor_diandioly/compteurs');
 });
 
 test('ForageContext : LEGACY ne s\'applique QU\'à Diandioly (isolation multi-forage)', () => {
     // Régression : un président d'un AUTRE forage ne doit JAMAIS retomber sur les
-    // chemins historiques de Diandioly, même si LEGACY est encore actif pour ce
+    // chemins historiques de Diandioly, même si LEGACY était encore actif pour ce
     // dernier — sinon ses données se mélangent avec celles de Diandioly.
     const p = ForageContext.paths('Asufor_ogo');
     assert.strictEqual(p.compteurs, 'Asufor/Asufor_ogo/compteurs');
