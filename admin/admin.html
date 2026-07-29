@@ -157,6 +157,10 @@
                     <input type="text" id="f_siege" placeholder="Ex: Keur Massar" maxlength="100">
                 </div>
             </div>
+            <div class="field">
+                <label for="f_key">Clé personnalisée (optionnel)</label>
+                <input type="text" id="f_key" placeholder="Ex: diandioly — laisser vide pour une clé générée automatiquement" autocomplete="off" maxlength="40">
+            </div>
 
             <h3>Président</h3>
             <div class="row">
@@ -275,6 +279,7 @@
         clearErrors();
         const fNom   = document.getElementById('f_nom').value.trim();
         const fSiege = document.getElementById('f_siege').value.trim();
+        const fKey   = document.getElementById('f_key').value.trim();
         const pNom   = document.getElementById('p_nom').value.trim();
         const pLogin = document.getElementById('p_login').value.trim();
         const pPin   = document.getElementById('p_pin').value;
@@ -282,18 +287,34 @@
 
         let valid = true;
         if (!fNom)   { markError('f_nom');   valid = false; }
+        // ✅ Clé personnalisée optionnelle (ex: "diandioly") : format restreint pour
+        // rester un chemin Firebase sûr et lisible (pas de caractères spéciaux).
+        if (fKey && !/^[a-z0-9_-]{2,40}$/.test(fKey)) { markError('f_key'); valid = false; }
         if (!pNom)   { markError('p_nom');   valid = false; }
         if (!pLogin) { markError('p_login'); valid = false; }
         if (!/^\d{6}$/.test(pPin)) { markError('p_pin'); valid = false; }
         if (pPin !== pPin2) { markError('p_pin2'); valid = false; }
 
-        if (!valid) { showMsg('Veuillez corriger les champs en rouge.', true); return; }
+        if (!valid) { showMsg('Veuillez corriger les champs en rouge (minuscules/chiffres/tirets uniquement pour la clé).', true); return; }
 
         btn.disabled = true;
         if (window.AsuforLoader) AsuforLoader.show('Création du forage…');
 
         try {
-            const forageKey = push(ref(db, 'forages')).key;
+            let forageKey;
+            if (fKey) {
+                const existing = await get(ref(db, 'forages/' + fKey));
+                if (existing.exists()) {
+                    markError('f_key');
+                    showMsg('Cette clé est déjà utilisée par un autre forage.', true);
+                    btn.disabled = false;
+                    if (window.AsuforLoader) AsuforLoader.hide();
+                    return;
+                }
+                forageKey = fKey;
+            } else {
+                forageKey = push(ref(db, 'forages')).key;
+            }
 
             await createAccount({
                 firebaseConfig,
@@ -312,8 +333,8 @@
                 created_at: new Date().toISOString()
             });
 
-            showMsg('✅ Forage « ' + fNom + ' » et président créés.', false);
-            ['f_nom', 'f_siege', 'p_nom', 'p_login', 'p_pin', 'p_pin2'].forEach(id => document.getElementById(id).value = '');
+            showMsg('✅ Forage « ' + fNom + ' » (clé : ' + forageKey + ') et président créés.', false);
+            ['f_nom', 'f_siege', 'f_key', 'p_nom', 'p_login', 'p_pin', 'p_pin2'].forEach(id => document.getElementById(id).value = '');
             loadForages();
         } catch (e) {
             console.error('Création forage échouée :', e);
