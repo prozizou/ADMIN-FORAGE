@@ -111,9 +111,12 @@
     },
 
     // ══════════════════════════════════════════════════════════════
-    //  MULTI-FORAGE (Phase 3) — ADDITIF : les noeuds legacy ci-dessus
-    //  restent actifs pour la connexion actuelle. Ces noeuds préparent
-    //  la bascule (voir docs/MULTI-FORAGE.md).
+    //  MULTI-FORAGE — ADDITIF : les noeuds legacy ci-dessus restent actifs
+    //  pour la connexion actuelle (Diandioly, tant que non migré). Ces
+    //  noeuds préparent/portent la bascule (voir docs/MULTI-FORAGE.md).
+    //
+    //  Chaque forage a une forageKey au format Asufor_<village>
+    //  (ex. Asufor_diandioly, Asufor_ogo), stockée dans users/{uid}.forageKey.
     //
     //  Super-admin       : auth.token.email == 'prozizou298@gmail.com'
     //  Forage de l'appelant : root.child('users').child(auth.uid).child('forageKey').val()
@@ -145,8 +148,8 @@
       }
     },
 
-    // ============ FORAGES (données namespacées par forageKey) ============
-    "forages": {
+    // ============ ASUFOR (données namespacées par village, forageKey = Asufor_<village>) ============
+    "Asufor": {
       // Lecture du noeud entier (listing) : super-admin uniquement — nécessaire pour
       // l'écran super-admin (lister les forages existants). Cascade vers tous les $forageKey.
       ".read": "auth != null && auth.token.email == 'prozizou298@gmail.com'",
@@ -214,7 +217,7 @@
         // ── Annuaire de l'équipe (index léger, miroir de users/{uid}) ──
         // Nécessaire car les règles de "users" ne permettent PAS à un président de
         // lister le noeud entier (seul le super-admin le peut) : ce sous-noeud,
-        // enfant de forages/{forageKey}, hérite du .read déjà accordé aux membres
+        // enfant de Asufor/{forageKey}, hérite du .read déjà accordé aux membres
         // du forage (cf. .read ci-dessus sur $forageKey), sans exposer les autres
         // forages. Écrit en même temps que users/{uid} par provisioning.js.
         "team": {

@@ -9,11 +9,12 @@
  * la base PRIMAIRE (authentifiée en tant que créateur — c'est elle que les
  * règles de sécurité évaluent).
  *
- * Connexion (Option A, voir docs/MULTI-FORAGE.md §4) : l'identifiant saisi par
- * l'utilisateur est mappé vers un e-mail interne `{identifiant}@asufor.local`,
- * sauf s'il contient déjà un « @ » (cas du super-admin, qui garde son adresse
- * réelle pour rester reconnu par les règles `auth.token.email`). Le PIN à
- * 6 chiffres sert de mot de passe Firebase Auth.
+ * Connexion (Option A, voir docs/MULTI-FORAGE.md §4) : l'identifiant est le
+ * **numéro de téléphone sans indicatif** (7-15 chiffres) de la personne —
+ * président, secrétaire ou trésorier —, mappé vers un e-mail interne
+ * `{identifiant}@asufor.local`. Le PIN à 6 chiffres sert de mot de passe
+ * Firebase Auth. (Le super-admin, créé à part via la console Firebase, garde
+ * son adresse e-mail réelle — voir resolveLoginEmail() et index.html.)
  *
  * SDK modulaire uniquement (cohérent avec agents/agent.html, counter/list.html,
  * reset/zero.html, impression/impression.html, statistiques/stats.js).
@@ -41,7 +42,8 @@ export function resolveLoginEmail(identifiant) {
  * @param {object} params
  * @param {object} params.firebaseConfig - window.ASUFOR_FIREBASE_CONFIG
  * @param {import('firebase/database').Database} params.db - base PRIMAIRE (session du créateur)
- * @param {string} params.identifiant - identifiant unique saisi (sans @asufor.local)
+ * @param {string} params.identifiant - numéro de téléphone SANS indicatif (7-15 chiffres) ;
+ *        sert d'identifiant unique (sans @asufor.local)
  * @param {string} params.pin - mot de passe / PIN à 6 chiffres
  * @param {'président'|'secrétaire'|'trésorier'} params.role
  * @param {string} params.forageKey
@@ -50,8 +52,10 @@ export function resolveLoginEmail(identifiant) {
  * @returns {Promise<string>} l'uid du compte créé
  */
 export async function createAccount({ firebaseConfig, db, identifiant, pin, role, forageKey, nom, createdByUid }) {
-    const login = String(identifiant || '').trim();
-    if (!login) throw new Error("L'identifiant est requis.");
+    // Identifiant = numéro de téléphone sans indicatif (même regex que agent_tel
+    // ailleurs dans l'app : agents/agent.html, database.rules.json).
+    const login = String(identifiant || '').trim().replace(/[\s\-.]/g, '');
+    if (!/^\d{7,15}$/.test(login)) throw new Error("L'identifiant doit être un numéro de téléphone valide (7 à 15 chiffres, sans indicatif).");
     if (!/^\d{6}$/.test(String(pin || ''))) throw new Error('Le PIN doit contenir exactement 6 chiffres.');
     if (!forageKey) throw new Error('forageKey manquant.');
 
@@ -81,10 +85,10 @@ export async function createAccount({ firebaseConfig, db, identifiant, pin, role
         created_at: new Date().toISOString()
     });
 
-    // Miroir léger dans forages/{forageKey}/team : seul moyen pour un président
+    // Miroir léger dans Asufor/{forageKey}/team : seul moyen pour un président
     // (non super-admin) de lister son équipe, les règles ne permettant pas de
     // lister le noeud "users" entier hors super-admin (cf. database.rules.json).
-    await set(ref(db, 'forages/' + forageKey + '/team/' + uid), {
+    await set(ref(db, 'Asufor/' + forageKey + '/team/' + uid), {
         role: role,
         nom: nom || '',
         login: login

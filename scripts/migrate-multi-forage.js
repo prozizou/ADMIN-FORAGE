@@ -1,23 +1,23 @@
 #!/usr/bin/env node
 /**
- * migrate-multi-forage.js — Migration Phase 4 : legacy → forages/{forageKey}/…
+ * migrate-multi-forage.js — Migration Phase 4 : legacy → Asufor/{forageKey}/…
  * ==============================================================================
  *
  * Copie les 4 noeuds racine legacy vers leur emplacement namespacé, sans RIEN
  * supprimer (les noeuds legacy restent intacts — leur retrait est une étape
  * MANUELLE et séparée, cf. étape 6 du runbook dans docs/MULTI-FORAGE.md) :
  *
- *   db_agents            → forages/{forageKey}/agents
- *   asufor_db_diandioly  → forages/{forageKey}/compteurs
- *   asufor_backup        → forages/{forageKey}/backup
- *   asufor_depenses      → forages/{forageKey}/depenses
+ *   db_agents            → Asufor/{forageKey}/agents
+ *   asufor_db_diandioly  → Asufor/{forageKey}/compteurs
+ *   asufor_backup        → Asufor/{forageKey}/backup
+ *   asufor_depenses      → Asufor/{forageKey}/depenses
  *
- * Si forages/{forageKey}/config n'existe pas encore, un branding minimal est
+ * Si Asufor/{forageKey}/config n'existe pas encore, un branding minimal est
  * créé automatiquement (nom "ASUFOR Diandioly").
  *
  * Prérequis (runbook étapes 1-3, docs/MULTI-FORAGE.md) : règles déployées,
  * super-admin créé, forage Diandioly provisionné (une forageKey existe déjà —
- * voir la colonne "Clé" de admin/admin.html, ou le noeud `forages/` dans la
+ * voir la colonne "Clé" de admin/admin.html, ou le noeud `Asufor/` dans la
  * console Firebase).
  *
  * ⚠️ Cette migration NE modifie PAS `ForageContext.LEGACY` : l'application
@@ -30,7 +30,7 @@
  *
  *   A) Contre les fichiers JSON exportés (aucune écriture, 100% sûr) :
  *      node scripts/migrate-multi-forage.js --dry-run \
- *           --forage-key <forageKeyDiandioly> \
+ *           --forage-key Asufor_diandioly \
  *           --agents ./db_agents.json \
  *           --compteurs ./asufor_db_diandioly.json \
  *           --backup ./asufor_backup.json \
@@ -41,7 +41,7 @@
  *      scripts/README-FACTURATION.md §Sécurité pour l'obtenir.
  *      npm install firebase-admin
  *      node scripts/migrate-multi-forage.js --apply \
- *           --forage-key <forageKeyDiandioly> \
+ *           --forage-key Asufor_diandioly \
  *           --service-account ./serviceAccountKey.json \
  *           --db-url https://asufor-67a06-default-rtdb.firebaseio.com
  *
@@ -52,7 +52,7 @@
  *   --agents/--compteurs/--backup/--depenses <path>  fichiers JSON (mode fichier)
  *   --service-account <path>  clé Admin SDK (mode Firebase)
  *   --db-url <url>         databaseURL (mode Firebase)
- *   --force                autorise l'écrasement si forages/{key}/compteurs
+ *   --force                autorise l'écrasement si Asufor/{key}/compteurs
  *                          contient déjà des données (déconseillé — vérifiez
  *                          d'abord pourquoi une migration semble déjà faite)
  */
@@ -129,11 +129,11 @@ function printReport(root, forageKey) {
     console.log('\n══════════════════════════════════════════════════════');
     console.log('  RAPPORT DE MIGRATION MULTI-FORAGE');
     console.log('══════════════════════════════════════════════════════');
-    console.log('  Forage cible : forages/' + forageKey);
+    console.log('  Forage cible : Asufor/' + forageKey);
     console.log('──────────────────────────────────────────────────────');
     Object.keys(LEGACY_NODES).forEach((target) => {
         const n = countRecords(root[target]);
-        console.log('  ' + LEGACY_NODES[target].padEnd(22) + ' → forages/' + forageKey + '/' + target.padEnd(11) + ' (' + n + ' entrées)');
+        console.log('  ' + LEGACY_NODES[target].padEnd(22) + ' → Asufor/' + forageKey + '/' + target.padEnd(11) + ' (' + n + ' entrées)');
     });
     console.log('══════════════════════════════════════════════════════\n');
 }
@@ -143,10 +143,10 @@ function printReport(root, forageKey) {
 // ─────────────────────────────────────────────
 async function applyToFirebase(db, root, forageKey, force) {
     // Garde-fou : refuse d'écraser une migration déjà en place, sauf --force.
-    const existing = await db.ref(`forages/${forageKey}/compteurs`).get();
+    const existing = await db.ref(`Asufor/${forageKey}/compteurs`).get();
     if (existing.exists() && !force) {
         throw new Error(
-            `forages/${forageKey}/compteurs contient déjà des données. ` +
+            `Asufor/${forageKey}/compteurs contient déjà des données. ` +
             `Cette forageKey semble déjà migrée — vérifiez avant de continuer. ` +
             `Utilisez --force pour écraser quand même (déconseillé).`
         );
@@ -154,21 +154,21 @@ async function applyToFirebase(db, root, forageKey, force) {
 
     const updates = {};
     Object.keys(LEGACY_NODES).forEach((target) => {
-        updates[`forages/${forageKey}/${target}`] = root[target];
+        updates[`Asufor/${forageKey}/${target}`] = root[target];
     });
 
-    const configSnap = await db.ref(`forages/${forageKey}/config`).get();
+    const configSnap = await db.ref(`Asufor/${forageKey}/config`).get();
     if (!configSnap.exists()) {
-        updates[`forages/${forageKey}/config`] = {
+        updates[`Asufor/${forageKey}/config`] = {
             nom: 'ASUFOR Diandioly',
             siege: 'Diandioly',
             migrated_at: new Date().toISOString()
         };
-        console.log('ℹ️  forages/' + forageKey + '/config absent : branding par défaut créé.');
+        console.log('ℹ️  Asufor/' + forageKey + '/config absent : branding par défaut créé.');
     }
 
     await db.ref().update(updates);
-    console.log('\n✅ Migration appliquée à Firebase : forages/' + forageKey + ' peuplé.');
+    console.log('\n✅ Migration appliquée à Firebase : Asufor/' + forageKey + ' peuplé.');
     console.log('   Les noeuds legacy (db_agents, asufor_db_diandioly, asufor_backup,');
     console.log('   asufor_depenses) sont INCHANGÉS — vérifiez les données avant de');
     console.log('   passer ForageContext.LEGACY = false dans forage-context.js.\n');
