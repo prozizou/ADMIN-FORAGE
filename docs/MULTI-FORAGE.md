@@ -135,14 +135,17 @@ La Phase 3 est un **basculement**, à exécuter dans cet ordre :
 2. **Créer le compte super-admin** (`prozizou298@gmail.com`) dans Firebase Auth,
    avec un **mot de passe à 6 chiffres** (voir §4). Se connecter via l'onglet
    « Identifiant » de `index.html` en saisissant l'adresse complète.
-3. **Provisionner** le forage Diandioly : soit via `admin/admin.html` pour de
-   **nouveaux** forages (crée tout automatiquement), soit — pour les **comptes
-   legacy existants** (`president@diandioly.com`…) — en écrivant manuellement
-   `users/{uid} = { role, forageKey:'diandioly', login, nom }` dans la console
-   Firebase pour chacun des 3 UID (ils continuent de fonctionner sans cette
-   fiche, voir §8 ; l'écrire les aligne simplement sur le modèle cible).
-4. **Migrer les données** legacy → `forages/{keyDiandioly}/…` (Phase 4, script
-   dry-run d'abord) puis passer `ForageContext.LEGACY = false`.
+3. **Provisionner** le forage Diandioly avec la clé **`diandioly`** (décision
+   retenue — lisible, et déjà la valeur de `ForageContext.DEFAULT_FORAGE_KEY`,
+   donc zéro changement de code) : dans `admin/admin.html`, champ « Clé
+   personnalisée », saisir `diandioly` au lieu de laisser le champ vide (qui
+   génèrerait une clé aléatoire). Pour les **comptes legacy existants**
+   (`president@diandioly.com`…), écrire manuellement `users/{uid} = { role,
+   forageKey:'diandioly', login, nom }` dans la console Firebase pour chacun
+   des 3 UID (ils continuent de fonctionner sans cette fiche, voir §8).
+4. **Migrer les données** legacy → `forages/diandioly/…` (Phase 4, `npm run
+   forage-dry-run -- --forage-key diandioly` puis `forage-apply`) puis passer
+   `ForageContext.LEGACY = false`.
 5. **Basculer la page de connexion** vers l'Option A (identifiant + PIN) pour
    Diandioly : l'onglet « Identifiant » (implémenté depuis la phase 3b) devient
    le mode par défaut/unique, le sélecteur de rôle legacy est retiré.
@@ -196,30 +199,36 @@ puis :
 ```bash
 cd scripts
 node migrate-multi-forage.js --dry-run \
-     --forage-key <forageKeyDiandioly> \
+     --forage-key diandioly \
      --agents ./db_agents.json \
      --compteurs ./asufor_db_diandioly.json \
      --backup ./asufor_backup.json \
      --depenses ./asufor_depenses.json
 
 # ou, via le raccourci npm (scripts/package.json) :
-npm run forage-dry-run -- --forage-key <forageKeyDiandioly>
+npm run forage-dry-run -- --forage-key diandioly
 ```
 
-La `forageKey` s'obtient dans `admin/admin.html` (colonne « Clé » du tableau
-« Forages existants »), une fois le forage Diandioly provisionné (runbook
-étape 3). Le rapport affiche le nombre d'entrées par noeud, sans rien écrire.
+> `asufor_depenses` n'existe pas encore en production (confirmé sur un export
+> réel) : créez un fichier vide `echo '{}' > asufor_depenses.json` pour le mode
+> fichier — le mode Firebase (`--service-account`) gère l'absence tout seul.
+
+**Clé retenue pour ce village : `diandioly`** — décision prise pour rester
+lisible et parce que c'est déjà la valeur de `ForageContext.DEFAULT_FORAGE_KEY`
+(zéro changement de code). Provisionnée via le champ « Clé personnalisée » de
+`admin/admin.html` (runbook étape 3) plutôt qu'une clé générée aléatoirement.
+Le rapport du script affiche le nombre d'entrées par noeud, sans rien écrire.
 
 ### Étape 2 — Application réelle
 
 ```bash
 npm install            # firebase-admin (scripts/package.json)
 node migrate-multi-forage.js --apply \
-     --forage-key <forageKeyDiandioly> \
+     --forage-key diandioly \
      --service-account ./serviceAccountKey.json \
      --db-url https://asufor-67a06-default-rtdb.firebaseio.com
 
-# ou : npm run forage-apply -- --forage-key <forageKeyDiandioly>
+# ou : npm run forage-apply -- --forage-key diandioly
 ```
 
 Le script refuse d'écraser un forage déjà peuplé (`forages/{key}/compteurs`
