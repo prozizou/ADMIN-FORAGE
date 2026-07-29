@@ -295,6 +295,16 @@
             });
 
             try {
+                // ✅ Siège dérivé du forage réel de l'utilisateur (Asufor/{forageKey}/config.siege),
+                // jamais "DIANDIOLY" en dur — sinon un agent créé pour un AUTRE village se
+                // retrouve avec le siège de Diandioly.
+                let siege = 'ASUFOR';
+                try {
+                    const cfgSnap = await get(ref(db, P.config));
+                    const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
+                    siege = (cfg.siege || cfg.nom || 'ASUFOR').toUpperCase();
+                } catch (_) { /* garde le repli générique */ }
+
                 const agentsRef   = ref(db, P.agents);
                 const newAgentRef = push(agentsRef);
                 const uniqueId    = newAgentRef.key;
@@ -308,7 +318,7 @@
                     //     Utiliser une Firebase Function pour cette opération en production.
                     id_source: "267b175fb210e9be",
                     key:       uniqueId,
-                    siege:     "DIANDIOLY",
+                    siege:     siege,
                     zone:      zone,
                     created_at: new Date().toISOString() // ✅ CORRECTION : traçabilité de création
                 });

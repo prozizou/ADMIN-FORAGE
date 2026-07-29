@@ -218,7 +218,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, push, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification d'accès
@@ -232,8 +232,19 @@
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
-    // ✅ Chemins Firebase du forage courant (legacy → db_agents / asufor_db_diandioly)
+    // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
     const P = window.ForageContext.paths();
+
+    // ✅ Repli du siège pour les agents legacy sans champ `siege`, dérivé du forage
+    // réel (Asufor/{forageKey}/config.siege) plutôt que "DIANDIOLY" en dur.
+    let forageSiege = 'ASUFOR';
+    async function loadForageSiege() {
+        try {
+            const cfgSnap = await get(ref(db, P.config));
+            const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
+            forageSiege = (cfg.siege || cfg.nom || 'ASUFOR').toUpperCase();
+        } catch (_) { /* garde le repli générique */ }
+    }
 
     const msgEl  = document.getElementById('msg');
     const btn    = document.getElementById('btnSubmit');
@@ -278,7 +289,7 @@
                     id:    child.key,
                     name:  d.agent || 'Agent',
                     tel:   d.agent_tel || '',
-                    siege: d.siege || 'DIANDIOLY',
+                    siege: d.siege || forageSiege,
                     zone:  d.zone || ''
                 });
                 opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
@@ -299,6 +310,7 @@
     // On attend la confirmation du jeton Firebase avant toute lecture.
     onAuthStateChanged(auth, (user) => {
         if (user) {
+            loadForageSiege();
             loadAgents();
         } else if (window.AsuforLoader) {
             AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');

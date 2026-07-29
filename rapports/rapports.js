@@ -2,7 +2,7 @@
  * rapports.js — Rapports d'AG, Tableau de bord KPIs & Caisse (ASUFOR)
  * ===================================================================
  *
- * Lit les données existantes (db_agents, asufor_db_diandioly, asufor_backup) et
+ * Lit les données existantes (Asufor/{forageKey}/{agents,compteurs,backup}) et
  * délègue tout le calcul monétaire à billing.js (source unique de vérité).
  *
  * Nouveautés :
@@ -44,6 +44,11 @@ let cmpCycle = null;       // période de comparaison (ou null)
 let currentUser = 'système';
 try { const s = JSON.parse(localStorage.getItem('asufor_session') || '{}'); if (s && s.role) currentUser = s.role; } catch (_) {}
 const canEditExpenses = ['président', 'trésorier'].includes((currentUser || '').toLowerCase());
+
+// ✅ Branding par forage : nom affiché (titre de page, en-tête PDF) résolu
+// dynamiquement depuis Asufor/{forageKey}/config.nom, jamais "Diandioly" en dur —
+// chaque village doit voir son propre nom (bug constaté en multi-forage).
+let forageBranding = 'ASUFOR — Gestion de l\'eau';
 
 // ── Utilitaires ──────────────────────────────────────────────
 function currentMonthStr() {
@@ -424,7 +429,7 @@ function pdfHeader(doc, titre, sousTitre) {
         try { doc.addImage(logoDataUrl, 'PNG', 14, 8, 16, 16); x = 34; } catch (_) {}
     }
     doc.setFontSize(16); doc.setTextColor(0, 82, 254);
-    doc.text("ASUFOR Diandioly — Gestion de l'eau", x, 16);
+    doc.text(forageBranding, x, 16);
     doc.setFontSize(13); doc.setTextColor(30, 41, 59);
     doc.text(titre, x, 25);
     doc.setFontSize(10); doc.setTextColor(100);
@@ -712,15 +717,22 @@ window.toggleTheme = function () {
 // ── Chargement des données ───────────────────────────────────
 async function loadAll() {
     if (window.AsuforLoader) AsuforLoader.update('Chargement des données…');
-    const [agentsSnap, activeSnap, backupSnap] = await Promise.all([
+    const [agentsSnap, activeSnap, backupSnap, configSnap] = await Promise.all([
         get(ref(db, P.agents)),
         get(ref(db, P.compteurs)),
-        get(ref(db, P.backup))
+        get(ref(db, P.backup)),
+        get(ref(db, P.config))
     ]);
     agents = agentsSnap.val() || {};
     activeRecords = Object.values(activeSnap.val() || {});
     backupsRaw = backupSnap.val() || {};
     indexedBackups = B.indexBackups(backupsRaw);
+
+    const cfg = configSnap.val() || {};
+    if (cfg.nom) {
+        forageBranding = cfg.nom;
+        document.title = cfg.nom + ' – Rapports & Bilan';
+    }
 
     populateSelectors();
     window.toggleReportMode();
