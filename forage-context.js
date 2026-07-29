@@ -44,18 +44,40 @@
     // Compte super-administrateur (accès à tous les forages).
     var SUPERADMIN_EMAIL = 'prozizou298@gmail.com';
 
+    // Village actuellement choisi par le super-admin (vue à 360°), persisté à
+    // part de la session — voir setSuperadminForageKey()/superadmin-village.js.
+    var SUPERADMIN_FORAGE_STORAGE_KEY = 'asufor_superadmin_forageKey';
+
     /**
      * Résout la forageKey de la session courante.
      * PHASE 1 : lit une éventuelle `forageKey` déjà posée dans la session locale,
      * sinon retombe sur le forage par défaut. PHASE 3 : la key sera écrite dans la
      * session à la connexion, à partir de users/{uid}.forageKey.
+     *
+     * Cas super-admin : n'a pas de forageKey propre (accès à tous les forages) —
+     * on lit alors le village choisi via le sélecteur (superadmin-village.js),
+     * pour lui permettre de naviguer les pages existantes « comme si » il était
+     * président du village sélectionné (vue à 360°).
      */
     function getForageKey() {
         try {
             var s = JSON.parse((typeof localStorage !== 'undefined' && localStorage.getItem('asufor_session')) || '{}');
+            if (s && s.isSuperadmin) {
+                var chosen = (typeof localStorage !== 'undefined' && localStorage.getItem(SUPERADMIN_FORAGE_STORAGE_KEY)) || '';
+                if (chosen) return chosen;
+            }
             if (s && typeof s.forageKey === 'string' && s.forageKey) return s.forageKey;
         } catch (_) {}
         return DEFAULT_FORAGE_KEY;
+    }
+
+    /** Persiste (ou efface, si key est vide) le village choisi par le super-admin. */
+    function setSuperadminForageKey(key) {
+        try {
+            if (typeof localStorage === 'undefined') return;
+            if (key) localStorage.setItem(SUPERADMIN_FORAGE_STORAGE_KEY, key);
+            else localStorage.removeItem(SUPERADMIN_FORAGE_STORAGE_KEY);
+        } catch (_) {}
     }
 
     /** Vrai si l'e-mail fourni est celui du super-admin. */
@@ -109,7 +131,9 @@
         LEGACY: LEGACY,
         DEFAULT_FORAGE_KEY: DEFAULT_FORAGE_KEY,
         SUPERADMIN_EMAIL: SUPERADMIN_EMAIL,
+        SUPERADMIN_FORAGE_STORAGE_KEY: SUPERADMIN_FORAGE_STORAGE_KEY,
         getForageKey: getForageKey,
+        setSuperadminForageKey: setSuperadminForageKey,
         isSuperadmin: isSuperadmin,
         paths: paths
     };

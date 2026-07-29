@@ -24,6 +24,8 @@
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
     <script src="../forage-context.js"></script>
+    <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
+    <script src="../superadmin-village.js"></script>
 
     <style>
         :root {
@@ -194,10 +196,8 @@
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // ✅ CORRECTION : Vérification d'accès avant tout chargement
-        if (typeof window.checkAccess === 'function') {
-            const session = window.checkAccess(['président', 'secrétaire']);
-            if (!session) throw new Error('Accès refusé');
-        }
+        const session = window.checkAccess(['président', 'secrétaire']);
+        if (!session) throw new Error('Accès refusé');
 
         const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
         const app  = initializeApp(firebaseConfig);
@@ -205,6 +205,9 @@
         const auth = getAuth(app);
         // ✅ Chemins Firebase du forage courant (legacy → db_agents, etc.)
         const P = window.ForageContext.paths();
+
+        // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
+        if (window.SuperadminVillage) window.SuperadminVillage.init({ db, get, ref, session });
 
         const msgEl  = document.getElementById('msg');
         const btn    = document.getElementById('btnEnreg');

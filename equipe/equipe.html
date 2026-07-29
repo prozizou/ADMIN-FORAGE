@@ -71,6 +71,22 @@
         h2 { margin: 0 0 25px 0; font-weight: 600; color: var(--accent-blue); font-size: 1.25rem; }
 
         .field { margin-bottom: 18px; }
+        .pin-wrap { position: relative; }
+        .pin-wrap input { padding-right: 46px; }
+        .pin-toggle {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            font-size: 1.1rem;
+            line-height: 1;
+            opacity: 0.6;
+        }
+        .pin-toggle:hover { opacity: 1; }
         label {
             display: block;
             margin-bottom: 8px;
@@ -156,12 +172,18 @@
 
         <div class="field">
             <label for="m_pin">PIN (6 chiffres)</label>
-            <input type="password" id="m_pin" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+            <div class="pin-wrap">
+                <input type="password" id="m_pin" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+                <button type="button" class="pin-toggle" data-target="m_pin" aria-label="Afficher le PIN" title="Afficher le PIN">👁️</button>
+            </div>
         </div>
 
         <div class="field">
             <label for="m_pin2">Confirmer le PIN</label>
-            <input type="password" id="m_pin2" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+            <div class="pin-wrap">
+                <input type="password" id="m_pin2" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+                <button type="button" class="pin-toggle" data-target="m_pin2" aria-label="Afficher le PIN" title="Afficher le PIN">👁️</button>
+            </div>
         </div>
 
         <button class="btn-submit" id="btnCreate">Créer le compte</button>
@@ -318,6 +340,19 @@
     document.getElementById('btn-logout').addEventListener('click', (e) => {
         e.preventDefault();
         if (confirm('Voulez-vous vraiment vous déconnecter ?')) window.logout();
+    });
+
+    // ✅ Bascule affichage/masquage du PIN (voir en clair via l'icône œil).
+    document.querySelectorAll('.pin-toggle').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const input = document.getElementById(btn.dataset.target);
+            if (!input) return;
+            const showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            btn.textContent = showing ? '👁️' : '🙈';
+            btn.setAttribute('aria-label', showing ? 'Afficher le PIN' : 'Masquer le PIN');
+            btn.setAttribute('title', showing ? 'Afficher le PIN' : 'Masquer le PIN');
+        });
     });
 
     (async function init() {

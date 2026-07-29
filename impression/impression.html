@@ -27,6 +27,8 @@
     <script src="../billing.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
     <script src="../forage-context.js"></script>
+    <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
+    <script src="../superadmin-village.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
@@ -355,10 +357,8 @@
     import { getAuth, onAuthStateChanged }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification de la session
-    if (typeof window.checkAccess === 'function') {
-        const s = window.checkAccess(['président', 'secrétaire', 'trésorier']);
-        if (!s) throw new Error('Accès refusé');
-    }
+    const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);
+    if (!session) throw new Error('Accès refusé');
 
     // ── Config Firebase ──
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
@@ -368,6 +368,9 @@
     const auth = getAuth(app);
     // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
     const P = window.ForageContext.paths();
+
+    // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
+    if (window.SuperadminVillage) window.SuperadminVillage.init({ db, get, ref, session });
 
     // ✅ Branding par forage : nom du village + numéro de contact (téléphone du
     // président, saisi obligatoirement à la création du forage) imprimés sur les

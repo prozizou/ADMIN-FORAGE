@@ -24,6 +24,8 @@
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
     <script src="../forage-context.js"></script>
+    <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
+    <script src="../superadmin-village.js"></script>
 
     <style>
         :root {
@@ -187,16 +189,6 @@
         <input type="text" id="ownerName" placeholder="ex: Amadou Bâ" autocomplete="off" maxlength="100">
     </div>
 
-    <div class="input-layout" id="wrap-phone">
-        <label>Numéro téléphone</label>
-        <input type="tel" id="ownerPhone" placeholder="ex: 77#######" inputmode="tel" maxlength="15">
-    </div>
-
-    <div class="input-layout" id="wrap-compteur">
-        <label>Numéro de compteur</label>
-        <input type="text" id="numCompteur" placeholder="ex: 00123" autocomplete="off" maxlength="20">
-    </div>
-
     <div class="input-layout" id="wrap-index">
         <label>Index de départ</label>
         <input type="number" id="startIndex" placeholder="0" min="0">
@@ -222,10 +214,8 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification d'accès
-    if (typeof window.checkAccess === 'function') {
-        const s = window.checkAccess(['président', 'secrétaire']);
-        if (!s) throw new Error('Accès refusé');
-    }
+    const session = window.checkAccess(['président', 'secrétaire']);
+    if (!session) throw new Error('Accès refusé');
 
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
@@ -234,6 +224,9 @@
     const auth = getAuth(app);
     // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
     const P = window.ForageContext.paths();
+
+    // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
+    if (window.SuperadminVillage) window.SuperadminVillage.init({ db, get, ref, session });
 
     // ✅ Repli du siège pour les agents legacy sans champ `siege`, dérivé du forage
     // réel (Asufor/{forageKey}/config.siege) plutôt que "DIANDIOLY" en dur.
@@ -322,8 +315,6 @@
 
         const agentRaw  = document.getElementById('agentSelect').value;
         const owner     = document.getElementById('ownerName').value.trim();
-        let   phone     = document.getElementById('ownerPhone').value.trim(); // ✅ FIX : let (réassigné plus bas, const provoquait un TypeError bloquant)
-        const compteur  = document.getElementById('numCompteur').value.trim();
         const start     = document.getElementById('startIndex').value;
         const price     = document.getElementById('pricePerCube').value;
 
@@ -331,18 +322,8 @@
         if (!agentRaw)  { markError('wrap-agent');   valid = false; }
         if (!owner)     { markError('wrap-owner');   valid = false; }
         if (!start)     { markError('wrap-index');   valid = false; }
-        if (!compteur)  { markError('wrap-compteur'); valid = false; }
 
         if (!valid) { showMsg('Veuillez remplir les champs obligatoires.', true); return; }
-
-        // ✅ CORRECTION : validation du format téléphone (facultatif mais vérifié si rempli)
-        // ✅ CORRECTION : normaliser avant validation (supprimer espaces/tirets)
-        phone = phone.replace(/[\s\-\.]/g, '');
-        if (phone && !/^\d{7,15}$/.test(phone)) {
-            markError('wrap-phone');
-            showMsg('Numéro de téléphone invalide (7 à 15 chiffres).', true);
-            return;
-        }
 
         let agent;
         try { agent = JSON.parse(agentRaw); }
@@ -358,6 +339,22 @@
             const unsub = onAuthStateChanged(auth, (user) => { unsub(); resolve(user); });
         });
 
+        // ✅ Numéro de compteur auto-généré : longueur de la liste existante + 1
+        // (ex : 417 compteurs déjà enregistrés → le nouveau devient 418).
+        let compteur;
+        try {
+            const listSnap = await get(ref(db, P.compteurs));
+            const count = listSnap.exists() ? Object.keys(listSnap.val()).length : 0;
+            compteur = String(count + 1);
+        } catch (e) {
+            console.error('Comptage des compteurs échoué :', e);
+            showMsg('Erreur : impossible de calculer le numéro de compteur.', true);
+            btn.disabled = false;
+            loader.style.display = 'none';
+            btnTxt.textContent = 'ENREGISTRER';
+            return;
+        }
+
         const payload = {
             agent_id:        agent.id,
             agent_name:      agent.name,
@@ -365,7 +362,6 @@
             siege:           agent.siege,
             zone:            agent.zone || '',
             name:            owner,
-            tel:             phone,
             numero_compteur: compteur,
             last_index:      String(start),
             new_index:       parseInt(start) || 0,
@@ -380,11 +376,9 @@
 
         try {
             await push(ref(db, P.compteurs), payload);
-            showMsg('✅ Compteur enregistré avec succès !');
+            showMsg('✅ Compteur n°' + compteur + ' enregistré avec succès !');
             document.getElementById('ownerName').value  = '';
-            document.getElementById('ownerPhone').value = '';
             document.getElementById('startIndex').value = '';
-            document.getElementById('numCompteur').value = '';
             document.getElementById('agentSelect').value = '';
         } catch (e) {
             console.error('Erreur Firebase :', e);

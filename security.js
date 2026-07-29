@@ -86,6 +86,10 @@ function safeRemoveItem(key) {
 
 window.logout = function () {
     safeRemoveItem('asufor_session');
+    // ✅ Vue à 360° super-admin : le village choisi ne doit pas survivre à la
+    // déconnexion (sinon le prochain compte connecté sur cet appareil hérite
+    // silencieusement du dernier village consulté).
+    safeRemoveItem('asufor_superadmin_forageKey');
     // Déconnexion Firebase si le SDK compat est chargé
     if (typeof firebase !== 'undefined' && firebase.auth) {
         firebase.auth().signOut().catch(() => {});
@@ -116,6 +120,7 @@ window.logout = function () {
 window.handleFirebaseSessionLoss = function (reason, onMessage) {
     console.warn('[ASUFOR] Perte de session Firebase :', reason || 'inconnue');
     safeRemoveItem('asufor_session');
+    safeRemoveItem('asufor_superadmin_forageKey');
 
     const message = "⚠️ Session expirée ou invalide. Reconnexion nécessaire.";
     if (typeof onMessage === 'function') {
