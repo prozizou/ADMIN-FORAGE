@@ -118,15 +118,31 @@
         .msg-error { color: var(--error); }
 
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); white-space: nowrap; }
         .key-cell { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem; opacity: 0.85; user-select: all; }
         th { opacity: 0.6; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.5px; }
-        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; }
+        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; white-space: normal; }
+
+        /* ✅ Table scrollable horizontalement plutôt que débordante hors carte sur petit écran */
+        .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
         .denied {
             text-align: center;
             padding: 60px 20px;
             opacity: 0.7;
+        }
+
+        /* ✅ Responsive : resserre les cartes et le texte sur mobile */
+        @media (max-width: 480px) {
+            body { padding: 14px; }
+            .glass-card { padding: 22px 16px; border-radius: 18px; }
+            h2 { font-size: 1.1rem; margin-bottom: 18px; }
+            input { padding: 12px 14px; font-size: 0.95rem; }
+            .btn-submit { padding: 14px; font-size: 0.9rem; }
+        }
+        @media (max-width: 360px) {
+            .top-nav a { font-size: 0.78rem; }
+            th, td { padding: 8px 6px; font-size: 0.78rem; }
         }
     </style>
 </head>
@@ -190,6 +206,7 @@
 
         <div class="glass-card">
             <h2>📋 Forages existants</h2>
+            <div class="table-scroll">
             <table>
                 <thead>
                     <tr><th>Forage</th><th>Clé</th><th>Siège</th><th>Président(s)</th></tr>
@@ -198,6 +215,7 @@
                     <tr class="empty-row"><td colspan="4">Chargement…</td></tr>
                 </tbody>
             </table>
+            </div>
             <p style="font-size: 0.72rem; opacity: 0.5; margin: 10px 2px 0;">
                 La « Clé » identifie le forage dans Firebase (utilisée par le script
                 <code>scripts/migrate-multi-forage.js --forage-key</code> lors de la migration).
