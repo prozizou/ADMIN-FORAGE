@@ -16,9 +16,16 @@ l'utilisent tous, ce qui garantit des montants identiques partout.
    systématiquement en nombres (`Billing.toInt`).
 
 2. **Anomalie** si `new_index < last_index` (compteur non relevé, remis à zéro ou
-   remplacé) ou si un index est manquant/non numérique.
+   remplacé), si un index est manquant/non numérique, **ou si la consommation dépasse
+   `Billing.CONSO_ANOMALIE_MAX` (100 m³/mois)** — signe probable d'une erreur de saisie
+   d'index plutôt que d'une vraie fuite.
    → la facture n'est pas calculée (montant = 0), un drapeau `anomalie` est levé,
    et **ce mois est exclu du cumul des arriérés**.
+   Sans ce plafond, une saisie aberrante non corrigée serait facturée normalement puis
+   RE-additionnée à chaque cycle archivé où elle reste impayée (`computeArrears` la
+   recalcule pour CHAQUE mois de `asufor_backup`), ce qui peut faire exploser le total
+   « Reste à recouvrer » affiché dans les statistiques (cumul qui grossit de façon
+   exponentielle au lieu de rester borné à une vraie dette).
 
 3. **Arriérés** = somme des factures **recalculées** pour chaque cycle passé
    (`asufor_backup`) où `status === "impaye"`, pour un même compteur identifié par

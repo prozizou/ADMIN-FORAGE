@@ -35,6 +35,14 @@
 
     var FACTEUR_DEFAUT = 250;
 
+    // Consommation mensuelle au-delà de laquelle une saisie est jugée invraisemblable
+    // (fuite majeure ou, le plus souvent, erreur de saisie d'index — ex. un chiffre en
+    // trop ou un numéro de téléphone collé dans new_index). Sans ce garde-fou, un tel
+    // montant aberrant est facturé normalement, puis RE-additionné à chaque cycle
+    // archivé où il reste impayé (voir computeArrears), ce qui peut faire exploser le
+    // cumul des arriérés affiché dans les tableaux de bord.
+    var CONSO_ANOMALIE_MAX = 100;
+
     // ─────────────────────────────────────────────────────────────
     // OUTILS DE CONVERSION (Firebase mélange String et Number)
     // ─────────────────────────────────────────────────────────────
@@ -116,6 +124,18 @@
         }
 
         var conso = nIdx - lIdx;
+
+        // Consommation invraisemblable : on suspend le calcul automatique plutôt que
+        // de facturer un montant aberrant (cf. CONSO_ANOMALIE_MAX ci-dessus).
+        if (conso > CONSO_ANOMALIE_MAX) {
+            return {
+                montant: 0, conso: 0, facteur: facteur,
+                anomalie: true,
+                raison: 'Consommation invraisemblable (' + conso + ' m³ > ' + CONSO_ANOMALIE_MAX +
+                        ' m³) — vérification manuelle requise avant facturation'
+            };
+        }
+
         return {
             montant: conso * facteur,
             conso: conso,
@@ -331,6 +351,7 @@
     // ─────────────────────────────────────────────────────────────
     return {
         FACTEUR_DEFAUT: FACTEUR_DEFAUT,
+        CONSO_ANOMALIE_MAX: CONSO_ANOMALIE_MAX,
         // conversions
         toInt: toInt,
         norm: norm,
