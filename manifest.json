@@ -1,8 +1,8 @@
 {
   "id": "/asufor-diandioly",
-  "name": "ASUFOR Diandioly — Gestion de l'Eau",
+  "name": "ASUFOR — Gestion de l'Eau",
   "short_name": "ASUFOR",
-  "description": "Application de gérance rurale de l'eau ASUFOR Diandioly : relevés de compteurs, facturation, arriérés, statistiques et impression.",
+  "description": "Application de gérance rurale de l'eau ASUFOR : relevés de compteurs, facturation, arriérés, statistiques et impression.",
   "start_url": "index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
@@ -58,7 +58,7 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Accueil ASUFOR Diandioly"
+      "label": "Accueil ASUFOR"
     }
   ],
   "shortcuts": [

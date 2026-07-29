@@ -285,8 +285,8 @@
             </svg>
         </div>
 
-        <h1>Maintenance Diandioly</h1>
-        <div style="margin: 8px 0;"><span class="badge">asufor_db_diandioly</span></div>
+        <h1 id="page-h1">Maintenance</h1>
+        <div style="margin: 8px 0;"><span class="badge" id="path-badge">…</span></div>
 
         <div id="offline-banner">⚠️ Connexion Internet perdue</div>
 
@@ -335,13 +335,27 @@
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
-        // ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly / asufor_backup)
+        // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
         const P = window.ForageContext.paths();
 
         // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
         const esc = window.escHtml || ((s) => String(s == null ? '' : s)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;').replace(/'/g, '&#039;'));
+
+        // ✅ Branding dynamique par forage : le nœud technique lu/écrit et le nom du
+        // village affichés à l'écran doivent refléter le VRAI forage de l'utilisateur
+        // connecté, jamais "Diandioly" en dur (bug constaté quand plusieurs villages
+        // partagent la même app).
+        let villageName = 'ce forage';
+        document.getElementById('path-badge').textContent = P.compteurs;
+        get(ref(db, P.config)).then((snap) => {
+            const cfg = snap.exists() ? snap.val() : {};
+            villageName = cfg.siege || cfg.nom || P.forageKey;
+            document.getElementById('page-h1').textContent = 'Maintenance ' + villageName;
+        }).catch(() => {
+            document.getElementById('page-h1').textContent = 'Maintenance';
+        });
 
         // ✅ FIX LOGIQUE : un compteur d'eau est MONOTONE — son index ne régresse jamais.
         // Renvoie l'index réel à conserver : le nouveau relevé s'il est valide et >= ancien,
@@ -613,7 +627,7 @@
             }
             maintenanceAttempts = 0; // Reset si correct
 
-            if (!confirm(`⚠️ ATTENTION\n\nVoulez-vous clôturer le cycle ${cycleKey} et réinitialiser la base Diandioly ?\n\nCette opération est irréversible.`)) return;
+            if (!confirm(`⚠️ ATTENTION\n\nVoulez-vous clôturer le cycle ${cycleKey} et réinitialiser la base ${villageName} ?\n\nCette opération est irréversible.`)) return;
             // ✅ CORRECTION : Effacer le passcode dès que validé
             document.getElementById('passcode').value = '';
 

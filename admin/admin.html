@@ -169,7 +169,7 @@
                     <input type="text" id="p_nom" placeholder="Ex: Moussa Fall" maxlength="100">
                 </div>
                 <div class="field">
-                    <label for="p_login">Numéro de téléphone (identifiant)</label>
+                    <label for="p_login">Numéro de téléphone (identifiant + contact sur les factures)</label>
                     <input type="tel" id="p_login" placeholder="Ex: 770000000 (sans indicatif)" inputmode="tel" autocomplete="off" maxlength="15">
                 </div>
             </div>
@@ -345,9 +345,13 @@
                 createdByUid: auth.currentUser ? auth.currentUser.uid : ''
             });
 
+            // ✅ Le numéro de téléphone du président (déjà obligatoire comme identifiant)
+            // sert aussi de contact affiché sur les factures du forage — plus de
+            // numéro en dur, chaque forage a le sien.
             await set(ref(db, 'Asufor/' + forageKey + '/config'), {
                 nom: fNom,
                 siege: fSiege,
+                telephone: pLogin,
                 created_at: new Date().toISOString()
             });
 

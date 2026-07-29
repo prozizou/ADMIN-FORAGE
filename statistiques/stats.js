@@ -8,7 +8,7 @@ const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
-// ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly / asufor_backup / db_agents)
+// ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
 const P = window.ForageContext.paths();
 
 // ✅ Overlay visible dès le départ, pendant la restauration du jeton Firebase.
@@ -30,6 +30,23 @@ let currentActivePath = "";
 let allBackupsCache = {};
 
 let currentUser = 'Trésorier/Admin';
+
+// ✅ Branding par forage : nom affiché (en-tête, titre, PDF impayés) résolu
+// depuis Asufor/{forageKey}/config.nom, jamais "Diandioly" en dur — chaque
+// village doit voir son propre nom.
+let forageBranding = 'ASUFOR';
+async function loadForageBranding() {
+    try {
+        const snap = await get(ref(db, P.config));
+        const cfg = snap.exists() ? snap.val() : {};
+        if (cfg.nom) {
+            forageBranding = cfg.nom;
+            document.title = cfg.nom + ' – Statistiques';
+            const titleEl = document.getElementById('forage-title');
+            if (titleEl) titleEl.textContent = cfg.nom;
+        }
+    } catch (_) { /* garde le repli générique */ }
+}
 
 // ✅ Échappement HTML partagé (security.js), avec un repli local UNIQUE
 //   (évite la double définition qui traînait dans startSync et renderList).
@@ -746,6 +763,7 @@ document.addEventListener("DOMContentLoaded", () => {
 onAuthStateChanged(auth, (user) => {
     if (user) {
         if (window.AsuforLoader) AsuforLoader.update('Chargement des relevés…');
+        loadForageBranding();
         window.startSync();
     } else {
         // ✅ CORRECTION v4 : message visible (plus de redirection silencieuse)
@@ -807,7 +825,7 @@ window.exportPDFImpayes = function() {
 
     doc.setFontSize(16);
     doc.setTextColor(239, 68, 68);
-    doc.text("Liste des Impayés - ASUFOR Diandioly", 14, 15);
+    doc.text("Liste des Impayés - " + forageBranding, 14, 15);
 
     doc.setFontSize(11);
     doc.setTextColor(60, 60, 60);
