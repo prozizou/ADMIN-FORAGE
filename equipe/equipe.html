@@ -131,9 +131,26 @@
         .msg-error { color: var(--error); }
 
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); }
+        th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); white-space: nowrap; }
         th { opacity: 0.6; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.5px; }
-        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; }
+        .empty-row td { opacity: 0.5; text-align: center; padding: 20px; white-space: normal; }
+
+        /* ✅ Table scrollable horizontalement plutôt que débordante hors carte sur petit écran */
+        .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+        /* ✅ Responsive : resserre les cartes et le texte sur mobile */
+        @media (max-width: 480px) {
+            body { padding: 14px; }
+            .wrap { max-width: 100%; }
+            .glass-card { padding: 22px 16px; border-radius: 18px; }
+            h2 { font-size: 1.1rem; margin-bottom: 18px; }
+            input, select { padding: 12px 14px; font-size: 0.95rem; }
+            .btn-submit { padding: 14px; font-size: 0.9rem; }
+        }
+        @media (max-width: 360px) {
+            .top-nav a { font-size: 0.78rem; }
+            th, td { padding: 8px 6px; font-size: 0.78rem; }
+        }
     </style>
 </head>
 <body>
@@ -192,6 +209,7 @@
 
     <div class="glass-card">
         <h2>👥 Mon équipe</h2>
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr><th>Nom</th><th>Téléphone</th><th>Rôle</th></tr>
@@ -200,6 +218,7 @@
                 <tr class="empty-row"><td colspan="3">Chargement…</td></tr>
             </tbody>
         </table>
+        </div>
     </div>
 </div>
 
