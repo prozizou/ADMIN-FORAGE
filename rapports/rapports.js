@@ -23,6 +23,14 @@ const auth = getAuth(app);
 // ✅ Chemins Firebase du forage courant (legacy → asufor_db_diandioly, etc.)
 const P = window.ForageContext.paths();
 
+// ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
+if (window.SuperadminVillage) {
+    try {
+        const sessionForSelector = JSON.parse(localStorage.getItem('asufor_session') || '{}');
+        window.SuperadminVillage.init({ db, get, ref, session: sessionForSelector });
+    } catch (_) { /* pas de session lisible : le sélecteur ne s'affiche simplement pas */ }
+}
+
 if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
 const B = window.Billing; // moteur de facturation partagé
