@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="light">
+<html lang="fr" data-theme="dark">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#ffffff">
+    <meta name="theme-color" content="#0b1120">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -27,20 +27,24 @@
     <script src="forage-context.js"></script>
 
     <style>
-        /* ── Design épuré noir sur blanc : contraste fort, aucune décoration superflue ── */
+        /* ── Design glassmorphique : fond dégradé profond + halos flous, carte en verre dépoli ── */
         :root {
-            --bg:          #ffffff;
-            --fg:          #0a0a0a;
-            --muted:       #737373;
-            --border-soft: #e5e5e5;
-            --error:       #dc2626;
-            --success:     #16a34a;
+            --fg:      #f8fafc;
+            --muted:   rgba(248, 250, 252, 0.6);
+            --accent:  #38bdf8;
+            --accent2: #a78bfa;
+            --error:   #f87171;
+            --success: #34d399;
+            --glass:        rgba(255, 255, 255, 0.08);
+            --glass-strong: rgba(255, 255, 255, 0.16);
+            --glass-border: rgba(255, 255, 255, 0.22);
         }
 
         * { box-sizing: border-box; }
 
         body {
-            background: var(--bg);
+            position: relative;
+            background: linear-gradient(160deg, #0b1120 0%, #171335 45%, #0b1120 100%);
             color: var(--fg);
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             display: flex;
@@ -49,6 +53,26 @@
             min-height: 100vh;
             margin: 0;
             padding: 24px;
+            overflow: hidden;
+        }
+
+        /* ── Halos de couleur flous en arrière-plan (signature du glassmorphisme) ── */
+        .glass-blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.55;
+            pointer-events: none;
+            z-index: 0;
+            animation: blobFloat 12s ease-in-out infinite;
+        }
+        .glass-blob.b1 { top: -12%;  left: -10%; width: 340px; height: 340px; background: #38bdf8; }
+        .glass-blob.b2 { bottom: -15%; right: -12%; width: 380px; height: 380px; background: #a78bfa; animation-delay: -4s; }
+        .glass-blob.b3 { top: 40%; right: 15%; width: 220px; height: 220px; background: #f472b6; opacity: 0.35; animation-delay: -8s; }
+
+        @keyframes blobFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(20px, -25px) scale(1.08); }
         }
 
         @keyframes shake {
@@ -60,10 +84,13 @@
 
         .card {
             position: relative;
-            background: var(--bg);
-            border: 2px solid var(--fg);
-            border-radius: 24px;
-            box-shadow: 8px 8px 0 var(--fg);
+            z-index: 1;
+            background: var(--glass);
+            backdrop-filter: blur(22px) saturate(160%);
+            -webkit-backdrop-filter: blur(22px) saturate(160%);
+            border: 1px solid var(--glass-border);
+            border-radius: 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.15);
             padding: 40px 32px;
             width: 100%;
             max-width: 380px;
@@ -71,18 +98,18 @@
         }
 
         .icon-lock {
-            width: 34px;
-            height: 34px;
-            stroke: var(--fg);
+            width: 32px;
+            height: 32px;
+            stroke: var(--accent);
             margin-bottom: 6px;
+            filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
         }
 
         .header-title {
             font-size: 22px;
-            font-weight: 800;
+            font-weight: 700;
             margin: 14px 0 4px 0;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+            letter-spacing: 1.5px;
         }
 
         .header-subtitle {
@@ -100,12 +127,17 @@
             margin: 0 auto 24px;
             padding: 12px 16px;
             text-align: left;
-            background: var(--bg);
-            border: 2px solid var(--fg);
-            border-radius: 12px;
-            transition: background 0.15s ease;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 14px;
+            transition: background 0.2s ease, border-color 0.2s ease;
         }
-        .id-field:focus-within { background: #f5f5f5; }
+        .id-field:focus-within {
+            background: var(--glass-strong);
+            border-color: var(--accent);
+        }
         .id-label {
             display: block;
             font-size: 10px;
@@ -126,7 +158,7 @@
             font-weight: 600;
             outline: none;
         }
-        .id-field input::placeholder { color: #b3b3b3; }
+        .id-field input::placeholder { color: rgba(248, 250, 252, 0.35); }
 
         /* ── Points de progression du code PIN ── */
         .dots {
@@ -142,11 +174,13 @@
             height: 12px;
             border-radius: 50%;
             background: transparent;
-            border: 2px solid var(--fg);
+            border: 2px solid rgba(248, 250, 252, 0.35);
             transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         .dot.active {
-            background: var(--fg);
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-color: transparent;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
             transform: scale(1.15);
         }
 
@@ -158,23 +192,25 @@
         }
 
         .key {
-            background: var(--bg);
-            border: 2px solid var(--fg);
-            border-radius: 14px;
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
             padding: 16px;
             color: var(--fg);
             font-size: 20px;
-            font-weight: 700;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.12s ease;
             display: flex;
             justify-content: center;
             align-items: center;
         }
-        .key:hover:not(:disabled) { background: #f5f5f5; }
+        .key:hover:not(:disabled) { background: var(--glass-strong); border-color: rgba(255,255,255,0.35); }
         .key:active:not(:disabled) {
-            background: var(--fg);
-            color: var(--bg);
+            background: rgba(56, 189, 248, 0.25);
+            border-color: var(--accent);
             transform: scale(0.94);
         }
         .key:disabled {
@@ -207,19 +243,24 @@
         }
 
         @media (max-width: 360px) {
-            .card { padding: 30px 20px; box-shadow: 5px 5px 0 var(--fg); }
+            .card { padding: 30px 20px; }
             .header-title { font-size: 19px; }
             .key { padding: 13px; font-size: 18px; }
             .keypad { gap: 9px; }
             .dots { gap: 12px; }
+            .glass-blob { filter: blur(60px); }
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .shake, .dot, .key { animation: none !important; transition: none !important; }
+            .shake, .dot, .key, .glass-blob { animation: none !important; transition: none !important; }
         }
     </style>
 </head>
 <body>
+
+<div class="glass-blob b1" aria-hidden="true"></div>
+<div class="glass-blob b2" aria-hidden="true"></div>
+<div class="glass-blob b3" aria-hidden="true"></div>
 
 <div class="card" id="loginCard">
     <svg class="icon-lock" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
