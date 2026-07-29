@@ -100,37 +100,6 @@
             margin-bottom: 5px;
         }
 
-        .role-selector {
-            display: flex;
-            gap: 5px;
-            background: rgba(0,0,0,0.25);
-            padding: 6px;
-            border-radius: 50px;
-            margin-bottom: 30px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .role-btn {
-            flex: 1;
-            padding: 10px;
-            border-radius: 50px;
-            border: none;
-            background: transparent;
-            color: var(--txt);
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            opacity: 0.7;
-        }
-
-        .role-btn.active {
-            background: var(--blue);
-            color: #000;
-            opacity: 1;
-            box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
-        }
-
         .dots {
             display: flex;
             justify-content: center;
@@ -206,27 +175,6 @@
         }
         .forgot-link:hover { opacity: 1; }
 
-        .mode-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 18px;
-            font-size: 11px;
-        }
-        .mode-tab {
-            flex: 1;
-            padding: 8px;
-            background: transparent;
-            border: none;
-            border-bottom: 2px solid rgba(255,255,255,0.1);
-            color: var(--txt);
-            opacity: 0.5;
-            cursor: pointer;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .mode-tab.active { opacity: 1; border-bottom-color: var(--blue); }
-
         .id-field {
             margin-bottom: 20px;
             text-align: left;
@@ -254,21 +202,10 @@
     </svg>
 
     <h2 class="header-title">ASUFOR ADMIN</h2>
-    <p class="header-subtitle">Réseau : Forage Diandioly</p>
+    <p class="header-subtitle">Gestion de forage</p>
 
-    <div class="mode-tabs" role="tablist" aria-label="Mode de connexion">
-        <button class="mode-tab active" id="tabRole" onclick="setMode('role')" role="tab" aria-selected="true">Compte du forage</button>
-        <button class="mode-tab" id="tabId" onclick="setMode('identifiant')" role="tab" aria-selected="false">Identifiant</button>
-    </div>
-
-    <div class="role-selector" id="roleSelector" role="group" aria-label="Sélection du rôle">
-        <button class="role-btn active" onclick="setRole('secrétaire', this)" aria-pressed="true">Secrétaire</button>
-        <button class="role-btn" onclick="setRole('président', this)" aria-pressed="false">Président</button>
-        <button class="role-btn" onclick="setRole('trésorier', this)" aria-pressed="false">Trésorier</button>
-    </div>
-
-    <div class="id-field" id="idField" style="display:none;">
-        <input type="text" id="idInput" placeholder="Identifiant" autocomplete="off" autocapitalize="off">
+    <div class="id-field" id="idField">
+        <input type="text" id="idInput" placeholder="Téléphone (sans indicatif)" inputmode="tel" autocomplete="off" autocapitalize="off">
     </div>
 
     <div class="dots" id="dots" aria-label="Progression du code" role="status">
@@ -337,7 +274,7 @@
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
     // ✅ CORRECTION : init défensive. Si la config n'a pas chargé (404) ou si firebase
     // n'est pas disponible, on N'APPELLE PAS firebase.auth() (qui lèverait une exception
-    // et interromprait tout le script → erreurs TDZ en cascade sur emailMap/lockUntil).
+    // et interromprait tout le script → erreurs TDZ en cascade sur lockUntil).
     // auth reste null et l'UI affiche un message clair au lieu de planter.
     let auth = null;
     if (!firebaseConfig || typeof firebase === 'undefined') {
@@ -355,8 +292,6 @@
     }
 
     let code = "";
-    let role = "secrétaire";
-    let loginMode = "role"; // "role" (comptes partagés legacy) | "identifiant" (multi-forage)
     let isVerifying = false;
 
     // ✅ Protection brute-force (persistée en sessionStorage pour résister au rechargement)
@@ -377,13 +312,6 @@
     const statusEl = document.getElementById('status');
     const cardEl   = document.getElementById('loginCard');
     const keypadEl = document.getElementById('keypad');
-
-    // ✅ CORRECTION : Emails définis dans un objet gelé (non modifiable)
-    const emailMap = Object.freeze({
-        "secrétaire": "secretaire@diandioly.com",
-        "président":  "president@diandioly.com",
-        "trésorier":  "tresorier@diandioly.com"
-    });
 
     // ✅ CORRECTION : Firebase = source de vérité pour l'accès aux données.
     //  • user + session locale valide → accès confirmé, on entre dans l'app.
@@ -432,46 +360,7 @@
         return false;
     }
 
-    const roleSelectorEl = document.getElementById('roleSelector');
-    const idFieldEl       = document.getElementById('idField');
-    const idInputEl       = document.getElementById('idInput');
-    const tabRoleEl        = document.getElementById('tabRole');
-    const tabIdEl          = document.getElementById('tabId');
-
-    // ✅ Multi-forage (Phase 3) : onglet "Identifiant" en plus du sélecteur de rôle
-    //    legacy — n'affecte pas le flux existant, purement additif.
-    function setMode(mode) {
-        if (isVerifying) return;
-        loginMode = mode;
-        tabRoleEl.classList.toggle('active', mode === 'role');
-        tabRoleEl.setAttribute('aria-selected', mode === 'role' ? 'true' : 'false');
-        tabIdEl.classList.toggle('active', mode === 'identifiant');
-        tabIdEl.setAttribute('aria-selected', mode === 'identifiant' ? 'true' : 'false');
-        roleSelectorEl.style.display = mode === 'role' ? '' : 'none';
-        idFieldEl.style.display = mode === 'identifiant' ? '' : 'none';
-        code = "";
-        updateDots();
-        statusEl.innerHTML = "&nbsp;";
-        statusEl.className = "";
-    }
-
-    function setRole(newRole, btn) {
-        // ✅ CORRECTION : Valider le rôle avant de l'accepter
-        const validRoles = Object.keys(emailMap);
-        if (!validRoles.includes(newRole)) return;
-
-        role = newRole;
-        document.querySelectorAll('.role-btn').forEach(b => {
-            b.classList.remove('active');
-            b.setAttribute('aria-pressed', 'false');
-        });
-        btn.classList.add('active');
-        btn.setAttribute('aria-pressed', 'true');
-        code = "";
-        statusEl.innerHTML = "&nbsp;";
-        statusEl.className = "";
-        updateDots();
-    }
+    const idInputEl = document.getElementById('idInput');
 
     function press(n) {
         if (checkLock() || isVerifying) return;
@@ -502,11 +391,11 @@
     }
 
     /**
-     * ✅ Multi-forage (Phase 3) : résout role/forageKey/nom depuis users/{uid}
-     * après une connexion Firebase réussie. Retombe sur le rôle choisi dans l'UI
-     * (mode "role") si aucune fiche n'existe encore — comportement legacy inchangé.
-     * En mode "identifiant", l'absence de fiche est une erreur (compte mal
-     * configuré) : on déconnecte et on prévient l'utilisateur au lieu de deviner.
+     * ✅ Multi-forage : résout role/forageKey/nom depuis users/{uid} après une
+     * connexion Firebase réussie. Chaque compte étant désormais individuel
+     * (identifiant = téléphone), l'absence de fiche users/{uid} est une erreur
+     * (compte mal configuré) : on déconnecte et on prévient au lieu de deviner
+     * un rôle par défaut.
      */
     function resolveSessionProfile(user) {
         const email = user.email || '';
@@ -517,7 +406,7 @@
                 if (snap.exists()) {
                     const u = snap.val() || {};
                     return {
-                        role: u.role || role,
+                        role: u.role,
                         time: Date.now(),
                         email: email,
                         forageKey: u.forageKey || null,
@@ -528,21 +417,15 @@
                 if (isSuper) {
                     return { role: 'président', time: Date.now(), email: email, forageKey: null, nom: 'Super-admin', isSuperadmin: true };
                 }
-                if (loginMode === 'identifiant') {
-                    auth.signOut().catch(() => {});
-                    triggerError("Compte non configuré. Contactez l'administrateur.");
-                    return null;
-                }
-                return { role: role, time: Date.now(), email: email, forageKey: null, nom: null, isSuperadmin: false };
+                auth.signOut().catch(() => {});
+                triggerError("Compte non configuré. Contactez l'administrateur.");
+                return null;
             })
             .catch((lookupErr) => {
                 console.warn('[ASUFOR] Résolution profil users/{uid} indisponible :', lookupErr);
-                if (loginMode === 'identifiant') {
-                    auth.signOut().catch(() => {});
-                    triggerError("Impossible de vérifier le compte. Réessayez.");
-                    return null;
-                }
-                return { role: role, time: Date.now(), email: email, forageKey: null, nom: null, isSuperadmin: isSuper };
+                auth.signOut().catch(() => {});
+                triggerError("Impossible de vérifier le compte. Réessayez.");
+                return null;
             });
     }
 
@@ -564,23 +447,14 @@
         statusEl.className = "status-info";
         setLockState(true);
 
-        let email;
-        if (loginMode === 'identifiant') {
-            const identifiant = (idInputEl.value || '').trim();
-            if (!identifiant) {
-                triggerError("Identifiant requis.");
-                return;
-            }
-            // ✅ Miroir de resolveLoginEmail() dans provisioning.js : un identifiant
-            //    contenant déjà "@" (adresse réelle du super-admin) est gardé tel quel.
-            email = identifiant.includes('@') ? identifiant : identifiant + '@asufor.local';
-        } else {
-            email = emailMap[role];
-            if (!email) {
-                triggerError("Rôle inconnu.");
-                return;
-            }
+        const identifiant = (idInputEl.value || '').trim();
+        if (!identifiant) {
+            triggerError("Identifiant requis.");
+            return;
         }
+        // ✅ Miroir de resolveLoginEmail() dans provisioning.js : un identifiant
+        //    contenant déjà "@" (adresse réelle du super-admin) est gardé tel quel.
+        const email = identifiant.includes('@') ? identifiant : identifiant + '@asufor.local';
 
         // ✅ CORRECTION : Validation du code avant envoi (6 chiffres uniquement)
         if (!/^\d{6}$/.test(code)) {

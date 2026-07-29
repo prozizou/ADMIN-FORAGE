@@ -199,6 +199,19 @@ test('ForageContext : LEGACY actif par défaut (aucune bascule prématurée)', (
     assert.strictEqual(ForageContext.paths('diandioly').compteurs, 'asufor_db_diandioly');
 });
 
+test('ForageContext : LEGACY ne s\'applique QU\'à Diandioly (isolation multi-forage)', () => {
+    // Régression : un président d'un AUTRE forage ne doit JAMAIS retomber sur les
+    // chemins historiques de Diandioly, même si LEGACY est encore actif pour ce
+    // dernier — sinon ses données se mélangent avec celles de Diandioly.
+    const p = ForageContext.paths('ogo');
+    assert.strictEqual(p.compteurs, 'forages/ogo/compteurs');
+    assert.strictEqual(p.backup, 'forages/ogo/backup');
+    assert.strictEqual(p.agents, 'forages/ogo/agents');
+    assert.strictEqual(p.depenses, 'forages/ogo/depenses');
+    assert.strictEqual(p.config, 'forages/ogo/config');
+    assert.notStrictEqual(p.compteurs, 'asufor_db_diandioly');
+});
+
 test('ForageContext : détection du super-admin', () => {
     assert.strictEqual(ForageContext.isSuperadmin('prozizou298@gmail.com'), true);
     assert.strictEqual(ForageContext.isSuperadmin('  Prozizou298@Gmail.com '), true);

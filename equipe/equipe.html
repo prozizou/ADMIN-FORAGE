@@ -142,8 +142,8 @@
         </div>
 
         <div class="field">
-            <label for="m_login">Identifiant</label>
-            <input type="text" id="m_login" placeholder="Ex: fatou.ndiaye" autocomplete="off" maxlength="60">
+            <label for="m_login">Numéro de téléphone (identifiant)</label>
+            <input type="tel" id="m_login" placeholder="Ex: 770000000 (sans indicatif)" inputmode="tel" autocomplete="off" maxlength="15">
         </div>
 
         <div class="field">
@@ -172,7 +172,7 @@
         <h2>👥 Mon équipe</h2>
         <table>
             <thead>
-                <tr><th>Nom</th><th>Identifiant</th><th>Rôle</th></tr>
+                <tr><th>Nom</th><th>Téléphone</th><th>Rôle</th></tr>
             </thead>
             <tbody id="teamList">
                 <tr class="empty-row"><td colspan="3">Chargement…</td></tr>
@@ -270,7 +270,9 @@
         clearErrors();
         const forageKey = currentForageKey();
         const nom   = document.getElementById('m_nom').value.trim();
-        const login = document.getElementById('m_login').value.trim();
+        // Identifiant = numéro de téléphone SANS indicatif (même convention que
+        // agent_tel ailleurs dans l'app).
+        const login = document.getElementById('m_login').value.trim().replace(/[\s\-.]/g, '');
         const role  = document.getElementById('m_role').value;
         const pin   = document.getElementById('m_pin').value;
         const pin2  = document.getElementById('m_pin2').value;
@@ -278,11 +280,11 @@
         let valid = true;
         if (!forageKey) { if (session.isSuperadmin) markError('forageSelect'); valid = false; }
         if (!nom)   { markError('m_nom');   valid = false; }
-        if (!login) { markError('m_login'); valid = false; }
+        if (!/^\d{7,15}$/.test(login)) { markError('m_login'); valid = false; }
         if (!/^\d{6}$/.test(pin)) { markError('m_pin'); valid = false; }
         if (pin !== pin2) { markError('m_pin2'); valid = false; }
 
-        if (!valid) { showMsg('Veuillez corriger les champs en rouge.', true); return; }
+        if (!valid) { showMsg('Veuillez corriger les champs en rouge (téléphone : 7-15 chiffres sans indicatif).', true); return; }
 
         btn.disabled = true;
         if (window.AsuforLoader) AsuforLoader.show('Création du compte…');

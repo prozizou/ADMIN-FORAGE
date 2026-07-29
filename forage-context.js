@@ -12,11 +12,15 @@
  *   • Les données vivent sous  forages/{forageKey}/{compteurs,backup,agents,depenses,config}.
  *   • Super-admin (prozizou298@gmail.com) : accès à tous les forages.
  *
- * ⚠️ PHASE 1 — mode LEGACY :
- *   Les données réelles sont ENCORE aux chemins historiques (asufor_db_diandioly,
- *   asufor_backup, db_agents, asufor_depenses). Ce module renvoie donc ces chemins
- *   par défaut : aucune migration, aucun changement visible. La bascule vers
- *   forages/{key}/… se fera à la phase de migration en passant LEGACY à false.
+ * ⚠️ PHASE 1 — mode LEGACY (scopé à Diandioly UNIQUEMENT, voir paths()) :
+ *   Les données de Diandioly sont ENCORE aux chemins historiques (asufor_db_diandioly,
+ *   asufor_backup, db_agents, asufor_depenses) : c'est le SEUL forage qui utilise
+ *   legacyPaths(), tant que sa migration (Phase 4) n'a pas eu lieu. Tout AUTRE
+ *   forage (créé via admin/admin.html après la mise en place du multi-forage) n'a
+ *   jamais eu de données aux chemins historiques : il utilise TOUJOURS
+ *   forages/{forageKey}/… dès sa création, même si LEGACY reste à true pour
+ *   Diandioly. Sans cette distinction, un président d'un AUTRE forage se
+ *   retrouvait à lire/écrire les données de Diandioly (bug constaté en prod).
  *
  * Double usage :
  *   • Navigateur : <script src="../forage-context.js"></script> → window.ForageContext
@@ -29,8 +33,9 @@
 })(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : this), function () {
     'use strict';
 
-    // Bascule globale legacy ↔ namespacé. Reste à true tant que la migration
-    // n'a pas eu lieu (phase 1 → 3). Passera à false à la phase de migration.
+    // Bascule legacy ↔ namespacé, applicable UNIQUEMENT au forage Diandioly
+    // (voir paths()). Reste à true tant que sa migration n'a pas eu lieu.
+    // Passera à false une fois les données de Diandioly migrées (Phase 4).
     var LEGACY = true;
 
     // Forage par défaut tant que l'identité n'est pas encore résolue au login
@@ -84,13 +89,18 @@
 
     /**
      * Construit les chemins Firebase du forage.
+     *
+     * ⚠️ LEGACY ne s'applique QU'AU forage Diandioly (key === DEFAULT_FORAGE_KEY) :
+     * c'est le seul à avoir des données aux chemins historiques. Tout autre
+     * forage utilise TOUJOURS forages/{key}/…, isolé des autres, dès sa création.
+     *
      * @param {string} [forageKey] - forage ciblé (défaut : forage de la session).
      * @param {object} [opts] - { legacy?: boolean } pour forcer le mode (tests/migration).
      * @returns {{forageKey:string, compteurs:string, backup:string, agents:string, depenses:string, config:string}}
      */
     function paths(forageKey, opts) {
         var key = forageKey || getForageKey();
-        var legacy = (opts && typeof opts.legacy === 'boolean') ? opts.legacy : LEGACY;
+        var legacy = (opts && typeof opts.legacy === 'boolean') ? opts.legacy : (LEGACY && key === DEFAULT_FORAGE_KEY);
         var p = legacy ? legacyPaths() : namespacedPaths(key);
         p.forageKey = key;
         return p;

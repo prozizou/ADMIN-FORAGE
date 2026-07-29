@@ -66,26 +66,32 @@ propre session pendant qu'il crée le compte d'un tiers.
 | **1. Fondations** | `forage-context.js` (résolution key + construction des chemins, mode LEGACY) ; `billing.js` déparamétré (`backupPath`) ; tests ; ce document. **Aucun changement de comportement.** | ✅ PR #4 |
 | **2. Adoption** | Toutes les pages consomment `ForageContext.paths()` au lieu des chemins en dur (toujours en LEGACY → comportement identique). **Aucun changement de comportement.** | ✅ cette PR |
 | **3a. Règles & modèle** | Règles de sécurité généralisées `forages/{forageKey}` + `users/{uid}` + super-admin ; ce document. | ✅ PR #7 |
-| **3b. Identité & écrans admin** | Login résout `role`/`forageKey` depuis `users/{uid}` (nouvel onglet « Identifiant » en plus du sélecteur de rôle legacy, inchangé) ; écran super-admin `admin/admin.html` (créer/lister forages & présidents) ; écran président `equipe/equipe.html` (créer son équipe) via instance Firebase secondaire (`provisioning.js`). | ✅ cette PR |
-| **4. Migration** | Script `scripts/migrate-multi-forage.js` (**dry-run** par défaut, copie non-destructive) ; bascule `ForageContext.LEGACY = false` **après vérification manuelle**. | ⚙️ outil prêt (cette PR) — exécution manuelle à venir |
+| **3b. Identité & écrans admin** | Login résout `role`/`forageKey` depuis `users/{uid}` (onglet « Identifiant » en plus du sélecteur de rôle legacy) ; écran super-admin `admin/admin.html` ; écran président `equipe/equipe.html` via instance Firebase secondaire (`provisioning.js`). | ✅ PR #11 |
+| **3c. Isolation multi-forage** | **Correctif critique** : `LEGACY` ne s'applique désormais qu'au forage `diandioly` — tout autre forage utilise `forages/{key}/…` dès sa création, jamais les chemins historiques. Identifiant = numéro de téléphone (sans indicatif) pour président/secrétaire/trésorier. | ✅ cette PR |
+| **4. Migration** | Script `scripts/migrate-multi-forage.js` (**dry-run** par défaut, copie non-destructive) ; bascule `ForageContext.LEGACY = false` **après vérification manuelle**, pour Diandioly uniquement (les autres forages n'en ont pas besoin, cf. 3c). | ⚙️ outil prêt — exécution manuelle à venir |
+| **5. Retrait du login legacy** | Code prêt (onglet « Compte du forage » + sélecteur de rôle supprimés d'`index.html`, seul « Identifiant » subsiste). **⚠️ Ne pas déployer avant que le président/secrétaire/trésorier de Diandioly aient chacun un compte individuel** (téléphone + PIN) créé via `equipe/equipe.html`, sans quoi ils perdent tout accès (cf. §8). | ⚙️ code prêt — déploiement conditionné |
 
-### Bascule LEGACY
+### Bascule LEGACY (précision post-bug isolation)
 
-`forage-context.js` expose `LEGACY = true` en phase 1–4 : les chemins renvoyés
-restent les chemins historiques, donc **rien ne casse**. `LEGACY` ne passe à
-`false` qu'**après** avoir migré et vérifié les données (§8), en éditant
-`forage-context.js` à la main — jamais automatiquement, puisque c'est le
-verrou qui fait basculer toute l'application de production vers
-`forages/{key}/…` en une seule modification.
+`forage-context.js` expose `LEGACY = true`, mais **uniquement pour le forage
+`diandioly`** (voir `paths()`) : c'est le seul dont les données réelles sont
+encore aux chemins historiques. Tout autre forage (Ogo, etc.) utilise
+`forages/{key}/…` dès sa création, quel que soit l'état de `LEGACY` — sinon
+ses données se mélangent avec celles de Diandioly (bug constaté et corrigé
+dans cette PR). `LEGACY` ne passe à `false` qu'**après** avoir migré et
+vérifié les données de Diandioly (§8), en éditant `forage-context.js` à la
+main — jamais automatiquement.
 
 ---
 
 ## 4. Connexion (Option A retenue) — identifiant + code PIN
 
 Chaque utilisateur a un **compte individuel**. Firebase Auth reste en
-**e-mail + mot de passe** sous le capot :
+**e-mail + mot de passe** sous le capot. Seul login désormais dans `index.html`
+(le sélecteur de rôle legacy et son onglet ont été retirés — §3 phase 5) :
 
-- L'**identifiant** saisi (ex. nom d'utilisateur, ou téléphone) est mappé vers un
+- L'**identifiant** est le **numéro de téléphone sans indicatif** (7-15
+  chiffres) de la personne — président, secrétaire, trésorier — mappé vers un
   **e-mail interne synthétisé** : `{identifiant}@asufor.local`.
 - Le **PIN** (6 chiffres) sert de **mot de passe**.
 - Connexion : `signInWithEmailAndPassword('{identifiant}@asufor.local', pin)`.
@@ -145,10 +151,16 @@ La Phase 3 est un **basculement**, à exécuter dans cet ordre :
    des 3 UID (ils continuent de fonctionner sans cette fiche, voir §8).
 4. **Migrer les données** legacy → `forages/diandioly/…` (Phase 4, `npm run
    forage-dry-run -- --forage-key diandioly` puis `forage-apply`) puis passer
-   `ForageContext.LEGACY = false`.
-5. **Basculer la page de connexion** vers l'Option A (identifiant + PIN) pour
-   Diandioly : l'onglet « Identifiant » (implémenté depuis la phase 3b) devient
-   le mode par défaut/unique, le sélecteur de rôle legacy est retiré.
+   `ForageContext.LEGACY = false`. (Optionnel avant l'étape 5 — voir §3 phase 5,
+   le retrait du login legacy n'exige PAS que les données soient déjà migrées.)
+5. **Déployer le retrait du login legacy** (code déjà prêt, §3 phase 5) : **au
+   préalable**, vérifier que `users/{uid}` existe pour les 3 comptes partagés
+   Diandioly (étape 3 ci-dessus) — sans ça, `president@diandioly.com` etc. ne
+   pourront plus se connecter du tout une fois le sélecteur de rôle retiré.
+   Une fois vérifié : merger/déployer `index.html`. Les 3 comptes partagés
+   continuent de fonctionner en tapant leur e-mail complet dans le champ
+   Identifiant (reconnu grâce au « @ ») ; à terme, les remplacer par des
+   comptes individuels (téléphone + PIN) via `equipe/equipe.html`.
 6. Une fois validé, **retirer** les noeuds/règles legacy et les comptes partagés.
 
 > ⚠️ Les règles de sécurité **n'ont pas pu être testées dans ce dépôt** (pas
