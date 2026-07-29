@@ -92,7 +92,8 @@ etc.) utilise `Asufor/{key}/…` dès sa création, quel que soit l'état de
 `LEGACY` — sinon ses données se mélangent avec celles de Diandioly (bug
 constaté et corrigé dans une PR précédente). Les données de Diandioly ont
 depuis été migrées et vérifiées (§7) : `LEGACY = false` est désormais commité.
-Les nœuds legacy (`db_agents`, `asufor_db_diandioly`, `asufor_backup`,
+`asufor_db_diandioly` a été retiré (règle supprimée, noeud à supprimer
+manuellement en base) ; les autres nœuds legacy (`db_agents`, `asufor_backup`,
 `asufor_depenses`) restent en base jusqu'à l'étape 6 du runbook (retrait
 manuel, après période de validation en production) ; `legacyPaths()` reste
 disponible via `paths(key, { legacy: true })` en attendant.
@@ -309,9 +310,12 @@ dans cette même PR (voir §8) : `facteur` parfois stocké en string, et un cham
   dur ; repli sur la valeur par défaut si `config` absent.
 - **Comptes partagés actuels** (`president@diandioly.com`…) : conservés jusqu'à
   l'étape 6 du runbook, puis retirés.
-- **Règles legacy** (`db_agents`, `asufor_db_diandioly`, `asufor_backup`,
-  `asufor_depenses`) : conservées tant que `LEGACY = true` ; à retirer après la
-  migration (Phase 4).
+- **Règles legacy** (`db_agents`, `asufor_backup`, `asufor_depenses`) :
+  conservées pour l'instant (étape 6 du runbook restante) ; la règle de
+  `asufor_db_diandioly` a été retirée de `database.rules.json` — nécessite un
+  `firebase deploy --only database` pour prendre effet, **et** la suppression
+  manuelle du noeud lui-même (console Firebase ou Admin SDK, aucun accès
+  automatisé depuis ce dépôt).
 - **`facteur` en string** : confirmé sur un export réel (281/417 compteurs).
   `.validate` accepte désormais `isNumber() || isString()`, comme `last_index`
   déjà — `billing.js` normalise dans tous les cas via `toInt()`.

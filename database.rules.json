@@ -52,31 +52,12 @@
     },
 
     // ============ COMPTEURS / RELEVÉS (cycle courant) ============
-    "asufor_db_diandioly": {
-      // Lecture : tous les rôles authentifiés (stats, impression, anomalies).
-      ".read": "auth != null",
-
-      "$recordId": {
-        // Création : président ou secrétaire uniquement.
-        // Mise à jour (paiement, anomalie, archivage) : les trois rôles connus.
-        ".write": "auth != null && ( (!data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')) || (data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')) )",
-
-        // Validation des champs critiques. Les autres champs applicatifs
-        // (statut/status/facture/print/apaid/arrieres/anomaly_*/last_modified*…)
-        // restent permis pour ne pas casser les écritures partielles existantes.
-        "name":            { ".validate": "newData.isString() && newData.val().length <= 100" },
-        "numero_compteur": { ".validate": "newData.isString()" },
-        "new_index":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
-        "last_index":      { ".validate": "newData.isString() || newData.isNumber()" },
-        // ⚠️ Données réelles : ~2/3 des 417 compteurs stockent "facteur" en STRING
-        // ("250") plutôt qu'en number — comme last_index ci-dessus, on tolère les
-        // deux (billing.js le convertit systématiquement via toInt()).
-        "facteur":         { ".validate": "newData.isNumber() || newData.isString()" },
-        "tel":             { ".validate": "!newData.exists() || newData.val().matches(/^[0-9]{0,15}$/)" },
-        "agent_id":        { ".validate": "newData.isString()" },
-        "$other":          { ".validate": true }
-      }
-    },
+    // ⚠️ Noeud "asufor_db_diandioly" RETIRÉ (ex-Phase 4/étape 6 du runbook,
+    // voir docs/MULTI-FORAGE.md) : les compteurs de Diandioly vivent désormais
+    // sous Asufor/Asufor_diandioly/compteurs (LEGACY = false, forage-context.js).
+    // Après suppression du noeud legacy en base (console Firebase / Admin SDK),
+    // ce refus par défaut (".read"/".write": false à la racine) s'applique — plus
+    // aucune règle ne couvre ce chemin, intentionnellement.
 
     // ============ ARCHIVES DE CYCLE (reset/clôture) ============
     "asufor_backup": {
