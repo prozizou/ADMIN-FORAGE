@@ -38,6 +38,11 @@
         "zone":       { ".validate": "newData.isString() && newData.val().length <= 100" },
         "siege":      { ".validate": "newData.isString()" },
         "agent_id":   { ".validate": "newData.isString()" },
+        // ⚠️  Données réelles : les 6 agents existants ont ce champ avec un ESPACE
+        // ("agent id") au lieu de "agent_id" — un export Firebase confirmé l'a
+        // montré. Toléré explicitement pour ne pas bloquer leurs futures écritures ;
+        // les nouveaux agents créés par agents/agent.html utilisent "agent_id".
+        "agent id":   { ".validate": "newData.isString()" },
         "key":        { ".validate": "newData.isString()" },
         "id_source":  { ".validate": "newData.isString()" },
         "created_at": { ".validate": "newData.isString()" },
@@ -63,7 +68,10 @@
         "numero_compteur": { ".validate": "newData.isString()" },
         "new_index":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
         "last_index":      { ".validate": "newData.isString() || newData.isNumber()" },
-        "facteur":         { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        // ⚠️ Données réelles : ~2/3 des 417 compteurs stockent "facteur" en STRING
+        // ("250") plutôt qu'en number — comme last_index ci-dessus, on tolère les
+        // deux (billing.js le convertit systématiquement via toInt()).
+        "facteur":         { ".validate": "newData.isNumber() || newData.isString()" },
         "tel":             { ".validate": "!newData.exists() || newData.val().matches(/^[0-9]{0,15}$/)" },
         "agent_id":        { ".validate": "newData.isString()" },
         "$other":          { ".validate": true }
@@ -175,7 +183,9 @@
             "numero_compteur": { ".validate": "newData.isString()" },
             "new_index":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
             "last_index":      { ".validate": "newData.isString() || newData.isNumber()" },
-            "facteur":         { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            // ⚠️ Cf. commentaire équivalent sur asufor_db_diandioly ci-dessus : les
+            // données réelles stockent souvent "facteur" en string.
+            "facteur":         { ".validate": "newData.isNumber() || newData.isString()" },
             "$other":          { ".validate": true }
           }
         },

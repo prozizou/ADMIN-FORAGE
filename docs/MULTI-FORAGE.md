@@ -239,6 +239,16 @@ branding minimal (« ASUFOR Diandioly ») est créé automatiquement.
 4. Les noeuds/comptes legacy restent en place jusqu'à l'étape 6 du runbook —
    ne les retirez qu'après une période de validation en production.
 
+### Validé contre un export réel
+
+Le script a été testé (dry-run) contre un export réel de la base ASUFOR
+Diandioly : **6 agents, 417 compteurs, 2 cycles d'archives (2026-05, 2026-06),
+0 dépense** (le noeud `asufor_depenses` n'existe pas encore en production — le
+script gère ce cas, `--depenses` peut pointer vers `{}`). Cet export a aussi
+révélé deux écarts entre les données réelles et les règles Firebase, corrigés
+dans cette même PR (voir §8) : `facteur` parfois stocké en string, et un champ
+`"agent id"` (avec espace) sur les 6 agents existants.
+
 ---
 
 ## 8. Points d'attention
@@ -252,6 +262,13 @@ branding minimal (« ASUFOR Diandioly ») est créé automatiquement.
 - **Règles legacy** (`db_agents`, `asufor_db_diandioly`, `asufor_backup`,
   `asufor_depenses`) : conservées tant que `LEGACY = true` ; à retirer après la
   migration (Phase 4).
+- **`facteur` en string** : confirmé sur un export réel (281/417 compteurs).
+  `.validate` accepte désormais `isNumber() || isString()`, comme `last_index`
+  déjà — `billing.js` normalise dans tous les cas via `toInt()`.
+- **`"agent id"` (avec espace)** : les 6 agents existants ont ce champ au lieu
+  de `agent_id` (confirmé sur le même export). Ajouté explicitement à la liste
+  autorisée dans `db_agents.$agentId` pour ne pas bloquer leurs écritures
+  futures (`forages/{key}/agents` était déjà permissif — `$other:true`).
 - **Comptes legacy sans fiche `users/{uid}`** (`president@diandioly.com`…) : la
   connexion via l'onglet « Compte du forage » continue de fonctionner à
   l'identique (repli sur le rôle sélectionné + `forageKey` par défaut
