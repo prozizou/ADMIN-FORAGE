@@ -119,6 +119,7 @@
 
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
         th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--glass-border); }
+        .key-cell { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem; opacity: 0.85; user-select: all; }
         th { opacity: 0.6; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.5px; }
         .empty-row td { opacity: 0.5; text-align: center; padding: 20px; }
 
@@ -187,12 +188,16 @@
             <h2>📋 Forages existants</h2>
             <table>
                 <thead>
-                    <tr><th>Forage</th><th>Siège</th><th>Président(s)</th></tr>
+                    <tr><th>Forage</th><th>Clé</th><th>Siège</th><th>Président(s)</th></tr>
                 </thead>
                 <tbody id="forageList">
-                    <tr class="empty-row"><td colspan="3">Chargement…</td></tr>
+                    <tr class="empty-row"><td colspan="4">Chargement…</td></tr>
                 </tbody>
             </table>
+            <p style="font-size: 0.72rem; opacity: 0.5; margin: 10px 2px 0;">
+                La « Clé » identifie le forage dans Firebase (utilisée par le script
+                <code>scripts/migrate-multi-forage.js --forage-key</code> lors de la migration).
+            </p>
         </div>
     </div>
 </div>
@@ -251,18 +256,18 @@
 
             const keys = Object.keys(forages);
             if (keys.length === 0) {
-                forageList.innerHTML = '<tr class="empty-row"><td colspan="3">Aucun forage créé pour l\'instant.</td></tr>';
+                forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Aucun forage créé pour l\'instant.</td></tr>';
                 return;
             }
 
             forageList.innerHTML = keys.map((key) => {
                 const cfg = forages[key].config || {};
                 const presidents = (presidentsByForage[key] || []).map(escHtml).join(', ') || '—';
-                return '<tr><td>' + escHtml(cfg.nom || key) + '</td><td>' + escHtml(cfg.siege || '—') + '</td><td>' + presidents + '</td></tr>';
+                return '<tr><td>' + escHtml(cfg.nom || key) + '</td><td class="key-cell">' + escHtml(key) + '</td><td>' + escHtml(cfg.siege || '—') + '</td><td>' + presidents + '</td></tr>';
             }).join('');
         } catch (e) {
             console.error('Chargement forages échoué :', e);
-            forageList.innerHTML = '<tr class="empty-row"><td colspan="3">Erreur de chargement.</td></tr>';
+            forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Erreur de chargement.</td></tr>';
         }
     }
 

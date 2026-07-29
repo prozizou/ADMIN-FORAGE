@@ -67,14 +67,16 @@ propre session pendant qu'il crée le compte d'un tiers.
 | **2. Adoption** | Toutes les pages consomment `ForageContext.paths()` au lieu des chemins en dur (toujours en LEGACY → comportement identique). **Aucun changement de comportement.** | ✅ cette PR |
 | **3a. Règles & modèle** | Règles de sécurité généralisées `forages/{forageKey}` + `users/{uid}` + super-admin ; ce document. | ✅ PR #7 |
 | **3b. Identité & écrans admin** | Login résout `role`/`forageKey` depuis `users/{uid}` (nouvel onglet « Identifiant » en plus du sélecteur de rôle legacy, inchangé) ; écran super-admin `admin/admin.html` (créer/lister forages & présidents) ; écran président `equipe/equipe.html` (créer son équipe) via instance Firebase secondaire (`provisioning.js`). | ✅ cette PR |
-| **4. Migration** | Bascule `ForageContext.LEGACY = false` ; script **dry-run** puis migration des données Diandioly vers `forages/{keyDiandioly}/…`. | à venir |
+| **4. Migration** | Script `scripts/migrate-multi-forage.js` (**dry-run** par défaut, copie non-destructive) ; bascule `ForageContext.LEGACY = false` **après vérification manuelle**. | ⚙️ outil prêt (cette PR) — exécution manuelle à venir |
 
 ### Bascule LEGACY
 
-`forage-context.js` expose `LEGACY = true` en phase 1–3 : les chemins renvoyés
-restent les chemins historiques, donc **rien ne casse**. La phase 4 passe
-`LEGACY` à `false` **après** avoir migré les données, ce qui fait basculer toute
-l'application vers `forages/{key}/…` en une seule modification.
+`forage-context.js` expose `LEGACY = true` en phase 1–4 : les chemins renvoyés
+restent les chemins historiques, donc **rien ne casse**. `LEGACY` ne passe à
+`false` qu'**après** avoir migré et vérifié les données (§8), en éditant
+`forage-context.js` à la main — jamais automatiquement, puisque c'est le
+verrou qui fait basculer toute l'application de production vers
+`forages/{key}/…` en une seule modification.
 
 ---
 
@@ -138,7 +140,7 @@ La Phase 3 est un **basculement**, à exécuter dans cet ordre :
    legacy existants** (`president@diandioly.com`…) — en écrivant manuellement
    `users/{uid} = { role, forageKey:'diandioly', login, nom }` dans la console
    Firebase pour chacun des 3 UID (ils continuent de fonctionner sans cette
-   fiche, voir §7 ; l'écrire les aligne simplement sur le modèle cible).
+   fiche, voir §8 ; l'écrire les aligne simplement sur le modèle cible).
 4. **Migrer les données** legacy → `forages/{keyDiandioly}/…` (Phase 4, script
    dry-run d'abord) puis passer `ForageContext.LEGACY = false`.
 5. **Basculer la page de connexion** vers l'Option A (identifiant + PIN) pour
@@ -178,7 +180,68 @@ La Phase 3 est un **basculement**, à exécuter dans cet ordre :
 
 ---
 
-## 7. Points d'attention
+## 7. Script de migration (Phase 4) — `scripts/migrate-multi-forage.js`
+
+Copie les 4 noeuds legacy vers `forages/{forageKey}/…`, **sans rien supprimer**
+(la suppression des noeuds legacy reste l'étape 6, manuelle, du runbook). Suit
+exactement le pattern de `scripts/migrate-arrears.js` : dry-run par défaut,
+mode fichiers JSON pour tester sans risque, mode Firebase Admin SDK avec
+`--apply` pour l'écriture réelle.
+
+### Étape 1 — Simulation (aucune écriture, 100 % sûr)
+
+Exportez les 4 noeuds legacy en JSON (console Firebase → icône ⋮ → Exporter),
+puis :
+
+```bash
+cd scripts
+node migrate-multi-forage.js --dry-run \
+     --forage-key <forageKeyDiandioly> \
+     --agents ./db_agents.json \
+     --compteurs ./asufor_db_diandioly.json \
+     --backup ./asufor_backup.json \
+     --depenses ./asufor_depenses.json
+
+# ou, via le raccourci npm (scripts/package.json) :
+npm run forage-dry-run -- --forage-key <forageKeyDiandioly>
+```
+
+La `forageKey` s'obtient dans `admin/admin.html` (colonne « Clé » du tableau
+« Forages existants »), une fois le forage Diandioly provisionné (runbook
+étape 3). Le rapport affiche le nombre d'entrées par noeud, sans rien écrire.
+
+### Étape 2 — Application réelle
+
+```bash
+npm install            # firebase-admin (scripts/package.json)
+node migrate-multi-forage.js --apply \
+     --forage-key <forageKeyDiandioly> \
+     --service-account ./serviceAccountKey.json \
+     --db-url https://asufor-67a06-default-rtdb.firebaseio.com
+
+# ou : npm run forage-apply -- --forage-key <forageKeyDiandioly>
+```
+
+Le script refuse d'écraser un forage déjà peuplé (`forages/{key}/compteurs`
+non vide) sauf `--force`. Si `forages/{key}/config` n'existe pas encore, un
+branding minimal (« ASUFOR Diandioly ») est créé automatiquement.
+
+### Étape 3 — Vérification puis bascule
+
+1. Vérifiez dans la console Firebase que `forages/{forageKey}/{agents,
+   compteurs,backup,depenses}` contient bien les mêmes données que les noeuds
+   legacy (comptages, quelques enregistrements au hasard).
+2. Testez l'application en pointant temporairement `ForageContext.LEGACY` sur
+   `false` en local (jamais en committant directement sur `main` sans test).
+3. Une fois confiant : commit `LEGACY = false` dans `forage-context.js`,
+   déployez. Toute l'application bascule vers `forages/{key}/…` en un seul
+   changement (§3 « Bascule LEGACY »).
+4. Les noeuds/comptes legacy restent en place jusqu'à l'étape 6 du runbook —
+   ne les retirez qu'après une période de validation en production.
+
+---
+
+## 8. Points d'attention
 
 - **billing.js** : `buildPaymentUpdates({ backupPath })` reçoit déjà `P.backup`
   (adopté en Phase 2) ; en mode namespacé ce sera `forages/{key}/backup`.

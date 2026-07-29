@@ -2,12 +2,14 @@
   "name": "asufor-scripts",
   "version": "1.0.0",
   "private": true,
-  "description": "Scripts de maintenance ASUFOR (migration des arriérés)",
+  "description": "Scripts de maintenance ASUFOR (migration des arriérés, migration multi-forage)",
   "type": "commonjs",
   "scripts": {
     "test": "node billing.test.js",
     "dry-run": "node migrate-arrears.js --dry-run --active ./active.json --backup ./backup.json --report ./rapport-arrieres.csv",
-    "apply": "node migrate-arrears.js --apply --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com"
+    "apply": "node migrate-arrears.js --apply --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com",
+    "forage-dry-run": "node migrate-multi-forage.js --dry-run --agents ./db_agents.json --compteurs ./asufor_db_diandioly.json --backup ./asufor_backup.json --depenses ./asufor_depenses.json",
+    "forage-apply": "node migrate-multi-forage.js --apply --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com"
   },
   "optionalDependencies": {
     "firebase-admin": "^12.0.0"
