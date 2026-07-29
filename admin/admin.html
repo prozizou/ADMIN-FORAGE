@@ -158,8 +158,8 @@
                 </div>
             </div>
             <div class="field">
-                <label for="f_key">Clé personnalisée (optionnel)</label>
-                <input type="text" id="f_key" placeholder="Ex: diandioly — laisser vide pour une clé générée automatiquement" autocomplete="off" maxlength="40">
+                <label for="f_key">Clé du forage (auto-générée depuis le siège, modifiable)</label>
+                <input type="text" id="f_key" placeholder="Ex: Asufor_ogo" autocomplete="off" maxlength="50">
             </div>
 
             <h3>Président</h3>
@@ -208,7 +208,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, get, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { createAccount } from "../provisioning.js";
 
@@ -241,10 +241,31 @@
         if (el) el.classList.add('error');
     }
 
+    // ✅ Nouveau paradigme : chaque forage vit sous Asufor/{forageKey}, avec
+    // forageKey = "Asufor_<village>" (lisible, dérivé du siège saisi).
+    function slugify(text) {
+        return String(text || '')
+            .normalize('NFD').replace(/\p{Diacritic}/gu, '') // accents (é→e, etc.)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 40);
+    }
+
+    const fKeyEl   = document.getElementById('f_key');
+    const fSiegeEl = document.getElementById('f_siege');
+    let fKeyManuallyEdited = false;
+    fKeyEl.addEventListener('input', () => { fKeyManuallyEdited = fKeyEl.value.trim() !== ''; });
+    fSiegeEl.addEventListener('input', () => {
+        if (fKeyManuallyEdited) return;
+        const slug = slugify(fSiegeEl.value);
+        fKeyEl.value = slug ? 'Asufor_' + slug : '';
+    });
+
     async function loadForages() {
         try {
             const [forageSnap, usersSnap] = await Promise.all([
-                get(ref(db, 'forages')),
+                get(ref(db, 'Asufor')),
                 get(ref(db, 'users'))
             ]);
             const forages = forageSnap.val() || {};
@@ -289,34 +310,29 @@
 
         let valid = true;
         if (!fNom)   { markError('f_nom');   valid = false; }
-        // ✅ Clé personnalisée optionnelle (ex: "diandioly") : format restreint pour
-        // rester un chemin Firebase sûr et lisible (pas de caractères spéciaux).
-        if (fKey && !/^[a-z0-9_-]{2,40}$/.test(fKey)) { markError('f_key'); valid = false; }
+        // ✅ Clé du forage = Asufor_<village>, dérivée automatiquement du siège
+        // (modifiable). Format imposé pour garantir l'isolation par village.
+        if (!/^Asufor_[a-z0-9_]{1,40}$/.test(fKey)) { markError('f_key'); valid = false; }
         if (!pNom)   { markError('p_nom');   valid = false; }
         if (!/^\d{7,15}$/.test(pLogin)) { markError('p_login'); valid = false; }
         if (!/^\d{6}$/.test(pPin)) { markError('p_pin'); valid = false; }
         if (pPin !== pPin2) { markError('p_pin2'); valid = false; }
 
-        if (!valid) { showMsg('Veuillez corriger les champs en rouge (téléphone : 7-15 chiffres sans indicatif ; clé : minuscules/chiffres/tirets).', true); return; }
+        if (!valid) { showMsg('Veuillez corriger les champs en rouge (téléphone : 7-15 chiffres sans indicatif ; clé : doit commencer par "Asufor_").', true); return; }
 
         btn.disabled = true;
         if (window.AsuforLoader) AsuforLoader.show('Création du forage…');
 
         try {
-            let forageKey;
-            if (fKey) {
-                const existing = await get(ref(db, 'forages/' + fKey));
-                if (existing.exists()) {
-                    markError('f_key');
-                    showMsg('Cette clé est déjà utilisée par un autre forage.', true);
-                    btn.disabled = false;
-                    if (window.AsuforLoader) AsuforLoader.hide();
-                    return;
-                }
-                forageKey = fKey;
-            } else {
-                forageKey = push(ref(db, 'forages')).key;
+            const existing = await get(ref(db, 'Asufor/' + fKey));
+            if (existing.exists()) {
+                markError('f_key');
+                showMsg('Cette clé est déjà utilisée par un autre forage (renseignez un siège différent, ou modifiez la clé).', true);
+                btn.disabled = false;
+                if (window.AsuforLoader) AsuforLoader.hide();
+                return;
             }
+            const forageKey = fKey;
 
             await createAccount({
                 firebaseConfig,
@@ -329,7 +345,7 @@
                 createdByUid: auth.currentUser ? auth.currentUser.uid : ''
             });
 
-            await set(ref(db, 'forages/' + forageKey + '/config'), {
+            await set(ref(db, 'Asufor/' + forageKey + '/config'), {
                 nom: fNom,
                 siege: fSiege,
                 created_at: new Date().toISOString()
@@ -337,6 +353,7 @@
 
             showMsg('✅ Forage « ' + fNom + ' » (clé : ' + forageKey + ') et président créés.', false);
             ['f_nom', 'f_siege', 'f_key', 'p_nom', 'p_login', 'p_pin', 'p_pin2'].forEach(id => document.getElementById(id).value = '');
+            fKeyManuallyEdited = false; // prochain forage : ré-active l'auto-génération depuis le siège
             loadForages();
         } catch (e) {
             console.error('Création forage échouée :', e);

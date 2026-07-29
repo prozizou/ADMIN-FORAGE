@@ -85,10 +85,10 @@ export async function createAccount({ firebaseConfig, db, identifiant, pin, role
         created_at: new Date().toISOString()
     });
 
-    // Miroir léger dans forages/{forageKey}/team : seul moyen pour un président
+    // Miroir léger dans Asufor/{forageKey}/team : seul moyen pour un président
     // (non super-admin) de lister son équipe, les règles ne permettant pas de
     // lister le noeud "users" entier hors super-admin (cf. database.rules.json).
-    await set(ref(db, 'forages/' + forageKey + '/team/' + uid), {
+    await set(ref(db, 'Asufor/' + forageKey + '/team/' + uid), {
         role: role,
         nom: nom || '',
         login: login

@@ -216,7 +216,7 @@
 
     function currentForageKey() {
         if (session.isSuperadmin) return forageSel.value || '';
-        return session.forageKey || (window.ForageContext ? window.ForageContext.DEFAULT_FORAGE_KEY : 'diandioly');
+        return session.forageKey || (window.ForageContext ? window.ForageContext.DEFAULT_FORAGE_KEY : 'Asufor_diandioly');
     }
 
     async function loadTeam() {
@@ -227,7 +227,7 @@
         }
         teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Chargement…</td></tr>';
         try {
-            const snap = await get(ref(db, 'forages/' + forageKey + '/team'));
+            const snap = await get(ref(db, 'Asufor/' + forageKey + '/team'));
             const team = snap.val() || {};
             const uids = Object.keys(team);
             if (uids.length === 0) {
@@ -250,7 +250,7 @@
         if (!session.isSuperadmin) return;
         forageField.style.display = '';
         try {
-            const snap = await get(ref(db, 'forages'));
+            const snap = await get(ref(db, 'Asufor'));
             const forages = snap.val() || {};
             const keys = Object.keys(forages);
             if (keys.length === 0) {
