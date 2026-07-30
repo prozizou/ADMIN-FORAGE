@@ -126,9 +126,9 @@ window.setTab = function(tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tab-' + tabName).classList.add('active');
     displayLimit = 100;
-    // Afficher/masquer la carte de progression uniquement pour l'onglet Relevés
+    // Afficher/masquer la carte de progression pour les onglets Relevés / Non relevés
     const progressCard = document.getElementById('releves-progress-card');
-    if (progressCard) progressCard.style.display = (tabName === 'releves') ? 'block' : 'none';
+    if (progressCard) progressCard.style.display = (tabName === 'releves' || tabName === 'non-releves') ? 'block' : 'none';
     window.applyFilter();
 };
 
@@ -198,9 +198,30 @@ window.updateStatus = function(key, newStatus) {
         if (newStatus === 'paye') updates[`${p}/date_paiement`] = now;
     }
 
+    // ✅ CORRECTION : mise à jour optimiste — reflète le changement dans la liste
+    //   immédiatement, sans attendre l'aller-retour réseau vers Firebase. Le
+    //   listener onValue (loadDataForMonth) confirmera/réconciliera silencieusement
+    //   une fois l'écriture propagée ; en cas d'échec, on annule localement.
+    const previousRecord = storeReleves[key] ? { ...storeReleves[key] } : null;
+    if (storeReleves[key]) {
+        storeReleves[key] = {
+            ...storeReleves[key],
+            status: newStatus,
+            statut: newStatus === 'paye',
+            arriere: newStatus === 'paye' ? 0 : storeReleves[key].arriere
+        };
+        window.applyFilter();
+    }
+
     update(ref(db), updates)
         .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "⚠️ Facture révoquée !"))
-        .catch(err => showToast("Erreur réseau : " + err, true));
+        .catch(err => {
+            if (previousRecord) {
+                storeReleves[key] = previousRecord;
+                window.applyFilter();
+            }
+            showToast("Erreur réseau : " + err, true);
+        });
 };
 
 // --- EXPORT CSV ---
@@ -493,8 +514,13 @@ window.applyFilter = function() {
             const hasIndex = parseFloat(item.new_index || 0) > 0;
             if (!hasIndex) return false;
         }
-        
-        return true; 
+        // Onglet Non relevés : le pendant inverse — compteurs encore sans index saisi ce mois
+        if (currentTab === 'non-releves') {
+            const hasIndex = parseFloat(item.new_index || 0) > 0;
+            if (hasIndex) return false;
+        }
+
+        return true;
     });
 
     if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.calculatedAmount || 0) - (a.calculatedAmount || 0));
@@ -633,9 +659,9 @@ function renderList() {
         if (realConso < 0) {
             extraClass = 'bg-alerte-index';
             anomalyHtml = `<div style="margin-top: 8px; font-size: 0.75rem; color: #d97706; font-weight: bold;">⚠️ Erreur d'index (Nouveau < Ancien)</div>`;
-        } else if (realConso > 80) {
+        } else if (realConso > 100) {
             extraClass = 'bg-alerte-fuite';
-            anomalyHtml = `<div style="margin-top: 8px; font-size: 0.75rem; color: var(--danger); font-weight: bold;">⚠️ Alerte Fuite (> 80 m³)</div>`;
+            anomalyHtml = `<div style="margin-top: 8px; font-size: 0.75rem; color: var(--danger); font-weight: bold;">⚠️ Alerte Fuite (> 100 m³)</div>`;
         }
 
         let auditHtml = item.last_modified_by 
@@ -648,8 +674,7 @@ function renderList() {
             : '';
 
         const editBtn = (currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>
-               <button class="btn-edit" style="background:#f59e0b; margin-left:5px; color:#000;" onclick="openReplaceModal('${item.key}')" title="Remplacer le compteur"><i class="fa-solid fa-tools"></i></button>`
+            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
             : '';
 
         const statusBtn = !isPaid
@@ -900,91 +925,3 @@ window.exportPDFImpayes = function() {
     showToast("✅ Fichier PDF des impayés généré avec succès !");
 };
 
-// --- GESTION DU REMPLACEMENT DE COMPTEUR ---
-
-window.openReplaceModal = function(key) {
-    const item = storeReleves[key];
-    if (!item) {
-        showToast("Relevé introuvable.", true);
-        return;
-    }
-    document.getElementById('replace-key').value = key;
-    document.getElementById('replace-compteur').value = '';
-    document.getElementById('replace-start-index').value = '0';
-    document.getElementById('replace-modal').style.display = 'flex';
-};
-
-window.closeReplaceModal = function() {
-    document.getElementById('replace-modal').style.display = 'none';
-};
-
-window.submitReplace = function() {
-    if (currentUser.toLowerCase() !== 'président') {
-        showToast("⛔ Accès refusé : Seul le président peut remplacer un compteur.", true);
-        closeReplaceModal();
-        return;
-    }
-
-    const key = document.getElementById('replace-key').value;
-    const newCompteur = document.getElementById('replace-compteur').value.trim();
-    const startIdx = parseFloat(document.getElementById('replace-start-index').value);
-
-    if (!key || !newCompteur || isNaN(startIdx)) {
-        showToast("Veuillez remplir correctement le numéro et l'index de départ.", true);
-        return;
-    }
-
-    const item = storeReleves[key];
-    // Conversion fiable String/Number via le moteur partagé
-    const toInt = (window.Billing ? window.Billing.toInt : (v => parseFloat(v)||0));
-    const oldLastIdx = toInt(item.last_index) || 0;
-    const oldNewIdx  = toInt(item.new_index) || 0;
-    const fRaw       = toInt(item.facteur);
-    const facteur    = (fRaw && fRaw > 0) ? fRaw : 250;
-
-    // 1. Consommation non facturée sur l'ancien compteur (avant retrait)
-    let consoAncien = 0;
-    if (oldNewIdx > oldLastIdx) {
-        consoAncien = oldNewIdx - oldLastIdx;
-    }
-    const montantConsomme = consoAncien * facteur;
-
-    // 2. Dette déjà existante (arriéré courant + éventuelle facture du mois non réglée)
-    //    On lit le champ unifié `arriere` (schéma cible), avec repli sur anciens champs.
-    const detteExistante = toInt(item.arriere) || toInt(item.arrieres) || toInt(item.apaid) || 0;
-
-    // 3. Fusion : dette + consommation de l'ancien compteur ce mois-ci
-    const nouvelleDette = detteExistante + montantConsomme;
-
-    // 4. Données Firebase (schéma cible : champ `arriere`)
-    const updatedData = {
-        numero_compteur: newCompteur,
-        last_index: String(startIdx),
-        new_index: startIdx,        // Le nouveau compteur redémarre ici
-        arriere: nouvelleDette,     // Dette transférée et sécurisée sur le nouveau compteur
-        last_modified_by: currentUser + " (Remplacement)",
-        last_modified_at: new Date().toISOString()
-    };
-
-    // Si la nouvelle dette est supérieure à 0, le compte passe en impayé
-    if (nouvelleDette > 0) {
-        updatedData.status = "impaye";
-        updatedData.statut = false;
-    }
-
-    const dbPath = `${currentActivePath}/${key}`;
-    update(ref(db, dbPath), updatedData)
-        .then(() => {
-            showToast("✅ Compteur remplacé ! L'argent dû a été transféré avec succès.");
-            closeReplaceModal();
-        })
-        .catch(err => showToast("Erreur lors du remplacement : " + err, true));
-};
-
-// Permet de fermer la fenêtre en cliquant dans le vide (comme pour l'édition)
-const replaceModal = document.getElementById('replace-modal');
-if (replaceModal) {
-    replaceModal.addEventListener('click', function(e) {
-        if (e.target === this) closeReplaceModal();
-    });
-}
