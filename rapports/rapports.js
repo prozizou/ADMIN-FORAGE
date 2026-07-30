@@ -137,9 +137,16 @@ function totalDepensesAllTime() {
 }
 
 // ── Métriques d'un cycle (billing.js) ────────────────────────
-function cycleMetrics(records) {
-    let facture = 0, encaisse = 0, impayes = 0, volume = 0, nbReleves = 0, anomalies = 0;
+// ✅ CORRECTION : `impayes` reste la facture du SEUL mois (utilisé tel quel dans
+//   les rapports mensuels imprimés/exportés, où « Impayés du mois » est le libellé
+//   exact). `impayesTotal` (facture + arriérés cumulés) est la vraie somme « reste
+//   à recouvrer » — jusqu'ici absente du tableau de bord, qui affichait le montant
+//   du mois seul sous le libellé générique « Impayés », en désaccord avec le total
+//   affiché dans les statistiques (même donnée, deux chiffres très différents).
+function cycleMetrics(records, cycle) {
+    let facture = 0, encaisse = 0, impayesMois = 0, impayesTotal = 0, volume = 0, nbReleves = 0, anomalies = 0;
     const zones = {};
+    const beforeCycle = (cycle == null || cycle === 'actuel') ? '9999-99' : cycle;
     records.forEach(r => {
         const zone = zoneOf(r);
         if (!zones[zone]) zones[zone] = { facture: 0, encaisse: 0, impaye: 0, volume: 0, nb: 0 };
@@ -151,23 +158,32 @@ function cycleMetrics(records) {
 
         facture += c.montant; volume += c.conso;
         zones[zone].facture += c.montant; zones[zone].volume += c.conso;
-        if (B.isPaid(r)) { encaisse += c.montant; zones[zone].encaisse += c.montant; }
-        else { impayes += c.montant; zones[zone].impaye += c.montant; }
+        if (B.isPaid(r)) {
+            encaisse += c.montant; zones[zone].encaisse += c.montant;
+        } else {
+            impayesMois += c.montant;
+            const arr = B.computeArrears(r, indexedBackups, { beforeCycle });
+            const totalDu = c.montant + arr.arriere;
+            impayesTotal += totalDu;
+            zones[zone].impaye += totalDu;
+        }
     });
     const taux = facture > 0 ? (encaisse / facture * 100) : 0;
-    return { facture, encaisse, impayes, volume, anomalies, nbCompteurs: records.length, nbReleves, taux, zones };
+    return { facture, encaisse, impayes: impayesMois, impayesTotal, volume, anomalies, nbCompteurs: records.length, nbReleves, taux, zones };
 }
 
 // ── Tableau de bord ──────────────────────────────────────────
 function renderDashboard() {
-    const cur = cycleMetrics(recordsOfCycle(selCycle));
-    const cmp = cmpCycle ? cycleMetrics(recordsOfCycle(cmpCycle)) : null;
+    const cur = cycleMetrics(recordsOfCycle(selCycle), selCycle);
+    const cmp = cmpCycle ? cycleMetrics(recordsOfCycle(cmpCycle), cmpCycle) : null;
 
     setText('period-label', monthLabel(selCycle));
 
     setText('kpi-taux', cur.taux.toFixed(1) + ' %');
     setText('kpi-recettes', fMoney(cur.encaisse));
-    setText('kpi-impayes', fMoney(cur.impayes));
+    // ✅ « Reste à recouvrer » (facture du mois + arriérés), aligné sur stats.js —
+    //   avant : facture du mois seule, en désaccord avec l'écran Statistiques.
+    setText('kpi-impayes', fMoney(cur.impayesTotal));
     setText('kpi-volume', fNumber(cur.volume) + ' m³');
 
     const bar = document.getElementById('kpi-taux-bar');
@@ -179,7 +195,7 @@ function renderDashboard() {
     // Deltas de comparaison
     renderDeltaPct('d-taux', cur.taux, cmp && cmp.taux, true);
     renderDelta('d-recettes', cur.encaisse, cmp && cmp.encaisse, true);
-    renderDelta('d-impayes', cur.impayes, cmp && cmp.impayes, false);
+    renderDelta('d-impayes', cur.impayesTotal, cmp && cmp.impayesTotal, false);
     renderDelta('d-volume', cur.volume, cmp && cmp.volume, true, ' m³');
 
     const soldeMoisNet = cur.encaisse - expensesTotalOfCycle(selCycle);
@@ -480,7 +496,7 @@ function depensesTable(doc, expenses, total, encaisse, labelTotal) {
 
 function genererMensuel() {
     const cycle = selCycle;
-    const m = cycleMetrics(recordsOfCycle(cycle));
+    const m = cycleMetrics(recordsOfCycle(cycle), cycle);
     const expenses = expensesOfCycle(cycle);
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
 
@@ -498,6 +514,7 @@ function genererMensuel() {
             ['Montant facturé', fMoney(m.facture)],
             ['Montant encaissé', fMoney(m.encaisse)],
             ['Impayés du mois', fMoney(m.impayes)],
+            ['Reste à recouvrer (dont arriérés)', fMoney(m.impayesTotal)],
             ['Taux de recouvrement', m.taux.toFixed(1) + ' %'],
             ['Anomalies signalées', String(m.anomalies)]
         ],
@@ -532,7 +549,7 @@ function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses }) 
     cycles.forEach(cycle => {
         const recs = recordsOfCycle(cycle);
         if (!recs.length) return;
-        const m = cycleMetrics(recs);
+        const m = cycleMetrics(recs, cycle);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
         rows.push([
             monthLabel(cycle).replace(' ' + year, ''),
@@ -631,7 +648,7 @@ window.exporterCSV = function () {
 
 function exporterMensuelCSV() {
     const cycle = selCycle;
-    const m = cycleMetrics(recordsOfCycle(cycle));
+    const m = cycleMetrics(recordsOfCycle(cycle), cycle);
     const expenses = expensesOfCycle(cycle);
     const depTotal = expensesTotalOfCycle(cycle);
 
@@ -645,6 +662,7 @@ function exporterMensuelCSV() {
         ['Montant facturé (FCFA)', Math.round(m.facture)],
         ['Montant encaissé (FCFA)', Math.round(m.encaisse)],
         ['Impayés du mois (FCFA)', Math.round(m.impayes)],
+        ['Reste à recouvrer, dont arriérés (FCFA)', Math.round(m.impayesTotal)],
         ['Taux de recouvrement (%)', m.taux.toFixed(1)],
         ['Anomalies signalées', m.anomalies],
         [],
@@ -670,7 +688,7 @@ function exporterPeriodeCSV({ cycles, year, titre, sousTitre, filename, expenses
         const recs = recordsOfCycle(cycle);
         if (!recs.length) return;
         any = true;
-        const m = cycleMetrics(recs);
+        const m = cycleMetrics(recs, cycle);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
         rows.push([monthLabel(cycle).replace(' ' + year, ''), m.nbCompteurs, Math.round(m.volume), Math.round(m.facture), Math.round(m.encaisse), m.taux.toFixed(1)]);
     });
