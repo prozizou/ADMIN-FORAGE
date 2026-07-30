@@ -160,7 +160,27 @@
 
         // ── Config / branding : président du forage ou super-admin ──
         "config": {
-          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )"
+          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )",
+          // ✅ CORRECTION v4 : next_counter_number — compteur atomique pour la numérotation des compteurs.
+          //    Type number, >= 1, modifiable par président du forage ou super-admin.
+          "next_counter_number": {
+            ".validate": "newData.isNumber() && newData.val() >= 1"
+          },
+          // ✅ CORRECTION v4 : maintenance_passcode_hash — hash SHA-256 du passcode de maintenance.
+          //    Stocké en hex 64 chars, jamais en clair dans la base.
+          "maintenance_passcode_hash": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)"
+          },
+          // ✅ CORRECTION v4 : maintenance_passcode_cycle — mois de validité du passcode.
+          "maintenance_passcode_cycle": {
+            ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}$/)"
+          },
+          // Champs de branding existants (tolérés)
+          "siege":          { ".validate": "newData.isString()" },
+          "nom":            { ".validate": "newData.isString()" },
+          "telephone":      { ".validate": "newData.isString()" },
+          "logo":           { ".validate": "newData.isString()" },
+          "$other":         { ".validate": true }
         },
 
         // ── Agents (relevés terrain) ──
@@ -172,7 +192,17 @@
             "agent":     { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 100" },
             "agent_tel": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{7,15}$/)" },
             "zone":      { ".validate": "newData.isString() && newData.val().length <= 100" },
-            "$other":    { ".validate": true }
+            // ✅ CORRECTION v4 : Accepter passcode_hash (SHA-256, 64 chars hex) pour les nouveaux agents.
+            //    Le champ legacy 'passcode' (6 chiffres en clair) reste toléré pour les agents existants.
+            "passcode_hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
+            "passcode":       { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{6}$/)" },
+            "siege":          { ".validate": "newData.isString()" },
+            "agent_id":       { ".validate": "newData.isString()" },
+            "agent id":       { ".validate": "newData.isString()" },
+            "key":            { ".validate": "newData.isString()" },
+            "id_source":      { ".validate": "newData.isString()" },
+            "created_at":     { ".validate": "newData.isString()" },
+            "$other":         { ".validate": false }
           }
         },
 
@@ -228,6 +258,28 @@
             "nom":   { ".validate": "newData.isString()" },
             "login": { ".validate": "newData.isString()" },
             "$other": { ".validate": false }
+          }
+        },
+
+        // ✅ CORRECTION v4 : Journal d'audit des modifications d'arriérés.
+        //    Écriture par tout membre authentifié du forage (pour tracer qui a modifié quoi).
+        //    Lecture uniquement par président et super-admin.
+        "audit_arrieres": {
+          ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('role').val() == 'président' )",
+          "$entryId": {
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'secrétaire' || root.child('users').child(auth.uid).child('role').val() == 'trésorier')) )",
+            ".validate": "newData.hasChildren(['compteurKey', 'compteur', 'proprietaire', 'zone', 'ancienArrieres', 'nouveauArrieres', 'modifiePar', 'modifieRole', 'modifieLe', 'sessionForage'])",
+            "compteurKey":     { ".validate": "newData.isString()" },
+            "compteur":        { ".validate": "newData.isString()" },
+            "proprietaire":    { ".validate": "newData.isString()" },
+            "zone":            { ".validate": "newData.isString()" },
+            "ancienArrieres":  { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "nouveauArrieres": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "modifiePar":      { ".validate": "newData.isString()" },
+            "modifieRole":     { ".validate": "newData.isString()" },
+            "modifieLe":       { ".validate": "newData.isString()" },
+            "sessionForage":   { ".validate": "newData.isString()" },
+            "$other":          { ".validate": false }
           }
         }
       }
