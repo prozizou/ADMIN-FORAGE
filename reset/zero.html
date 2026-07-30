@@ -23,6 +23,7 @@
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../admin-config.js"></script>
     <script src="../forage-context.js"></script>
     <!-- ✅ Sécurité : hachage SHA-256 des passcodes maintenance -->
     <script src="../crypto.js"></script>
@@ -571,7 +572,8 @@
                 }
 
             } catch (e) {
-                contentDiv.innerHTML = `<div style="color:var(--danger)">Erreur de chargement : ${e.message}</div>`;
+                // ✅ CORRECTION v5 : échappement du message d'erreur (peut refléter des données).
+                contentDiv.innerHTML = `<div style="color:var(--danger)">Erreur de chargement : ${esc(e.message)}</div>`;
             }
         };
 
@@ -703,6 +705,15 @@
             log.textContent = "Ne fermez pas la page, communication avec Firebase...";
 
             try {
+                // ✅ CORRECTION v5 : VERROU ANTI-DOUBLE-CLÔTURE.
+                //    Si le cycle a déjà été archivé (double clic, second onglet,
+                //    deuxième président), on REFUSE d'écraser le backup existant
+                //    et de réinitialiser les compteurs une 2ème fois (perte de données).
+                const existingBackup = await get(ref(db, `${P.backup}/${cycleKey}/info`));
+                if (existingBackup.exists()) {
+                    throw new Error(`Le cycle ${cycleKey} a DÉJÀ été archivé le ${existingBackup.val().date_sauvegarde || '(date inconnue)'}. Clôture annulée pour protéger l'archive existante.`);
+                }
+
                 const sourceSnap = await get(ref(db, P.compteurs));
 
                 if (!sourceSnap.exists()) {
@@ -765,7 +776,37 @@
 
                 await update(ref(db), updates);
 
-                log.textContent = `✅ MAINTENANCE RÉUSSIE — ${keys.length} entrée(s) archivée(s)`;
+                // ✅ CORRECTION v5 : EXPORT AUTOMATIQUE de l'archive en local (JSON).
+                //    Firebase n'est plus le seul dépositaire de l'historique : en cas
+                //    de corruption/suppression de la base, ce fichier permet la
+                //    restauration. Téléchargement déclenché côté client, sans serveur.
+                try {
+                    const exportPayload = {
+                        meta: {
+                            application:      'ASUFOR Admin',
+                            type_export:      'archive_cloture_cycle',
+                            cycle:            cycleKey,
+                            village:          villageName,
+                            date_export:      new Date().toISOString(),
+                            total_entrees:    keys.length
+                        },
+                        donnees: data
+                    };
+                    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+                    const url  = URL.createObjectURL(blob);
+                    const a    = document.createElement('a');
+                    a.href     = url;
+                    a.download = `asufor_archive_${villageName.replace(/\s+/g, '_')}_${cycleKey}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                } catch (exportErr) {
+                    // L'export local ne doit jamais faire échouer la clôture elle-même.
+                    console.warn('Export local de l\'archive impossible :', exportErr);
+                }
+
+                log.textContent = `✅ MAINTENANCE RÉUSSIE — ${keys.length} entrée(s) archivée(s) — archive JSON téléchargée (conservez-la en lieu sûr)`;
                 log.style.color = "var(--success)";
                 btn.textContent = `✓ Cycle ${cycleKey} Clôturé`;
                 btn.style.background = "var(--success)";

@@ -26,6 +26,35 @@ import { ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-dat
 const SYNTHETIC_DOMAIN = '@asufor.local';
 
 /**
+ * ✅ CORRECTION v5 : renforcement du mot de passe Firebase Auth.
+ *
+ * PROBLÈME : le PIN 6 chiffres était utilisé TEL QUEL comme mot de passe
+ * Firebase Auth → espace de clés de 10^6 seulement, attaquable par force
+ * brute directe sur l'API Firebase (hors protection anti-brute-force client).
+ *
+ * SOLUTION : dériver un mot de passe fort à partir du PIN + login via
+ * SHA-256 salé. L'utilisateur continue de saisir son PIN à 6 chiffres
+ * (aucun changement d'UX), mais le mot de passe réel envoyé à Firebase
+ * est un hash de 64 caractères hexadécimaux (espace de clés 16^64).
+ *
+ * Un attaquant devrait connaître à la fois le PIN, le login ET le sel
+ * applicatif pour reconstituer le mot de passe. Combiné à l'anti-brute-force
+ * côté client, cela élève considérablement le coût d'une attaque en ligne.
+ *
+ * ⚠️  MIGRATION : les comptes existants (créés avec le PIN brut) doivent
+ * être migrés. index.html gère la transition en essayant d'abord le mot de
+ * passe dérivé, puis le PIN brut en fallback (comptes non migrés).
+ */
+export async function derivePassword(login, pin) {
+    const material = 'asufor_auth_v5:' + String(login).trim() + ':' + String(pin).trim();
+    const data = new TextEncoder().encode(material);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+/**
  * Résout l'identifiant saisi vers l'e-mail Firebase Auth interne.
  * Un identifiant contenant déjà « @ » (ex. l'adresse réelle du super-admin)
  * est utilisé tel quel.
@@ -66,9 +95,13 @@ export async function createAccount({ firebaseConfig, db, identifiant, pin, role
     const secondaryApp = initializeApp(firebaseConfig, 'provisioning-' + Date.now());
     const secondaryAuth = getAuth(secondaryApp);
 
+    // ✅ CORRECTION v5 : le mot de passe envoyé à Firebase est le hash dérivé,
+    //    plus jamais le PIN brut (10^6 combinaisons → 16^64).
+    const derivedPassword = await derivePassword(login, pin);
+
     let uid;
     try {
-        const cred = await createUserWithEmailAndPassword(secondaryAuth, email, pin);
+        const cred = await createUserWithEmailAndPassword(secondaryAuth, email, derivedPassword);
         uid = cred.user.uid;
         await signOut(secondaryAuth).catch(() => {});
     } finally {

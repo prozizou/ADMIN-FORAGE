@@ -26,6 +26,7 @@
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
     <script src="../billing.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
+    <script src="../admin-config.js"></script>
     <script src="../forage-context.js"></script>
     <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
     <script src="../superadmin-village.js"></script>
@@ -566,10 +567,15 @@
         // ── Mise à jour du filtre agents ──
         const releveurSelect = document.getElementById('releveurFilter');
         const current = releveurSelect.value;
-        releveurSelect.innerHTML = '<option value="">Tous les agents</option>';
+        // ✅ CORRECTION v5 : échappement XSS du nom d'agent (donnée Firebase) via
+        //    window.escHtml (security.js), et construction en une seule affectation
+        //    (évite le reparse DOM à chaque itération avec innerHTML +=).
+        const escOpt = window.escHtml || (s => String(s == null ? '' : s));
+        let optionsHtml = '<option value="">Tous les agents</option>';
         agentsMap.forEach((name, id) => {
-            releveurSelect.innerHTML += `<option value="${id}">👤 ${name.toUpperCase()}</option>`;
+            optionsHtml += `<option value="${escOpt(id)}">👤 ${escOpt(String(name).toUpperCase())}</option>`;
         });
+        releveurSelect.innerHTML = optionsHtml;
         releveurSelect.value = current;
 
         window.filterList();

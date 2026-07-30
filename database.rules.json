@@ -30,11 +30,16 @@
       ".indexOn": ["agent_tel"],
 
       "$agentId": {
-        ".validate": "newData.hasChildren(['agent', 'agent_tel', 'passcode', 'zone'])",
+        // ✅ CORRECTION v5 : accepte 'passcode' (legacy, clair) OU 'passcode_hash'
+        //    (nouveau format SHA-256), permettant la migration progressive des
+        //    anciens agents sans casser leurs écritures.
+        ".validate": "newData.hasChildren(['agent', 'agent_tel', 'zone']) && (newData.hasChild('passcode') || newData.hasChild('passcode_hash'))",
         "agent":      { ".validate": "newData.isString() && newData.val().length >= 2 && newData.val().length <= 100" },
         "agent_tel":  { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{7,15}$/)" },
-        // ⚠️  passcode encore en clair : valider le format en attendant un hachage côté serveur.
+        // ⚠️  passcode legacy en clair : toléré jusqu'à migration complète (scripts/migrate-passcodes.js).
         "passcode":   { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{6}$/)" },
+        // ✅ Nouveau format : hash SHA-256 hex (64 caractères).
+        "passcode_hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" },
         "zone":       { ".validate": "newData.isString() && newData.val().length <= 100" },
         "siege":      { ".validate": "newData.isString()" },
         "agent_id":   { ".validate": "newData.isString()" },

@@ -24,6 +24,7 @@
     <!-- ✅ Config Firebase centralisée -->
     <script src="firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution du super-admin (SUPERADMIN_EMAIL, isSuperadmin) -->
+    <script src="admin-config.js"></script>
     <script src="forage-context.js"></script>
 
     <style>
@@ -563,7 +564,37 @@
             return;
         }
 
-        auth.signInWithEmailAndPassword(email, code)
+        // ✅ CORRECTION v5 : le mot de passe Firebase est désormais un hash dérivé
+        //    (SHA-256 de 'asufor_auth_v5:login:pin') — miroir de derivePassword()
+        //    dans provisioning.js. On essaie d'abord le mot de passe dérivé
+        //    (nouveaux comptes), puis le PIN brut en fallback (comptes créés
+        //    avant v5, non encore migrés). Le super-admin (email réel, mot de
+        //    passe libre géré en console Firebase) suit le chemin fallback.
+        const deriveV5 = async (login, pin) => {
+            const material = 'asufor_auth_v5:' + String(login).trim() + ':' + String(pin).trim();
+            const data = new TextEncoder().encode(material);
+            const buf = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        const signInSmart = async () => {
+            if (identifiant.includes('@')) {
+                // Adresse réelle (super-admin) : mot de passe saisi tel quel.
+                return auth.signInWithEmailAndPassword(email, code);
+            }
+            const derived = await deriveV5(identifiant, code);
+            try {
+                return await auth.signInWithEmailAndPassword(email, derived);
+            } catch (err) {
+                // Fallback comptes pré-v5 (PIN brut comme mot de passe).
+                if (err && (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials')) {
+                    return await auth.signInWithEmailAndPassword(email, code);
+                }
+                throw err;
+            }
+        };
+
+        signInSmart()
             .then((cred) => resolveSessionProfile(cred.user))
             .then((sessionData) => {
                 if (!sessionData) return; // resolveSessionProfile a déjà géré l'erreur (compte non configuré)

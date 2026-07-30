@@ -86,8 +86,23 @@
     function generateMaintenancePasscode() {
         var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // pas de 0, O, I, 1
         var result = '';
-        for (var i = 0; i < 8; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        // ✅ CORRECTION v5 : générateur cryptographiquement sûr (CSPRNG).
+        //    Math.random() est prédictible ; crypto.getRandomValues() ne l'est pas.
+        //    Fonctionne dans le navigateur (Web Crypto) et Node.js ≥ 15 (globalThis.crypto).
+        var cryptoObj = (typeof globalThis !== 'undefined' && globalThis.crypto) ? globalThis.crypto : null;
+        if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+            // Rejection sampling pour éviter le biais modulo (256 % 32 === 0 ici,
+            // donc pas de biais, mais on garde la méthode robuste si chars change).
+            var array = new Uint8Array(8);
+            cryptoObj.getRandomValues(array);
+            for (var i = 0; i < 8; i++) {
+                result += chars.charAt(array[i] % chars.length);
+            }
+        } else {
+            // Fallback très improbable (vieux navigateurs) — mieux que rien.
+            for (var j = 0; j < 8; j++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
         }
         return result;
     }

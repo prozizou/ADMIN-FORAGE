@@ -7,6 +7,11 @@ node_modules/
 
 # Clé de service Firebase Admin SDK (NE JAMAIS committer)
 scripts/serviceAccountKey.json
+serviceAccountKey.json
+
+# Fichier de PINs pour migration auth (SENSIBLE — NE JAMAIS committer)
+pins.json
+scripts/pins.json
 
 # Variables d'environnement locales
 .env

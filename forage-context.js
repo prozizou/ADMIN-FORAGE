@@ -42,7 +42,16 @@
     var DEFAULT_FORAGE_KEY = 'Asufor_diandioly';
 
     // Compte super-administrateur (accès à tous les forages).
-    var SUPERADMIN_EMAIL = 'prozizou298@gmail.com';
+    // ✅ CORRECTION v5 : source unique de vérité = admin-config.js (window.ASUFOR_ADMIN
+    //    dans le navigateur, require en Node). Fallback conservé si le module n'est
+    //    pas chargé (page qui n'inclut pas admin-config.js).
+    var SUPERADMIN_EMAIL = (function () {
+        try {
+            if (typeof window !== 'undefined' && window.ASUFOR_ADMIN) return window.ASUFOR_ADMIN.SUPERADMIN_EMAIL;
+            if (typeof module === 'object' && module.exports) return require('./admin-config.js').SUPERADMIN_EMAIL;
+        } catch (_) {}
+        return 'prozizou298@gmail.com';
+    })();
 
     // Village actuellement choisi par le super-admin (vue à 360°), persisté à
     // part de la session — voir setSuperadminForageKey()/superadmin-village.js.

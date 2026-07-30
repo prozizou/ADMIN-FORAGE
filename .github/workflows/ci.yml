@@ -57,6 +57,8 @@ jobs:
           node scripts/crypto.test.js
           echo "── integration.test.js ──"
           node scripts/integration.test.js
+          echo "── v5.test.js ──"
+          node scripts/v5.test.js
           echo ""
           echo "✅ Tous les tests passent."
 
