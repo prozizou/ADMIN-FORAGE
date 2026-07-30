@@ -223,7 +223,7 @@ window.exportCSV = function() {
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
 
         const isPaid = item.status === 'paye' ? 'Paye' : 'Impaye';
-        const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
+        const zoneName = zoneOf(item);
         const clientName = (item.name || "Client Inconnu").replace(/;/g, ' ');
         const numCompteur = (item.numero_compteur || "").replace(/;/g, ' ');
         const lastModif = item.last_modified_at ? new Date(item.last_modified_at).toLocaleString() : 'N/A';
@@ -400,6 +400,17 @@ window.startVoiceSearch = function() {
     recognition.start();
 };
 
+// ✅ CORRECTION : résolution de zone alignée sur rapports.js (zoneOf) — le champ
+//   `item.zone` stocké sur le relevé prime sur celui de l'agent actuellement lié,
+//   qui peut avoir été supprimé/réassigné depuis (sinon le relevé retombe dans un
+//   fourre-tout générique et le graphique "Volume par Zone" perd des quartiers).
+function zoneOf(item) {
+    const own = item && item.zone && String(item.zone).trim();
+    if (own) return own;
+    const viaAgent = storeAgents[item && item.agent_id]?.zone;
+    return (viaAgent && String(viaAgent).trim()) || "Sans zone";
+}
+
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
 window.applyFilter = function() {
     const selectedId = document.getElementById('agent-spinner').value;
@@ -451,12 +462,14 @@ window.applyFilter = function() {
             calculatedAmount = stmt.facture_courante; // facture du mois courant
             arriere = stmt.arriere;                   // arriérés cumulés
             totalDu = stmt.total;                     // facture + arriérés
+            item.conso = stmt.conso;                  // ✅ 0 si consommation invraisemblable (anomalie)
         } else {
             const nIdx = parseFloat(item.new_index || 0);
             const lIdx = parseFloat(item.last_index || 0);
             const facteur = parseFloat(item.facteur || 0);
             calculatedAmount = Math.max(0, nIdx - lIdx) * facteur;
             totalDu = calculatedAmount;
+            item.conso = Math.max(0, nIdx - lIdx);
         }
 
         item.calculatedAmount = calculatedAmount;
@@ -486,7 +499,7 @@ window.applyFilter = function() {
 
     if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.calculatedAmount || 0) - (a.calculatedAmount || 0));
     else if (sortOption === "min_amount") currentFilteredData.sort((a, b) => (a.calculatedAmount || 0) - (b.calculatedAmount || 0));
-    else if (sortOption === "zone") currentFilteredData.sort((a, b) => (storeAgents[a.agent_id]?.zone || "Z").localeCompare(storeAgents[b.agent_id]?.zone || "Z"));
+    else if (sortOption === "zone") currentFilteredData.sort((a, b) => zoneOf(a).localeCompare(zoneOf(b)));
     else if (sortOption === "name") currentFilteredData.sort((a, b) => (a.name || "Z").localeCompare(b.name || "Z"));
     else if (sortOption === "compteur") currentFilteredData.sort((a, b) => {
         const na = String(a.numero_compteur || "").replace(/\D/g, "").padStart(10, "0");
@@ -542,10 +555,13 @@ function updateCharts(paye, impaye) {
 
     const zonesConso = {};
     currentFilteredData.forEach(item => {
-        const zone = storeAgents[item.agent_id]?.zone || "Autre";
-        const conso = parseFloat(item.new_index || 0) - parseFloat(item.last_index || 0);
+        const zone = zoneOf(item);
+        // ✅ CORRECTION : item.conso vient de billing.js (calculé dans applyFilter),
+        //   déjà à 0 pour toute lecture invraisemblable (anomalie) — évite qu'un seul
+        //   relevé corrompu écrase l'échelle du graphique (axe en milliards).
+        const conso = item.conso || 0;
         if (!zonesConso[zone]) zonesConso[zone] = 0;
-        zonesConso[zone] += (conso > 0 ? conso : 0);
+        zonesConso[zone] += conso;
     });
 
     const ctxBar = document.getElementById('barChart');
@@ -607,7 +623,7 @@ function renderList() {
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
         const isPaid = item.status === 'paye';
-        const zoneName = esc(storeAgents[item.agent_id]?.zone || "Sans Zone");
+        const zoneName = esc(zoneOf(item));
         // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
         const arriereHtml = (!isPaid && arriere > 0)
             ? `<div style="margin-top:4px;font-size:0.68rem;color:var(--danger);font-weight:600;">Mois: ${calculatedAmount.toLocaleString()} F + Arriérés: ${arriere.toLocaleString()} F</div>`
@@ -849,7 +865,7 @@ window.exportPDFImpayes = function() {
     let totalImpaye = 0;
 
     impayes.forEach(item => {
-        const zoneName = storeAgents[item.agent_id]?.zone || "Inconnu";
+        const zoneName = zoneOf(item);
         const clientName = item.name || "Inconnu";
         const numCompteur = item.numero_compteur || "N/A";
         const montant = (item.totalDu != null) ? item.totalDu : (item.calculatedAmount || 0);
