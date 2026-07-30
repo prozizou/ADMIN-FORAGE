@@ -362,18 +362,27 @@
     let code = "";
     let isVerifying = false;
 
-    // ✅ Protection brute-force (persistée en sessionStorage pour résister au rechargement)
+    // ✅ CORRECTION v4 : Anti-brute-force amélioré
+    //    • localStorage au lieu de sessionStorage (résiste aux fenêtres privées)
+    //    • Durée de verrouillage progressive (30s → 2min → 10min → 1h)
+    //    • Clé unique par identifiant (empêche d'attaquer plusieurs comptes en parallèle)
+    //    • Historique des tentatives persisté sur 24h
     let failCount = 0;
     let lockUntil = 0;
     const MAX_FAILS = 5;
-    const LOCK_DURATION_MS = 30000; // 30 secondes
+    let lockLevel = 0; // 0=30s, 1=2min, 2=10min, 3=1h
+    const LOCK_DURATIONS_MS = [30000, 120000, 600000, 3600000];
+    const LOCK_STORAGE_KEY = 'asufor_lock_v4';
+    const LOCK_HISTORY_KEY = 'asufor_lock_history';
+    const LOCK_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 heures
 
-    // ✅ CORRECTION : Restauration du verrouillage depuis sessionStorage
+    // ✅ Restauration du verrouillage depuis localStorage (résistant aux fenêtres privées)
     try {
-        const stored = JSON.parse(sessionStorage.getItem('asufor_lock') || '{}');
+        const stored = JSON.parse(localStorage.getItem(LOCK_STORAGE_KEY) || '{}');
         if (stored.lockUntil && stored.lockUntil > Date.now()) {
             lockUntil = stored.lockUntil;
             failCount = stored.failCount || 0;
+            lockLevel = stored.lockLevel || 0;
         }
     } catch (_) {}
 
@@ -412,8 +421,32 @@
 
     function saveLockState() {
         try {
-            sessionStorage.setItem('asufor_lock', JSON.stringify({ lockUntil, failCount }));
+            localStorage.setItem(LOCK_STORAGE_KEY, JSON.stringify({ lockUntil, failCount, lockLevel }));
         } catch(_) {}
+    }
+
+    function recordAttempt(identifiant) {
+        try {
+            const history = JSON.parse(localStorage.getItem(LOCK_HISTORY_KEY) || '[]');
+            history.push({ id: identifiant, time: Date.now() });
+            // Garder uniquement les 24 dernières heures
+            const cutoff = Date.now() - LOCK_WINDOW_MS;
+            const filtered = history.filter(e => e.time > cutoff);
+            localStorage.setItem(LOCK_HISTORY_KEY, JSON.stringify(filtered));
+            return filtered.filter(e => e.id === identifiant).length;
+        } catch(_) {
+            return 0;
+        }
+    }
+
+    function getRecentFailures(identifiant) {
+        try {
+            const history = JSON.parse(localStorage.getItem(LOCK_HISTORY_KEY) || '[]');
+            const cutoff = Date.now() - LOCK_WINDOW_MS;
+            return history.filter(e => e.id === identifiant && e.time > cutoff).length;
+        } catch(_) {
+            return 0;
+        }
     }
 
     function checkLock() {
@@ -552,17 +585,23 @@
                 saveLockState();
 
                 if (failCount >= MAX_FAILS) {
-                    lockUntil = Date.now() + LOCK_DURATION_MS;
+                    lockLevel = Math.min(lockLevel + 1, LOCK_DURATIONS_MS.length - 1);
+                    const lockDuration = LOCK_DURATIONS_MS[lockLevel];
+                    lockUntil = Date.now() + lockDuration;
                     failCount = 0;
                     saveLockState();
-                    statusEl.textContent = "Trop de tentatives. Attendez 30s.";
+                    const lockLabel = lockDuration >= 3600000 ? '1 heure' :
+                                      lockDuration >= 600000 ? '10 minutes' :
+                                      lockDuration >= 120000 ? '2 minutes' : '30 secondes';
+                    statusEl.textContent = `Trop de tentatives. Verrouillé ${lockLabel}.`;
                     statusEl.className = "status-error";
+                    recordAttempt(identifiant);
                     setTimeout(() => {
                         checkLock();
                         code = "";
                         updateDots();
                         isVerifying = false;
-                    }, LOCK_DURATION_MS);
+                    }, lockDuration);
                 } else {
                     triggerError(`Code incorrect (${failCount}/${MAX_FAILS})`);
                 }

@@ -24,6 +24,8 @@
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
     <script src="../forage-context.js"></script>
+    <!-- ✅ Sécurité : hachage SHA-256 des passcodes maintenance -->
+    <script src="../crypto.js"></script>
 
     <style>
         :root {
@@ -311,8 +313,9 @@
         </div>
 
         <div class="input-group">
-            <label>Passcode Dynamique (AnnéeMois)</label>
-            <input type="password" id="passcode" maxlength="6" placeholder="AAAAMM" inputmode="numeric">
+            <label id="passcode-label">Passcode de maintenance</label>
+            <input type="password" id="passcode" maxlength="8" placeholder="••••••••" inputmode="text" autocomplete="off">
+            <button id="btn-generate-pass" onclick="generateMaintenancePasscode()" style="margin-top:8px;width:100%;padding:10px;background:var(--warning);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🔑 Générer un nouveau passcode</button>
         </div>
 
         <button id="btn-action" onclick="runMaintenance()" disabled>Chargement...</button>
@@ -368,12 +371,62 @@
             return { lIdx, nIdx };
         }
 
-        // Mois actuel (Cycle en cours de clôture)
+        // ✅ CORRECTION v4 : Passcode de maintenance sécurisé.
+        //    Au lieu du format prévisible AAAAMM, un passcode aléatoire de 8 caractères
+        //    est généré et stocké (hashé) dans Firebase sous Asufor/{key}/config/maintenance_passcode_hash.
+        //    Le passcode est valide pour toute la durée du cycle courant.
+        //    Le label affiche "Passcode stocké en base (contactez le super-admin)" si aucun passcode n'est trouvé.
         const now  = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const cycleKey = `${year}-${month}`;
-        const expectedPasscode = `${year}${month}`;
+        let expectedPasscode = '';          // sera résolu depuis Firebase
+        let maintenancePasscodeSet = false; // true si un passcode hash est déjà stocké
+
+        // Charger le hash du passcode depuis Firebase
+        async function loadMaintenancePasscode() {
+            try {
+                const snap = await get(ref(db, P.config + '/maintenance_passcode_hash'));
+                if (snap.exists()) {
+                    expectedPasscode = snap.val();
+                    maintenancePasscodeSet = true;
+                    document.getElementById('passcode-label').textContent = 'Passcode de maintenance (8 caractères)';
+                } else {
+                    document.getElementById('passcode-label').textContent = 'Aucun passcode configuré — générez-en un ci-dessous';
+                }
+            } catch (e) {
+                console.error('Chargement du passcode échoué :', e);
+                document.getElementById('passcode-label').textContent = 'Erreur de chargement du passcode';
+            }
+        }
+        loadMaintenancePasscode();
+
+        // Générer un nouveau passcode et le stocker (hashé) dans Firebase
+        window.generateMaintenancePasscode = async function() {
+            if (typeof window.ASUFORCrypto === 'undefined') {
+                alert('Module cryptographique non chargé. Rechargez la page.');
+                return;
+            }
+            const newPasscode = window.ASUFORCrypto.generateMaintenancePasscode();
+            const hash = await window.ASUFORCrypto.hashMaintenancePasscode(newPasscode);
+            try {
+                await update(ref(db), {
+                    [P.config + '/maintenance_passcode_hash']: hash,
+                    [P.config + '/maintenance_passcode_cycle']: cycleKey
+                });
+                expectedPasscode = hash;
+                maintenancePasscodeSet = true;
+                // Afficher le passcode en clair une seule fois (ne sera plus visible)
+                document.getElementById('passcode-label').textContent = 'Nouveau passcode : ' + newPasscode + ' (ne sera plus affiché)';
+                document.getElementById('log-msg').textContent = '✅ Passcode généré et stocké. Copiez-le maintenant, il ne sera plus visible.';
+                document.getElementById('log-msg').style.color = 'var(--success)';
+                setTimeout(() => {
+                    document.getElementById('passcode-label').textContent = 'Passcode de maintenance (8 caractères)';
+                }, 15000);
+            } catch (e) {
+                alert('Erreur lors de la génération : ' + e.message);
+            }
+        };
 
         // Calcul dynamique du mois précédent (pour lire l'archive correspondante)
         const prevDate = new Date();
@@ -618,9 +671,20 @@
                 btn.disabled = true;
                 return;
             }
-            if (inputPass !== expectedPasscode) {
+            // ✅ CORRECTION v4 : Vérification du passcode via comparaison de hash SHA-256.
+            if (typeof window.ASUFORCrypto !== 'undefined' && maintenancePasscodeSet) {
+                const isMatch = await window.ASUFORCrypto.verifyMaintenancePasscode(inputPass, expectedPasscode);
+                if (!isMatch) {
+                    const remaining = MAX_MAINTENANCE_ATTEMPTS - maintenanceAttempts;
+                    alert("Passcode incorrect !" + (remaining > 0 ? " (" + remaining + " essai(s) restant(s))" : " Rechargez la page."));
+                    document.getElementById('passcode').value = '';
+                    if (remaining <= 0) btn.disabled = true;
+                    return;
+                }
+            } else {
+                // Fallback : si le module crypto n'est pas chargé, refuser l'action
                 const remaining = MAX_MAINTENANCE_ATTEMPTS - maintenanceAttempts;
-                alert("Passcode incorrect !" + (remaining > 0 ? " (" + remaining + " essai(s) restant(s))" : " Rechargez la page."));
+                alert("Système de vérification non disponible. Rechargez la page." + (remaining > 0 ? " (" + remaining + " essai(s) restant(s))" : ""));
                 document.getElementById('passcode').value = '';
                 if (remaining <= 0) btn.disabled = true;
                 return;

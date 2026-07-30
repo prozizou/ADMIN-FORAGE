@@ -6,8 +6,40 @@ on:
   pull_request:
 
 jobs:
+  # ── Vérification .gitignore et secrets ─────────────────────
+  check-secrets:
+    name: Vérification des secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier la présence du .gitignore
+        run: |
+          if [ ! -f ".gitignore" ]; then
+            echo "::error::Fichier .gitignore manquant à la racine du projet"
+            exit 1
+          fi
+          echo ".gitignore trouvé."
+
+      - name: Vérifier que les clés sensibles ne sont pas commitées
+        run: |
+          if git ls-files | grep -q 'serviceAccountKey\.json'; then
+            echo "::error::serviceAccountKey.json est commité dans le dépôt — retiré-le immédiatement."
+            exit 1
+          fi
+          echo "Aucune clé sensible détectée dans le dépôt."
+
+      - name: Vérifier l'absence de clés API en clair dans firebase-config.js
+        run: |
+          # On ne bloque pas (la clé API Firebase est conçue pour être publique),
+          # mais on avertit si elle contient des patterns suspects.
+          if grep -qE 'apiKey.*[A-Za-z0-9_-]{30,}' firebase-config.js; then
+            echo "::warning::Clé API Firebase détectée. Vérifiez que les règles de sécurité Firebase sont configurées."
+          fi
+
+  # ── Tests unitaires et d'intégration ─────────────────────
   test:
-    name: Tests unitaires billing.js
+    name: Tests unitaires et d'intégration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,6 +49,107 @@ jobs:
         with:
           node-version: '20'
 
-      # billing.js n'a aucune dépendance : on lance directement les tests.
-      - name: Run billing tests
-        run: node scripts/billing.test.js
+      - name: Run all tests
+        run: |
+          echo "── billing.test.js ──"
+          node scripts/billing.test.js
+          echo "── crypto.test.js ──"
+          node scripts/crypto.test.js
+          echo "── integration.test.js ──"
+          node scripts/integration.test.js
+          echo ""
+          echo "✅ Tous les tests passent."
+
+  # ── Validation HTML ──────────────────────────────────────
+  validate-html:
+    name: Validation HTML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Vérifier que tous les HTML sont valides
+        run: |
+          ERRORS=0
+          for file in $(find . -name "*.html" -not -path "./node_modules/*"); do
+            # Vérification basique : chaque balise ouverte doit être fermée
+            # (ne détecte pas toutes les erreurs, mais bloque les erreurs grossières)
+            if grep -q '<script' "$file" && ! grep -q '</script>' "$file"; then
+              echo "::error file=$file::Balise <script> ouverte mais jamais fermée"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if grep -q '<style' "$file" && ! grep -q '</style>' "$file"; then
+              echo "::error file=$file::Balise <style> ouverte mais jamais fermée"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if ! grep -q '<meta charset' "$file"; then
+              echo "::warning file=$file::Attribut charset manquant"
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "::error::$ERRORS erreur(s) HTML détectée(s)"
+            exit 1
+          fi
+          echo "✅ Validation HTML réussie."
+
+  # ── Vérification de la structure multi-forage ─────────────
+  check-structure:
+    name: Vérification de la structure multi-forage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier les fichiers critiques
+        run: |
+          REQUIRED_FILES=(
+            "forage-context.js"
+            "crypto.js"
+            "security.js"
+            "firebase-config.js"
+            "billing.js"
+            ".gitignore"
+            "sw.js"
+            "index.html"
+            "home/accueil.html"
+            "counter/list.html"
+            "statistiques/stats.html"
+            "impression/impression.html"
+            "reset/zero.html"
+            "agents/agent.html"
+          )
+          MISSING=0
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Fichier critique manquant : $file"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "::error::$MISSING fichier(s) critique(s) manquant(s)"
+            exit 1
+          fi
+          echo "✅ Structure multi-forage vérifiée."
+
+      - name: Vérifier que crypto.js est inclus dans les pages critiques
+        run: |
+          echo "── Vérification inclusion crypto.js ──"
+          # Les pages qui stockent/vérifient des passcodes DOIVENT inclure crypto.js
+          # agent.html : oui (creation d'agent)
+          if grep -q 'crypto.js' agents/agent.html; then
+            echo "  ✓ agents/agent.html inclut crypto.js"
+          else
+            echo "::error::agents/agent.html ne charge pas crypto.js (hachage passcode impossible)"
+            exit 1
+          fi
+          # zero.html : oui (passcode maintenance)
+          if grep -q 'crypto.js' reset/zero.html; then
+            echo "  ✓ reset/zero.html inclut crypto.js"
+          else
+            echo "::error::reset/zero.html ne charge pas crypto.js (hachage maintenance impossible)"
+            exit 1
+          fi
+          echo "✅ Vérification crypto.js réussie."

@@ -26,6 +26,8 @@
     <script src="../forage-context.js"></script>
     <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
     <script src="../superadmin-village.js"></script>
+    <!-- ✅ Sécurité : hachage SHA-256 des passcodes agents -->
+    <script src="../crypto.js"></script>
 
     <style>
         :root {
@@ -312,18 +314,21 @@
                 const newAgentRef = push(agentsRef);
                 const uniqueId    = newAgentRef.key;
 
+                // ✅ CORRECTION v4 : Hachage SHA-256 du passcode avant stockage.
+                //    Le passcode en clair n'est plus écrit dans Firebase.
+                //    La vérification terrain se fait via ASUFORCrypto.verifyAgentPasscode().
+                const hashedPasscode = await window.ASUFORCrypto.hashAgentPasscode(pass);
+
                 await set(newAgentRef, {
-                    agent:     name,
-                    agent_id:  uniqueId,
-                    agent_tel: tel,
-                    passcode:  pass,
-                    // ⚠️  SÉCURITÉ : Le passcode devrait être haché avant stockage.
-                    //     Utiliser une Firebase Function pour cette opération en production.
-                    id_source: "267b175fb210e9be",
-                    key:       uniqueId,
-                    siege:     siege,
-                    zone:      zone,
-                    created_at: new Date().toISOString() // ✅ CORRECTION : traçabilité de création
+                    agent:          name,
+                    agent_id:       uniqueId,
+                    agent_tel:      tel,
+                    passcode_hash:  hashedPasscode,  // hash SHA-256 (ne jamais stocker en clair)
+                    id_source:      "267b175fb210e9be",
+                    key:            uniqueId,
+                    siege:          siege,
+                    zone:           zone,
+                    created_at:     new Date().toISOString()
                 });
 
                 showMsg('✅ Agent ' + name + ' enregistré avec succès !');

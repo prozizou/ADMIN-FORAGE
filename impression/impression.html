@@ -353,7 +353,7 @@
 ════════════════════════════════════════════════════ -->
 <script type="module">
     import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, onValue, get, set, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification de la session
@@ -614,7 +614,11 @@
         if (e.key === 'Escape') window.closeEditModal();
     };
 
-    window.confirmEdit = function() {
+    // ✅ CORRECTION v4 : Persistance des modifications d'arriérés dans Firebase.
+    //    Les arriérés modifiés manuellement sont désormais sauvegardés dans la base de données
+    //    et historisés dans un journal d'audit.
+
+    window.confirmEdit = async function() {
         const key = editCurrentKey;
         if (!key) return;
         const newArrieres = Math.max(0, parseFloat(document.getElementById('edit-input-arrieres').value) || 0);
@@ -623,6 +627,45 @@
         // Met à jour dataCache
         dataCache[key].arrieres = newArrieres;
         dataCache[key].total    = dataCache[key].montantMois + newArrieres;
+
+        // ✅ CORRECTION v4 : Persister l'arriéré dans Firebase
+        // Le chemin cible dépend du mois sélectionné (actuel ou archive)
+        const isArchive = currentSelectedMonth && currentSelectedMonth !== "actuel";
+        let targetPath;
+        if (isArchive) {
+            targetPath = `${P.backup}/${currentSelectedMonth}/donnees/${key}/arrieres`;
+        } else {
+            targetPath = `${P.compteurs}/${key}/arrieres`;
+        }
+
+        // Historiser la modification dans le journal d'audit
+        const auditEntry = {
+            compteurKey: key,
+            compteur: dataCache[key].numero_compteur || 'N/A',
+            proprietaire: dataCache[key].name || 'N/A',
+            zone: dataCache[key].zone || 'N/A',
+            ancienArrieres: dataCache[key].arrieresFB || 0,
+            nouveauArrieres: newArrieres,
+            modifiePar: session.email || 'inconnu',
+            modifieRole: session.role || 'inconnu',
+            modifieLe: new Date().toISOString(),
+            sessionForage: P.forageKey
+        };
+
+        try {
+            // Écrire la valeur dans la base de données
+            await update(ref(db), {
+                [targetPath]: newArrieres
+            });
+
+            // Historiser dans le journal d'audit (multi-forage)
+            const auditRef = push(ref(db, 'Asufor/' + P.forageKey + '/audit_arrieres'));
+            await set(auditRef, auditEntry);
+
+            console.log('[ASUFOR] Arriérés sauvegardés pour', key, ':', newArrieres);
+        } catch (err) {
+            console.error('[ASUFOR] Erreur sauvegarde arriérés :', err);
+        }
 
         // Met à jour la carte dans le DOM sans recharger toute la liste
         refreshCard(key);

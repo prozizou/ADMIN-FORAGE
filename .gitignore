@@ -1,0 +1,44 @@
+# ============================================
+#  ASUFOR Admin — Fichiers ignorés par Git
+# ============================================
+
+# Dépendances Node.js
+node_modules/
+
+# Clé de service Firebase Admin SDK (NE JAMAIS committer)
+scripts/serviceAccountKey.json
+
+# Variables d'environnement locales
+.env
+.env.local
+
+# Fichiers de sortie / build
+dist/
+build/
+*.log
+
+# Éditeurs et IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Fichiers d'export Firebase (données temporaires)
+scripts/*.json
+!scripts/package.json
+!scripts/package-lock.json
+
+# Rapports de migration générés
+scripts/reports/
+*.csv
+
+# Source maps
+*.map
