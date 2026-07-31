@@ -115,6 +115,29 @@
       }
     },
 
+    // ============ MOTIVATIONS DES AGENTS / BÉNÉFICIAIRES (par cycle "YYYY-MM") ============
+    // Répartition d'une partie de l'encaissé du cycle entre les bénéficiaires
+    // (président, trésorier, secrétaire, agents releveurs, programmeur, frais de
+    // développement…) — le rapport affiche Encaissé − Σ(motivations) = Net.
+    "asufor_motivations": {
+      // Lecture : tous les rôles authentifiés (le bilan est consultable).
+      ".read": "auth != null",
+      "$cycle": {
+        // Écriture (ajout/suppression) : président et trésorier uniquement (finance).
+        ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
+        "$motId": {
+          ".validate": "newData.hasChildren(['beneficiaire', 'montant'])",
+          "beneficiaire": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+          "montant":      { ".validate": "newData.isNumber() && newData.val() >= 0" },
+          "role":         { ".validate": "newData.isString()" },
+          "created_by":   { ".validate": "newData.isString()" },
+          "created_at":   { ".validate": "newData.isString()" },
+          // Verrouille le schéma : tout autre champ est refusé.
+          "$other":       { ".validate": false }
+        }
+      }
+    },
+
     // ══════════════════════════════════════════════════════════════
     //  MULTI-FORAGE — ADDITIF : les noeuds legacy ci-dessus restent actifs
     //  pour la connexion actuelle (Diandioly, tant que non migré). Ces
@@ -243,6 +266,19 @@
             "$depId": {
               ".validate": "newData.hasChildren(['libelle', 'montant'])",
               "libelle": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
+              "montant": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+              "$other":  { ".validate": true }
+            }
+          }
+        },
+
+        // ── Motivations des agents/bénéficiaires : président ou trésorier du forage, ou super-admin ──
+        "motivations": {
+          "$cycle": {
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier')) )",
+            "$motId": {
+              ".validate": "newData.hasChildren(['beneficiaire', 'montant'])",
+              "beneficiaire": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
               "montant": { ".validate": "newData.isNumber() && newData.val() >= 0" },
               "$other":  { ".validate": true }
             }

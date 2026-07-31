@@ -44,6 +44,7 @@ let activeRecords = [];
 let backupsRaw = {};
 let indexedBackups = [];
 let expensesRaw = {};      // asufor_depenses : { "YYYY-MM": { id: {libelle,montant,...} } }
+let motivationsRaw = {};   // asufor_motivations : { "YYYY-MM": { id: {beneficiaire,montant,...} } }
 let chartRecettes = null;
 
 let selCycle = 'actuel';   // période affichée au tableau de bord
@@ -136,6 +137,36 @@ function totalDepensesAllTime() {
         s + Object.values(node).reduce((a, d) => a + (Number(d.montant) || 0), 0), 0);
 }
 
+// ── Motivations des agents / bénéficiaires ───────────────────
+// Répartition d'une partie de l'encaissé du cycle entre les bénéficiaires
+// (président, trésorier, secrétaire, agents releveurs, programmeur, frais de
+// développement…) : Encaissé du mois − Σ(motivations) = Net.
+function motivationsOfCycle(cycle) {
+    const node = motivationsRaw[cycleKey(cycle)] || {};
+    return Object.entries(node).map(([key, d]) => ({ key, ...d }));
+}
+function motivationsTotalOfCycle(cycle) {
+    return motivationsOfCycle(cycle).reduce((s, d) => s + (Number(d.montant) || 0), 0);
+}
+function motivationsOfCycles(cycles) {
+    const set = new Set(cycles);
+    const out = [];
+    Object.keys(motivationsRaw).filter(k => set.has(k)).sort().forEach(k => {
+        Object.entries(motivationsRaw[k]).forEach(([key, d]) => out.push({ cycle: k, key, ...d }));
+    });
+    return out;
+}
+function motivationsOfYear(year) {
+    return motivationsOfCycles(Object.keys(motivationsRaw).filter(k => k.startsWith(year + '-')));
+}
+/** Code de confirmation de suppression : "YEAR-Mn" = n-ième motivation de l'année. */
+function motivationCode(cycle, key) {
+    const year = cycle.split('-')[0];
+    const list = motivationsOfYear(year).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    const idx = list.findIndex(d => d.cycle === cycle && d.key === key);
+    return `${year}-M${idx + 1}`;
+}
+
 // ── Métriques d'un cycle (billing.js) ────────────────────────
 // ✅ CORRECTION : `impayes` reste la facture du SEUL mois (utilisé tel quel dans
 //   les rapports mensuels imprimés/exportés, où « Impayés du mois » est le libellé
@@ -143,8 +174,12 @@ function totalDepensesAllTime() {
 //   à recouvrer » — jusqu'ici absente du tableau de bord, qui affichait le montant
 //   du mois seul sous le libellé générique « Impayés », en désaccord avec le total
 //   affiché dans les statistiques (même donnée, deux chiffres très différents).
+// ✅ `volumePaye` / `volumeImpaye` : mêmes m³ que `volume`, ventilés selon que la
+//   facture du mois est réglée ou non — permet d'afficher l'écart entre le m³
+//   total facturé et le m³ des factures effectivement payées, valorisé en argent
+//   via `impayes` (== facture − encaisse, par construction, sur le même périmètre).
 function cycleMetrics(records, cycle) {
-    let facture = 0, encaisse = 0, impayesMois = 0, impayesTotal = 0, volume = 0, nbReleves = 0, anomalies = 0;
+    let facture = 0, encaisse = 0, impayesMois = 0, impayesTotal = 0, volume = 0, volumePaye = 0, nbReleves = 0, anomalies = 0;
     const zones = {};
     const beforeCycle = (cycle == null || cycle === 'actuel') ? '9999-99' : cycle;
     records.forEach(r => {
@@ -160,6 +195,7 @@ function cycleMetrics(records, cycle) {
         zones[zone].facture += c.montant; zones[zone].volume += c.conso;
         if (B.isPaid(r)) {
             encaisse += c.montant; zones[zone].encaisse += c.montant;
+            volumePaye += c.conso;
         } else {
             impayesMois += c.montant;
             const arr = B.computeArrears(r, indexedBackups, { beforeCycle });
@@ -169,7 +205,12 @@ function cycleMetrics(records, cycle) {
         }
     });
     const taux = facture > 0 ? (encaisse / facture * 100) : 0;
-    return { facture, encaisse, impayes: impayesMois, impayesTotal, volume, anomalies, nbCompteurs: records.length, nbReleves, taux, zones };
+    const volumeImpaye = volume - volumePaye;
+    return {
+        facture, encaisse, impayes: impayesMois, impayesTotal,
+        volume, volumePaye, volumeImpaye,
+        anomalies, nbCompteurs: records.length, nbReleves, taux, zones
+    };
 }
 
 // ── Tableau de bord ──────────────────────────────────────────
@@ -186,6 +227,12 @@ function renderDashboard() {
     setText('kpi-impayes', fMoney(cur.impayesTotal));
     setText('kpi-volume', fNumber(cur.volume) + ' m³');
 
+    // ✅ Écart entre le m³ total facturé et le m³ des factures payées, valorisé en
+    //   argent (= impayés du mois, calculé sur le même périmètre par billing.js).
+    setText('kpi-ecart-m3', fNumber(cur.volumeImpaye) + ' m³');
+    setText('kpi-ecart-m3-fcfa',
+        `${fNumber(cur.volume)} m³ facturés − ${fNumber(cur.volumePaye)} m³ payés ≈ ${fMoney(cur.impayes)}`);
+
     const bar = document.getElementById('kpi-taux-bar');
     if (bar) {
         bar.style.width = Math.min(100, cur.taux) + '%';
@@ -197,6 +244,7 @@ function renderDashboard() {
     renderDelta('d-recettes', cur.encaisse, cmp && cmp.encaisse, true);
     renderDelta('d-impayes', cur.impayesTotal, cmp && cmp.impayesTotal, false);
     renderDelta('d-volume', cur.volume, cmp && cmp.volume, true, ' m³');
+    renderDelta('d-ecart-m3', cur.volumeImpaye, cmp && cmp.volumeImpaye, false, ' m³');
 
     const soldeMoisNet = cur.encaisse - expensesTotalOfCycle(selCycle);
     setText('kpi-solde', fMoney(soldeMoisNet));
@@ -209,6 +257,7 @@ function renderDashboard() {
     renderTopDebiteurs();
     renderZonesRisque(cur.zones);
     renderExpenses();
+    renderMotivations(cur);
 }
 
 function renderDelta(id, cur, prev, goodWhenUp, suffix = ' FCFA') {
@@ -386,6 +435,73 @@ window.deleteExpense = async function (ck, key) {
     catch (e) { alert('Erreur suppression : ' + (e.code || e.message)); }
 };
 
+// ── Motivations des agents/bénéficiaires : liste + CRUD Firebase ────────────
+// Somme totale perçue (encaissé du mois) − liste des bénéficiaires qui vont
+// recevoir une motivation (président, trésorier, secrétaire, agents releveurs,
+// programmeur, frais de développement…) = Net.
+function renderMotivations(curMetrics) {
+    const list = motivationsOfCycle(selCycle).sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    const total = list.reduce((s, d) => s + (Number(d.montant) || 0), 0);
+    const box = document.getElementById('motivation-list');
+    const ck = cycleKey(selCycle);
+
+    if (!list.length) {
+        box.innerHTML = '<p class="muted">Aucune motivation enregistrée pour ' + esc(monthLabel(selCycle)) + '.</p>';
+    } else {
+        box.innerHTML = list.map(d => `
+            <div class="row-item">
+                <div class="row-main">
+                    <b>${esc(d.beneficiaire || 'Bénéficiaire')}</b>
+                    <small>N° ${esc(motivationCode(ck, d.key))}${d.created_by ? ' · ' + esc(d.created_by) : ''}</small>
+                </div>
+                <span class="row-amt" style="color:var(--amber)">${fMoney(d.montant)}</span>
+                ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteMotivation('${ck}','${d.key}')">✕</button>` : ''}
+            </div>`).join('');
+    }
+
+    const encaisseMois = curMetrics.encaisse;
+    const net = encaisseMois - total;
+    setText('motivation-encaisse', fMoney(encaisseMois));
+    setText('motivation-total', fMoney(total));
+    setText('motivation-net', fMoney(net));
+    setText('motivation-period', monthLabel(selCycle));
+    const netEl = document.getElementById('motivation-net');
+    if (netEl) netEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)';
+}
+
+window.addMotivation = async function () {
+    if (!canEditExpenses) { alert('Seuls le président et le trésorier peuvent saisir les motivations.'); return; }
+    const benEl = document.getElementById('mot-new-ben');
+    const mntEl = document.getElementById('mot-new-mnt');
+    const beneficiaire = benEl.value.trim();
+    const montant = parseFloat(mntEl.value);
+    if (!beneficiaire) { alert('Bénéficiaire requis (ex : Président, Agent releveur - Zone A…).'); return; }
+    if (!(montant >= 0) || isNaN(montant)) { alert('Montant invalide.'); return; }
+
+    const ck = cycleKey(selCycle);
+    try {
+        await push(ref(db, P.motivations + '/' + ck), {
+            beneficiaire, montant,
+            created_by: currentUser,
+            created_at: new Date().toISOString()
+        });
+        benEl.value = ''; mntEl.value = '';
+        // onValue re-render automatiquement
+    } catch (e) {
+        alert('Erreur enregistrement motivation : ' + (e.code || e.message));
+    }
+};
+
+window.deleteMotivation = async function (ck, key) {
+    if (!canEditExpenses) return;
+    const code = motivationCode(ck, key);
+    const saisie = prompt(`Pour confirmer la suppression, tapez le code de la motivation : ${code}`);
+    if (saisie === null) return;
+    if (saisie.trim() !== code) { alert('Code incorrect — suppression annulée.'); return; }
+    try { await remove(ref(db, P.motivations + '/' + ck + '/' + key)); }
+    catch (e) { alert('Erreur suppression : ' + (e.code || e.message)); }
+};
+
 // ── Sélecteurs de période ────────────────────────────────────
 function populateSelectors() {
     const cyclesDesc = allCyclesAsc().slice().reverse();
@@ -401,9 +517,11 @@ function populateSelectors() {
     const years = Array.from(new Set(allCyclesAsc().map(c => c.split('-')[0]))).sort().reverse();
     document.getElementById('report-year').innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
 
-    // Masque le formulaire d'ajout de dépense pour les rôles non autorisés
+    // Masque le formulaire d'ajout de dépense / motivation pour les rôles non autorisés
     const addForm = document.getElementById('expense-add');
     if (addForm && !canEditExpenses) addForm.style.display = 'none';
+    const motAddForm = document.getElementById('motivation-add');
+    if (motAddForm && !canEditExpenses) motAddForm.style.display = 'none';
 }
 
 window.onPeriodChange = function () {
@@ -493,12 +611,33 @@ function depensesTable(doc, expenses, total, encaisse, labelTotal) {
         theme: 'striped', headStyles: { fillColor: [245, 158, 11] }, styles: { fontSize: 10 }
     });
 }
+// Somme totale perçue (encaissé) − liste des bénéficiaires qui vont recevoir une
+// motivation (président, trésorier, secrétaire, agents, programmeur, frais de
+// développement…) = Net.
+function motivationsTable(doc, motivations, total, encaisse) {
+    const body = motivations.length
+        ? motivations.map(e => [e.beneficiaire || 'Bénéficiaire', fMoney(e.montant)])
+        : [['Aucune motivation enregistrée', fMoney(0)]];
+    const net = encaisse - total;
+    body.push([{ content: 'TOTAL MOTIVATIONS', styles: { fontStyle: 'bold' } }, { content: fMoney(total), styles: { fontStyle: 'bold' } }]);
+    body.push([
+        { content: 'NET (encaissé − motivations)', styles: { fontStyle: 'bold', textColor: net >= 0 ? [22, 163, 74] : [239, 68, 68] } },
+        { content: fMoney(net), styles: { fontStyle: 'bold', textColor: net >= 0 ? [22, 163, 74] : [239, 68, 68] } }
+    ]);
+    doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 8,
+        head: [['Motivations des agents / bénéficiaires', 'Montant']], body,
+        theme: 'striped', headStyles: { fillColor: [168, 85, 247] }, styles: { fontSize: 10 }
+    });
+}
 
 function genererMensuel() {
     const cycle = selCycle;
     const m = cycleMetrics(recordsOfCycle(cycle), cycle);
     const expenses = expensesOfCycle(cycle);
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
+    const motivations = motivationsOfCycle(cycle);
+    const motTotal = motivations.reduce((s, e) => s + (Number(e.montant) || 0), 0);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -510,7 +649,10 @@ function genererMensuel() {
         body: [
             ['Compteurs suivis', String(m.nbCompteurs)],
             ['Relevés effectués', `${m.nbReleves} / ${m.nbCompteurs}`],
-            ['Volume consommé', fNumber(m.volume) + ' m³'],
+            ['Volume consommé (facturé)', fNumber(m.volume) + ' m³'],
+            ['Volume des factures payées', fNumber(m.volumePaye) + ' m³'],
+            ['Écart m³ (facturé − payé)', fNumber(m.volumeImpaye) + ' m³'],
+            ['Valeur de l\'écart m³', fMoney(m.impayes)],
             ['Montant facturé', fMoney(m.facture)],
             ['Montant encaissé', fMoney(m.encaisse)],
             ['Impayés du mois', fMoney(m.impayes)],
@@ -534,6 +676,7 @@ function genererMensuel() {
     });
 
     depensesTable(doc, expenses, depTotal, m.encaisse, 'TOTAL DÉPENSES');
+    motivationsTable(doc, motivations, motTotal, m.encaisse);
 
     let y = doc.lastAutoTable.finalY + 20;
     if (y > 250) { doc.addPage(); y = 30; }
@@ -543,14 +686,15 @@ function genererMensuel() {
 }
 
 // Rapport multi-mois (annuel ou trimestriel) : tableau mensuel + dépenses + signatures.
-function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses }) {
+function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses, motivations }) {
     const rows = [];
-    let tFacture = 0, tEncaisse = 0, tVolume = 0;
+    let tFacture = 0, tEncaisse = 0, tVolume = 0, tVolumePaye = 0, tImpayes = 0;
     cycles.forEach(cycle => {
         const recs = recordsOfCycle(cycle);
         if (!recs.length) return;
         const m = cycleMetrics(recs, cycle);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
+        tVolumePaye += m.volumePaye; tImpayes += m.impayes;
         rows.push([
             monthLabel(cycle).replace(' ' + year, ''),
             String(m.nbCompteurs),
@@ -561,11 +705,25 @@ function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses }) 
     if (!rows.length) { alert("Aucune donnée pour cette période."); return; }
 
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
+    const motTotal = (motivations || []).reduce((s, e) => s + (Number(e.montant) || 0), 0);
     const tauxPeriode = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
+    const tVolumeEcart = tVolume - tVolumePaye;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     pdfHeader(doc, titre, sousTitre);
+
+    doc.autoTable({
+        startY: 42,
+        head: [['Indicateur', 'Valeur']],
+        body: [
+            ['Volume consommé (facturé)', fNumber(tVolume) + ' m³'],
+            ['Volume des factures payées', fNumber(tVolumePaye) + ' m³'],
+            ['Écart m³ (facturé − payé)', fNumber(tVolumeEcart) + ' m³'],
+            ['Valeur de l\'écart m³', fMoney(tImpayes)]
+        ],
+        theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 10 }
+    });
 
     rows.push([
         { content: 'TOTAL', styles: { fontStyle: 'bold' } }, '',
@@ -575,13 +733,16 @@ function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses }) 
         { content: tauxPeriode.toFixed(0) + ' %', styles: { fontStyle: 'bold' } }
     ]);
     doc.autoTable({
-        startY: 42,
+        startY: doc.lastAutoTable.finalY + 8,
         head: [['Mois', 'Cpt', 'Volume (m³)', 'Facturé', 'Encaissé', 'Taux']],
         body: rows, theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 9 }
     });
 
     const expForPdf = expenses.map(e => ({ libelle: `${e.cycle} — ${e.libelle || 'Dépense'}`, montant: e.montant }));
     depensesTable(doc, expForPdf, depTotal, tEncaisse, 'TOTAL DÉPENSES');
+
+    const motForPdf = (motivations || []).map(e => ({ beneficiaire: `${e.cycle} — ${e.beneficiaire || 'Bénéficiaire'}`, montant: e.montant }));
+    motivationsTable(doc, motForPdf, motTotal, tEncaisse);
 
     let y = doc.lastAutoTable.finalY + 20;
     if (y > 250) { doc.addPage(); y = 30; }
@@ -605,7 +766,8 @@ function genererAnnuel() {
         titre: "Rapport annuel — Assemblée Générale",
         sousTitre: "Exercice : " + year,
         filename: `ASUFOR_Rapport_Annuel_${year}.pdf`,
-        expenses: expensesOfYear(year)
+        expenses: expensesOfYear(year),
+        motivations: motivationsOfYear(year)
     });
 }
 
@@ -618,7 +780,8 @@ function genererTrimestriel() {
         titre: "Rapport trimestriel — Assemblée Générale",
         sousTitre: `Trimestre : T${q} ${year}`,
         filename: `ASUFOR_Rapport_T${q}_${year}.pdf`,
-        expenses: expensesOfCycles(cycles)
+        expenses: expensesOfCycles(cycles),
+        motivations: motivationsOfCycles(cycles)
     });
 }
 
@@ -651,6 +814,8 @@ function exporterMensuelCSV() {
     const m = cycleMetrics(recordsOfCycle(cycle), cycle);
     const expenses = expensesOfCycle(cycle);
     const depTotal = expensesTotalOfCycle(cycle);
+    const motivations = motivationsOfCycle(cycle);
+    const motTotal = motivationsTotalOfCycle(cycle);
 
     const rows = [
         ['Rapport mensuel', monthLabel(cycle)],
@@ -658,7 +823,10 @@ function exporterMensuelCSV() {
         ['Indicateur', 'Valeur'],
         ['Compteurs suivis', m.nbCompteurs],
         ['Relevés effectués', `${m.nbReleves}/${m.nbCompteurs}`],
-        ['Volume consommé (m3)', Math.round(m.volume)],
+        ['Volume consommé, facturé (m3)', Math.round(m.volume)],
+        ['Volume des factures payées (m3)', Math.round(m.volumePaye)],
+        ['Écart m3 (facturé - payé)', Math.round(m.volumeImpaye)],
+        ['Valeur de l\'écart m3 (FCFA)', Math.round(m.impayes)],
         ['Montant facturé (FCFA)', Math.round(m.facture)],
         ['Montant encaissé (FCFA)', Math.round(m.encaisse)],
         ['Impayés du mois (FCFA)', Math.round(m.impayes)],
@@ -677,24 +845,36 @@ function exporterMensuelCSV() {
     expenses.forEach(e => rows.push([e.libelle || 'Dépense', Math.round(e.montant) || 0, e.date || '', e.created_by || '']));
     rows.push(['TOTAL DÉPENSES', Math.round(depTotal), '', '']);
     rows.push(['SOLDE (encaissé − dépenses)', Math.round(m.encaisse - depTotal), '', '']);
+    rows.push([]);
+    rows.push(['Motivations (bénéficiaires)', 'Montant (FCFA)', 'Saisi par']);
+    motivations.forEach(e => rows.push([e.beneficiaire || 'Bénéficiaire', Math.round(e.montant) || 0, e.created_by || '']));
+    rows.push(['TOTAL MOTIVATIONS', Math.round(motTotal), '']);
+    rows.push(['NET (encaissé − motivations)', Math.round(m.encaisse - motTotal), '']);
 
     downloadCsv(`ASUFOR_Rapport_Mensuel_${cycleKey(cycle)}.csv`, rows);
 }
 
-function exporterPeriodeCSV({ cycles, year, titre, sousTitre, filename, expenses }) {
+function exporterPeriodeCSV({ cycles, year, titre, sousTitre, filename, expenses, motivations }) {
     const rows = [[titre, sousTitre], [], ['Mois', 'Compteurs', 'Volume (m3)', 'Facturé (FCFA)', 'Encaissé (FCFA)', 'Taux (%)']];
-    let tFacture = 0, tEncaisse = 0, tVolume = 0, any = false;
+    let tFacture = 0, tEncaisse = 0, tVolume = 0, tVolumePaye = 0, tImpayes = 0, any = false;
     cycles.forEach(cycle => {
         const recs = recordsOfCycle(cycle);
         if (!recs.length) return;
         any = true;
         const m = cycleMetrics(recs, cycle);
         tFacture += m.facture; tEncaisse += m.encaisse; tVolume += m.volume;
+        tVolumePaye += m.volumePaye; tImpayes += m.impayes;
         rows.push([monthLabel(cycle).replace(' ' + year, ''), m.nbCompteurs, Math.round(m.volume), Math.round(m.facture), Math.round(m.encaisse), m.taux.toFixed(1)]);
     });
     if (!any) { alert("Aucune donnée pour cette période."); return; }
     const tauxPeriode = tFacture > 0 ? (tEncaisse / tFacture * 100) : 0;
     rows.push(['TOTAL', '', Math.round(tVolume), Math.round(tFacture), Math.round(tEncaisse), tauxPeriode.toFixed(1)]);
+
+    rows.push([]);
+    rows.push(['Volume consommé, facturé (m3)', Math.round(tVolume)]);
+    rows.push(['Volume des factures payées (m3)', Math.round(tVolumePaye)]);
+    rows.push(['Écart m3 (facturé - payé)', Math.round(tVolume - tVolumePaye)]);
+    rows.push(['Valeur de l\'écart m3 (FCFA)', Math.round(tImpayes)]);
 
     const depTotal = expenses.reduce((s, e) => s + (Number(e.montant) || 0), 0);
     rows.push([]);
@@ -702,6 +882,13 @@ function exporterPeriodeCSV({ cycles, year, titre, sousTitre, filename, expenses
     expenses.forEach(e => rows.push([`${e.cycle} — ${e.libelle || 'Dépense'}`, Math.round(e.montant) || 0, e.date || '', e.created_by || '']));
     rows.push(['TOTAL DÉPENSES', Math.round(depTotal), '', '']);
     rows.push(['SOLDE (encaissé − dépenses)', Math.round(tEncaisse - depTotal), '', '']);
+
+    const motTotal = (motivations || []).reduce((s, e) => s + (Number(e.montant) || 0), 0);
+    rows.push([]);
+    rows.push(['Motivations (bénéficiaires)', 'Montant (FCFA)', 'Saisi par']);
+    (motivations || []).forEach(e => rows.push([`${e.cycle} — ${e.beneficiaire || 'Bénéficiaire'}`, Math.round(e.montant) || 0, e.created_by || '']));
+    rows.push(['TOTAL MOTIVATIONS', Math.round(motTotal), '']);
+    rows.push(['NET (encaissé − motivations)', Math.round(tEncaisse - motTotal), '']);
 
     downloadCsv(filename, rows);
 }
@@ -712,7 +899,8 @@ function exporterAnnuelCSV() {
         cycles: cyclesOfYear(year), year,
         titre: 'Rapport annuel', sousTitre: year,
         filename: `ASUFOR_Rapport_Annuel_${year}.csv`,
-        expenses: expensesOfYear(year)
+        expenses: expensesOfYear(year),
+        motivations: motivationsOfYear(year)
     });
 }
 
@@ -724,7 +912,8 @@ function exporterTrimestrielCSV() {
         cycles, year,
         titre: 'Rapport trimestriel', sousTitre: `T${q} ${year}`,
         filename: `ASUFOR_Rapport_T${q}_${year}.csv`,
-        expenses: expensesOfCycles(cycles)
+        expenses: expensesOfCycles(cycles),
+        motivations: motivationsOfCycles(cycles)
     });
 }
 
@@ -782,6 +971,15 @@ async function loadAll() {
             console.error('Rapports (rendu) :', renderErr);
             if (window.AsuforLoader) AsuforLoader.fail('Erreur d\'affichage du tableau de bord (' + renderErr.message + ').', { retry: () => loadAll() });
         }
+    });
+
+    // Motivations des agents/bénéficiaires en temps réel (mutées par cette page)
+    onValue(ref(db, P.motivations), (snap) => {
+        motivationsRaw = snap.val() || {};
+        try { renderDashboard(); } catch (err) { console.error('Rapports (rendu) :', err); }
+    }, (err) => {
+        console.error('Motivations :', err.code, err.message);
+        try { renderDashboard(); } catch (renderErr) { console.error('Rapports (rendu) :', renderErr); }
     });
 }
 

@@ -102,6 +102,9 @@
             backup:    'asufor_backup',
             agents:    'db_agents',
             depenses:  'asufor_depenses',
+            // Motivations des agents/bénéficiaires (président, trésorier, secrétaire,
+            // agents releveurs, programmeur, frais de développement…), par cycle.
+            motivations: 'asufor_motivations',
             config:    'asufor_config'   // absent aujourd'hui → l'app retombe sur le branding par défaut
         };
     }
@@ -113,6 +116,7 @@
             backup:    base + '/backup',
             agents:    base + '/agents',
             depenses:  base + '/depenses',
+            motivations: base + '/motivations',
             config:    base + '/config'
         };
     }
