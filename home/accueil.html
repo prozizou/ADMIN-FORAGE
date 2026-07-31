@@ -129,12 +129,10 @@
             transition: background 0.3s;
         }
 
-        /* ✅ CORRECTION : .restricted masque visuellement sans casser la grille */
+        /* Masque complètement la tuile et retire sa place dans la grille,
+           pour que les autres cartes se réorganisent sans laisser de trou. */
         .restricted {
-            visibility: hidden !important;
-            pointer-events: none !important;
-            opacity: 0 !important;
-            /* Note: on garde la place dans la grille pour l'alignement */
+            display: none !important;
         }
 
         @media (min-width: 768px) {
