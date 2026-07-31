@@ -80,6 +80,7 @@
         .kpi .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--sub); font-weight: 700; }
         .kpi .value { font-size: 1.3rem; font-weight: 800; margin-top: 6px; word-break: break-word; }
         .kpi .delta { font-size: .72rem; font-weight: 700; margin-top: 6px; min-height: 14px; }
+        .kpi .sub-value { font-size: .7rem; color: var(--sub); font-weight: 600; margin-top: 4px; }
         .kpi.accent { background: var(--primary); color: #fff; border: none; }
         .kpi.accent .label, .kpi.accent .value { color: #fff; }
         .bar-bg { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.25); overflow: hidden; margin-top: 10px; }
@@ -181,6 +182,12 @@
             <div class="value" id="kpi-solde">—</div>
             <div class="delta" id="d-solde"></div>
         </div>
+        <div class="kpi">
+            <div class="label">Écart m³ facturé / payé</div>
+            <div class="value" id="kpi-ecart-m3" style="color:var(--danger)">—</div>
+            <div class="sub-value" id="kpi-ecart-m3-fcfa">—</div>
+            <div class="delta" id="d-ecart-m3"></div>
+        </div>
     </div>
 
     <!-- Caisse -->
@@ -219,6 +226,21 @@
         </div>
         <div id="expense-list"><p class="muted">Chargement…</p></div>
         <div class="exp-total"><span>Total dépenses du mois</span><span class="amber" id="expense-total">—</span></div>
+    </div>
+
+    <!-- Motivations des agents / bénéficiaires (persistées Firebase) -->
+    <div class="card-box">
+        <h2>🤝 Motivations des agents — <span id="motivation-period" style="font-weight:600;color:var(--sub);">…</span></h2>
+        <p class="hint">Somme totale perçue − liste des bénéficiaires qui vont recevoir une motivation (président, trésorier, secrétaire, agents releveurs, programmeur, frais de développement…).</p>
+        <div class="expense-add" id="motivation-add">
+            <input type="text" class="exp-inp lib" id="mot-new-ben" placeholder="Bénéficiaire (ex: Président, Agent releveur - Zone A)" maxlength="120">
+            <input type="number" class="exp-inp mnt" id="mot-new-mnt" placeholder="Montant" min="0">
+            <button class="btn-add" onclick="addMotivation()">Ajouter</button>
+        </div>
+        <div id="motivation-list"><p class="muted">Chargement…</p></div>
+        <div class="exp-total"><span>Encaissé du mois</span><span id="motivation-encaisse">—</span></div>
+        <div class="exp-total"><span>Total motivations</span><span class="amber" id="motivation-total">—</span></div>
+        <div class="exp-total"><span>Net (encaissé − motivations)</span><span id="motivation-net">—</span></div>
     </div>
 
     <!-- Générateur de rapport AG -->
