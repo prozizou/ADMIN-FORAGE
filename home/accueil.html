@@ -260,6 +260,15 @@
             if (session.isSuperadmin) {
                 const el = document.getElementById('btn-superadmin');
                 if (el) el.classList.remove('restricted');
+
+                // ✅ Le super-admin ne gère pas un forage précis : seuls le menu
+                // super-admin, les statistiques et les rapports & bilan ont un sens
+                // pour lui. On masque tout le reste (y compris ce qu'un président
+                // verrait normalement), à l'exception de la déconnexion.
+                const allowed = ['btn-superadmin', 'btn-stats', 'btn-rapports', 'btn-logout'];
+                document.querySelectorAll('.grid .glass-btn').forEach(tile => {
+                    if (!allowed.includes(tile.id)) tile.classList.add('restricted');
+                });
             }
         }
 
