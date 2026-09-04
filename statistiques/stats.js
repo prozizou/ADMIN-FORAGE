@@ -549,7 +549,10 @@ window.applyFilter = function() {
             const nIdxA = parseFloat(item.new_index || 0);
             const lIdxA = parseFloat(item.last_index || 0);
             const realConsoA = nIdxA - lIdxA;
-            if (!(realConsoA < 0 || realConsoA > 100)) return false;
+            // ✅ Un compteur pas encore relevé (new_index = 0) n'est pas une
+            // anomalie — l'erreur d'index suppose qu'un index A été saisi.
+            const isAnomalyA = (nIdxA > 0 && realConsoA < 0) || realConsoA > 100;
+            if (!isAnomalyA) return false;
         }
         // ✅ v2 : filtre secondaire (déplacé hors des onglets) — uniquement les
         // compteurs dont l'index a bien été saisi (new_index > 0), ou l'inverse.
@@ -688,30 +691,69 @@ function renderList() {
     document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
     const dataToShow = currentFilteredData.slice(0, displayLimit);
 
+    // ✅ v3 : pour des utilisateurs novices, la couleur de fond redevient un
+    // vrai repère pédagogique (payé=vert, impayé=rouge, anomalie=saumon —
+    // délibérément différent du rouge "impayé" pour ne pas confondre les deux
+    // situations —, non relevé=gris), mais jamais SEULE : chaque carte porte
+    // aussi un symbole/texte explicite (✓/✕/⚠/○) pour rester lisible sans
+    // interpréter la couleur.
     dataToShow.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
         const lIdx = parseFloat(item.last_index || 0);
+        const hasIndex = nIdx > 0;
         const realConso = nIdx - lIdx;
-        const isIndexError = realConso < 0;
+        // Une erreur d'index suppose qu'un index A été saisi ce mois — sinon
+        // (compteur pas encore relevé), realConso est mécaniquement négatif
+        // sans que ce soit une anomalie : c'est juste "non relevé".
+        const isIndexError = hasIndex && realConso < 0;
+        const isNotRead = !hasIndex;
         const zoneName = esc(zoneOf(item));
         const div = document.createElement('div');
 
-        // ✅ v2 : une erreur d'index (nouveau < ancien) prend le pas sur le
-        // statut financier — on ne présente jamais une consommation/un
-        // montant négatifs comme s'ils étaient normaux. L'action proposée
-        // est de corriger le relevé, pas de payer/révoquer.
+        // 1) Compteur pas encore relevé ce mois : ni erreur, ni statut
+        // financier à afficher — une simple action à venir, pas un problème.
+        if (isNotRead) {
+            const arriere = item.arriere || 0;
+            const arriereNote = arriere > 0
+                ? `<div style="margin-top:6px;font-size:0.75rem;color:var(--danger);font-weight:600;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
+                : '';
+            // Permet toujours de saisir l'index depuis cette page (président
+            // uniquement, hors archive) — on ne retire pas cette possibilité,
+            // on clarifie seulement l'état "pas encore fait".
+            const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
+                ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
+                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
+            div.className = 'item bg-non-releve';
+            div.innerHTML = `
+                <div style="flex: 1;">
+                    <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
+                    <small style="color:var(--text-main)">Cpt: ${esc(item.numero_compteur || 'N/A')} · Dernier index : ${lIdx}</small><br>
+                    <span class="status-badge status-pending">○ NON RELEVÉ</span>
+                    ${arriereNote}
+                </div>
+                <div style="text-align:right; align-self: flex-start; margin-left: 10px;">${editOrLock}</div>
+            `;
+            listDiv.appendChild(div);
+            return;
+        }
+
+        // 2) Erreur d'index (nouveau < ancien) — prend le pas sur le statut
+        // financier : on ne présente jamais une consommation/un montant
+        // négatifs comme s'ils étaient normaux. Fond volontairement différent
+        // du rouge "Impayé" pour ne pas confondre les deux situations.
         if (isIndexError) {
             const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
             const fixOrLock = canFix
                 ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
-            div.className = 'item bg-alerte-index';
+            div.className = 'item bg-anomalie';
             div.innerHTML = `
                 <div style="flex: 1;">
                     <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
                     <small style="color:var(--text-main)">Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
-                    <span class="anomaly-badge"><i class="fa-solid fa-triangle-exclamation"></i> Anomalie de relevé</span>
-                    <div style="margin-top:6px; font-size:0.78rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> · Nouvel index : <b>${nIdx}</b></div>
+                    <span class="anomaly-badge">⚠ ANOMALIE DE RELEVÉ</span>
+                    <div style="margin-top:6px; font-size:0.78rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> → Nouvel index : <b>${nIdx}</b></div>
+                    <div style="margin-top:2px; font-size:0.72rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien.</div>
                 </div>
                 <div style="text-align:right; align-self: flex-start; margin-left: 10px;">${fixOrLock}</div>
             `;
@@ -744,29 +786,33 @@ function renderList() {
             ? `<span class="badge-releve"><i class="fa-solid fa-gauge-high"></i> Relevé</span>`
             : '';
 
+        // ✅ v3 : icône + texte (« Modifier ») au lieu d'une icône seule — plus
+        // explicite pour un utilisateur novice.
         const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
+            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
             : '';
 
-        // ✅ v2 : sur une archive, le bouton Payé/Révoquer laisse place à un
+        // ✅ v2 : sur une archive, le bouton Payé/Annuler laisse place à un
         // simple cadenas — l'historique ne doit pas pouvoir être modifié
         // accidentellement.
+        // ✅ v3 : « Révoquer » → « Annuler le paiement » — le libellé doit dire
+        // ce qui va se passer, pas juste nommer l'action technique.
         const statusBtn = isArchiveView
             ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
             : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`);
+                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Marquer payé</button>`
+                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Annuler le paiement</button>`);
 
-        // ✅ v2 : carte neutre + badge de statut (le fond plein rose/vert sur
-        // chaque carte rendait toute la page rouge dès qu'une cinquantaine
-        // d'impayés se suivaient).
-        div.className = `item ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
+        // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
+        // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
+        // badge texte explicite (✓/✕), jamais la couleur seule.
+        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
 
         div.innerHTML = `
             <div style="flex: 1;">
                 <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
                 <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
-                <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? 'PAYÉ' : 'IMPAYÉ'}</span>
+                <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? '✓ PAYÉ' : '✕ IMPAYÉ'}</span>
                 ${arriereHtml}
                 ${auditHtml}
                 ${anomalyHtml}
