@@ -113,8 +113,11 @@
         .tri-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; }
         .tri-lbl { font-size: .68rem; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .03em; }
         .tri-val { font-size: 1rem; font-weight: 800; margin-top: 4px; word-break: break-word; }
-        .tri-val-danger { color: var(--danger); }
+        /* ✅ v3 : orange doux au lieu du rouge vif — "Impayé" est un chiffre de
+           suivi, pas une faute ; le rouge reste réservé aux vraies alertes. */
+        .tri-val-warn { color: var(--amber); }
         .tri-delta { font-size: .68rem; font-weight: 700; min-height: 14px; margin-top: 2px; }
+        .tri-note { font-size: .66rem; color: var(--sub); margin-top: 3px; }
 
         .kpi-more { margin-top: 14px; text-align: left; }
         .kpi-more summary { cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--primary); list-style: none; text-align: center; }
@@ -127,21 +130,27 @@
         /* ── Performance : graphique (vraiment lisible) + zones ── */
         .chart-wrap { min-height: 240px; }
         .chart-wrap canvas { max-height: 260px; }
+        .chart-caption { font-size: .78rem; color: var(--sub); margin: -6px 0 12px; }
 
         .zone-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
         .zone-row:last-child { border-bottom: none; padding-bottom: 0; }
-        .zone-row-top { display: flex; justify-content: space-between; align-items: center; font-size: .9rem; margin-bottom: 6px; }
+        .zone-row-top { display: flex; justify-content: space-between; align-items: center; font-size: .9rem; margin-bottom: 6px; gap: 8px; }
         .zone-bar-bg { height: 6px; border-radius: 5px; background: var(--border); overflow: hidden; }
         .zone-bar-fill { height: 100%; border-radius: 5px; transition: width .5s ease; }
         .zone-bar-ok   { background: var(--success); }
         .zone-bar-warn { background: var(--amber); }
-        .zone-bar-bad  { background: var(--danger); }
+        /* ✅ v3 : orange soutenu au lieu de rouge — une zone qui recouvre peu
+           a besoin d'attention, pas d'un signal de danger. */
+        .zone-bar-low  { background: #ea580c; }
         .zone-row-sub { display: block; color: var(--sub); font-size: .76rem; margin-top: 5px; }
 
-        .tag { font-weight: 800; font-size: .78rem; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+        .tag { font-weight: 800; font-size: .78rem; padding: 3px 9px; border-radius: 20px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
         .tag-ok   { background: rgba(34,197,94,0.15); color: var(--success); }
         .tag-warn { background: rgba(245,158,11,0.15); color: var(--amber); }
-        .tag-bad  { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .tag-low  { background: rgba(234,88,12,0.15); color: #ea580c; }
+        /* ✅ v3 : "0 %" seul est anxiogène — message rassurant + icône orange
+           plutôt qu'un badge qui ressemble à une erreur. */
+        .tag-notice { background: rgba(245,158,11,0.12); color: var(--amber); font-weight: 700; }
 
         /* ── Alertes / actions ── */
         .alert-card { border-color: rgba(239,68,68,0.25); }
@@ -149,7 +158,10 @@
 
         .row-item { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
         .row-item:last-child { border-bottom: none; }
-        .rank { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .74rem; font-weight: 800; flex: 0 0 auto; }
+        /* ✅ v3 : avatar (initiales sur fond de couleur dédiée) au lieu d'un
+           cercle numéroté — plus rassurant, identifie visuellement chaque
+           client (même principe que la page Anomalies). */
+        .rank { width: 30px; height: 30px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 800; flex: 0 0 auto; }
         .row-main { flex: 1; min-width: 0; }
         .row-main b { display: block; font-size: .9rem; font-weight: 600; }
         .row-main small { color: var(--sub); font-size: .76rem; }
@@ -177,7 +189,10 @@
         .caisse-cell { display: flex; flex-direction: column; gap: 3px; }
         .c-label { font-size: .68rem; font-weight: 700; color: var(--sub); text-transform: uppercase; }
         .c-val { font-size: 1rem; font-weight: 800; }
-        .caisse-caption { font-size: .78rem; color: var(--sub); text-align: center; margin: 12px 0 0; }
+        /* ✅ v3 : police agrandie + chiffres en gras (demandé explicitement —
+           l'ancienne taille était trop petite pour bien voir les montants). */
+        .caisse-caption { font-size: .92rem; color: var(--text); text-align: center; margin: 12px 0 0; line-height: 1.5; }
+        .caisse-caption b { font-weight: 800; }
 
         /* ── Rapport AG ── */
         .seg { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -255,19 +270,22 @@
 
         <div class="tri-row">
             <div>
-                <div class="tri-lbl">Facturé</div>
+                <div class="tri-lbl">Chiffre du mois</div>
                 <div class="tri-val" id="kpi-facture">—</div>
                 <div class="tri-delta" id="d-facture"></div>
+                <div class="tri-note">Montant total facturé</div>
             </div>
             <div>
                 <div class="tri-lbl">Encaissé</div>
                 <div class="tri-val" id="kpi-recettes-mini">—</div>
                 <div class="tri-delta" id="d-recettes"></div>
+                <div class="tri-note">Déjà réglé</div>
             </div>
             <div>
                 <div class="tri-lbl">Impayé</div>
-                <div class="tri-val tri-val-danger" id="kpi-impayes" title="Reste à recouvrer, dont arriérés">—</div>
+                <div class="tri-val tri-val-warn" id="kpi-impayes" title="Reste à recouvrer, dont arriérés">—</div>
                 <div class="tri-delta" id="d-impayes"></div>
+                <div class="tri-note">Reste à recevoir</div>
             </div>
         </div>
 
@@ -294,6 +312,7 @@
             <svg class="ic" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
             Évolution des encaissements
         </div>
+        <p class="chart-caption">L'argent encaissé ces 12 derniers mois. Touchez "Argent restant en caisse" dans la légende pour l'afficher.</p>
         <div class="chart-wrap"><canvas id="chart-recettes"></canvas></div>
     </section>
 
@@ -326,7 +345,7 @@
         </button>
         <button type="button" class="summary-row" onclick="window.openMotivationModal()">
             <span class="summary-row-icon"><svg class="ic" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-            <span class="summary-row-label">Motivations</span>
+            <span class="summary-row-label">Primes &amp; rémunérations</span>
             <span class="summary-row-val" id="motivation-summary-total">—</span>
             <span class="summary-row-arrow">Voir le détail →</span>
         </button>
@@ -346,8 +365,9 @@
         <p class="caisse-caption" id="caisse-mois-detail">—</p>
     </section>
 
-    <!-- 5. RAPPORT AG -->
-    <section class="card-box">
+    <!-- 5. RAPPORT AG — réservé au président/trésorier (masqué en JS pour les
+         autres rôles : un agent de recouvrement n'en a pas l'usage). -->
+    <section class="card-box" id="report-section">
         <div class="card-title">
             <svg class="ic" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h1"/></svg>
             Rapport pour l'Assemblée Générale
@@ -372,7 +392,7 @@
             </select>
         </div>
         <button class="btn-pdf" onclick="genererRapport()">Générer le rapport PDF</button>
-        <button class="btn-csv-link" onclick="exporterCSV()">Exporter les données en CSV</button>
+        <button class="btn-csv-link" onclick="exporterCSV()">Télécharger un tableau Excel</button>
     </section>
 </div>
 
@@ -397,10 +417,10 @@
 <div class="modal-overlay" id="motivation-modal-overlay" onclick="window.closeModalIfOutside(event,'motivation-modal-overlay')">
     <div class="modal-panel">
         <div class="modal-head">
-            <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>Motivations — <span id="motivation-period">…</span></h2>
+            <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>Primes &amp; rémunérations — <span id="motivation-period">…</span></h2>
             <button class="modal-close" onclick="window.closeMotivationModal()">✕</button>
         </div>
-        <p class="hint">Somme totale perçue − liste des bénéficiaires qui vont recevoir une motivation (président, trésorier, secrétaire, agents releveurs, programmeur, frais de développement…).</p>
+        <p class="hint">Somme totale perçue − liste des bénéficiaires qui reçoivent une prime ou une rémunération (président, trésorier, secrétaire, agents releveurs, programmeur, frais de développement…).</p>
         <div class="expense-add" id="motivation-add">
             <input type="text" class="exp-inp lib" id="mot-new-ben" placeholder="Bénéficiaire (ex: Président, Agent releveur - Zone A)" maxlength="120">
             <input type="number" class="exp-inp mnt" id="mot-new-mnt" placeholder="Montant" min="0">

@@ -90,6 +90,39 @@ function zoneOf(r) {
               (agents[r.agent_id] && agents[r.agent_id].zone) || '';
     return z ? String(z).trim() : 'Sans zone';
 }
+
+// ✅ v3 : uniformise l'affichage des zones ("veligara bambara" → "Veligara
+// Bambara") sans toucher aux données stockées — certaines zones étaient
+// saisies en minuscules, d'autres en capitales ("HLM 1"), ce qui donnait un
+// rendu peu soigné. Les sigles déjà en capitales (HLM 1…) restent tels quels.
+const ZONE_SMALL_WORDS = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'et', 'en', 'à', 'au', 'aux', 'sur', 'sous', 'é']);
+function formatZoneLabel(zone) {
+    const z = String(zone || '').trim();
+    if (!z) return 'Sans zone';
+    if (z === z.toUpperCase()) return z;
+    return z.toLowerCase().split(' ').map((word, i) => {
+        if (i > 0 && ZONE_SMALL_WORDS.has(word)) return word;
+        return word.replace(/^([a-zà-ÿ])/, c => c.toUpperCase());
+    }).join(' ');
+}
+
+// ✅ v3 : avatar (initiales + couleur dédiée) pour les débiteurs, au lieu
+// d'un cercle numéroté — plus rassurant pour un novice (même principe que
+// la page Anomalies).
+function getInitials(name) {
+    const n = String(name || '?').trim();
+    if (!n) return '?';
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+const AVATAR_PALETTE = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6'];
+function avatarColor(seed) {
+    let h = 0;
+    const s = String(seed);
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}
 function recordsOfCycle(cycle) {
     const c = cycleKey(cycle);
     if (c === currentMonthStr() && activeRecords.length) return activeRecords;
@@ -298,9 +331,12 @@ function renderCaisse(curMetrics) {
     const soldeEl = document.getElementById('caisse-solde');
     if (soldeEl) soldeEl.style.color = soldeCaisse >= 0 ? 'var(--success)' : 'var(--danger)';
 
-    setText('caisse-mois-detail',
-        `Sur ${monthLabel(selCycle)} : encaissé ${fMoney(curMetrics.encaisse)} − dépenses ${fMoney(depMois)} = ` +
-        `solde ${fMoney(soldeMois)}`);
+    // ✅ v3 : chiffres en gras (texte plus grand géré en CSS) — la phrase
+    // elle-même est déjà une bonne idée pour un novice, juste trop discrète.
+    const detailEl = document.getElementById('caisse-mois-detail');
+    if (detailEl) {
+        detailEl.innerHTML = `Sur ${esc(monthLabel(selCycle))} : encaissé <b>${fMoney(curMetrics.encaisse)}</b> − dépenses <b>${fMoney(depMois)}</b> = solde <b>${fMoney(soldeMois)}</b>`;
+    }
 }
 
 function renderFinanceChart() {
@@ -321,13 +357,18 @@ function renderFinanceChart() {
     const ctx = document.getElementById('chart-recettes');
     if (!ctx || typeof Chart === 'undefined') return;
     if (chartRecettes) chartRecettes.destroy();
+    // ✅ v3 : pour un novice, deux séries suffisent d'un coup d'œil (Encaissé
+    // + Dépenses) — "Solde net" reste disponible mais masqué par défaut,
+    // affichable en touchant son nom dans la légende (comportement natif
+    // de Chart.js). Titre du graphique retiré : la phrase d'explication au-
+    // dessus (HTML) fait déjà ce travail, pas la peine de le répéter.
     chartRecettes = new Chart(ctx, {
         data: {
             labels,
             datasets: [
                 { type: 'bar', label: 'Encaissé', data: dataEnc, backgroundColor: colorsEnc, borderRadius: 5, order: 2 },
                 { type: 'bar', label: 'Dépenses', data: dataDep, backgroundColor: '#f59e0b', borderRadius: 5, order: 2 },
-                { type: 'line', label: 'Solde net', data: dataSolde, borderColor: '#a855f7', backgroundColor: '#a855f7', tension: .3, order: 1 }
+                { type: 'line', label: 'Argent restant en caisse', data: dataSolde, borderColor: '#a855f7', backgroundColor: '#a855f7', tension: .3, order: 1, hidden: true }
             ]
         },
         options: {
@@ -335,7 +376,7 @@ function renderFinanceChart() {
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: true, labels: { color: textColor } },
-                title: { display: true, text: 'Encaissé, dépenses & solde net — 12 derniers cycles', color: textColor }
+                title: { display: false }
             },
             scales: {
                 x: { ticks: { color: textColor }, grid: { color: gridColor } },
@@ -364,17 +405,23 @@ function renderTopDebiteurs() {
     }
 
     const VISIBLE = 5;
-    const rowHtml = (d, i) => `
+    const rowHtml = (d) => {
+        const color = avatarColor(d.name);
+        return `
         <div class="row-item">
-            <span class="rank">${i + 1}</span>
-            <div class="row-main"><b>${esc(d.name)}</b><small>${esc(d.zone)} · Cpt ${esc(d.compteur)}</small></div>
+            <span class="rank" style="background:${color}">${esc(getInitials(d.name))}</span>
+            <div class="row-main"><b>${esc(d.name)}</b><small>${esc(formatZoneLabel(d.zone))} · Cpt ${esc(d.compteur)}</small></div>
             <span class="row-amt">${fMoney(d.total)}</span>
         </div>`;
+    };
 
     const head = debiteurs.slice(0, VISIBLE).map(rowHtml).join('');
     const rest = debiteurs.slice(VISIBLE);
-    const restHtml = rest.map((d, i) => rowHtml(d, i + VISIBLE)).join('');
-    const showLabel = `Voir tous les débiteurs (${debiteurs.length}) ▾`;
+    const restHtml = rest.map(rowHtml).join('');
+    // ✅ v3 : le nombre de clients en retard est explicite dans la phrase
+    // elle-même, pas juste entre parenthèses.
+    const n = debiteurs.length;
+    const showLabel = `Il y a ${n} client${n > 1 ? 's' : ''} en retard — Voir la liste complète`;
     const toggleHtml = rest.length
         ? `<button type="button" class="btn-see-all" id="btn-toggle-debiteurs" data-show-label="${esc(showLabel)}" onclick="window.toggleAllDebiteurs()">${esc(showLabel)}</button>
            <div id="debiteurs-rest" hidden>${restHtml}</div>`
@@ -395,12 +442,28 @@ window.toggleAllDebiteurs = function () {
 // du badge chiffré — au lieu d'une simple liste de badges 0 %, 95 %, 97 %…
 function renderZonesRisque(zones) {
     const rows = Object.entries(zones).map(([zone, z]) => ({
-        zone, taux: z.facture > 0 ? (z.encaisse / z.facture * 100) : 0, impaye: z.impaye, nb: z.nb
+        zone: formatZoneLabel(zone), taux: z.facture > 0 ? (z.encaisse / z.facture * 100) : 0,
+        impaye: z.impaye, nb: z.nb, facture: z.facture
     })).sort((a, b) => a.taux - b.taux);
 
     const box = document.getElementById('zones-risque');
     box.innerHTML = rows.length ? rows.map(r => {
-        const cls = r.taux >= 75 ? 'ok' : r.taux >= 50 ? 'warn' : 'bad';
+        // ✅ v3 : "0 %" seul ressemble à une erreur — message rassurant à la
+        // place, avec une icône orange plutôt qu'un badge rouge vif.
+        if (r.facture > 0 && r.taux === 0) {
+            return `<div class="zone-row">
+                <div class="zone-row-top">
+                    <b>${esc(r.zone)}</b>
+                    <span class="tag tag-notice">
+                        <svg class="ic" style="width:12px;height:12px;margin:0;" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                        Aucun paiement ce mois-ci
+                    </span>
+                </div>
+                <div class="zone-bar-bg"><div class="zone-bar-fill zone-bar-low" style="width:4%"></div></div>
+                <small class="zone-row-sub">${r.nb} compteur(s) · Impayés : ${fMoney(r.impaye)}</small>
+            </div>`;
+        }
+        const cls = r.taux >= 75 ? 'ok' : r.taux >= 50 ? 'warn' : 'low';
         const pct = Math.max(0, Math.min(100, r.taux));
         return `<div class="zone-row">
             <div class="zone-row-top">
@@ -508,7 +571,7 @@ function renderMotivations(curMetrics) {
 }
 
 window.addMotivation = async function () {
-    if (!canEditExpenses) { alert('Seuls le président et le trésorier peuvent saisir les motivations.'); return; }
+    if (!canEditExpenses) { alert('Seuls le président et le trésorier peuvent saisir les primes et rémunérations.'); return; }
     const benEl = document.getElementById('mot-new-ben');
     const mntEl = document.getElementById('mot-new-mnt');
     const beneficiaire = benEl.value.trim();
@@ -562,6 +625,12 @@ function populateSelectors() {
     if (addForm && !canEditExpenses) addForm.style.display = 'none';
     const motAddForm = document.getElementById('motivation-add');
     if (motAddForm && !canEditExpenses) motAddForm.style.display = 'none';
+
+    // ✅ v3 : "Rapport pour l'Assemblée Générale" (PDF/CSV) est une action de
+    // président/trésorier — un agent de recouvrement n'en a pas l'usage,
+    // autant garder son écran propre.
+    const reportSection = document.getElementById('report-section');
+    if (reportSection && !canEditExpenses) reportSection.style.display = 'none';
 }
 
 window.onPeriodChange = function () {
@@ -728,7 +797,7 @@ function genererMensuel() {
 
     const zoneRows = Object.entries(m.zones).map(([zone, z]) => {
         const taux = z.facture > 0 ? (z.encaisse / z.facture * 100) : 0;
-        return [zone, String(z.nb), fNumber(z.volume),
+        return [formatZoneLabel(zone), String(z.nb), fNumber(z.volume),
                 fMoney(z.facture), fMoney(z.encaisse), taux.toFixed(0) + ' %'];
     });
     doc.autoTable({
@@ -901,7 +970,7 @@ function exporterMensuelCSV() {
     ];
     Object.entries(m.zones).forEach(([zone, z]) => {
         const taux = z.facture > 0 ? (z.encaisse / z.facture * 100) : 0;
-        rows.push([zone, z.nb, Math.round(z.volume), Math.round(z.facture), Math.round(z.encaisse), taux.toFixed(1)]);
+        rows.push([formatZoneLabel(zone), z.nb, Math.round(z.volume), Math.round(z.facture), Math.round(z.encaisse), taux.toFixed(1)]);
     });
     rows.push([]);
     rows.push(['Dépenses', 'Montant (FCFA)', 'Date', 'Saisi par']);
