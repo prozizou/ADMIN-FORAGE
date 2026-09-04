@@ -27,12 +27,18 @@ let storeAgents = {};
 let prevMonthData = {}; 
 let unsubCurrentMonth = null; 
 
-let currentTab = 'all'; 
-let displayLimit = 100; 
-let currentFilteredData = []; 
-let chartPieInstance = null;
+let currentTab = 'all';
+// ✅ v2 : Relevés/Non relevés quittent la ligne d'onglets pour un filtre
+// secondaire indépendant (voir setReleveFilter) — la ligne d'onglets se
+// limite désormais à Tous / Payés / Impayés / Anomalies.
+let releveFilter = 'all';
+// ✅ v2 : vrai en consultant une période archivée — verrouille les actions
+// de modification (statut, édition) dans renderList() et les handlers.
+let isArchiveView = false;
+let displayLimit = 100;
+let currentFilteredData = [];
 let chartBarInstance = null;
-let currentActivePath = ""; 
+let currentActivePath = "";
 
 // Cache de l'arbre complet asufor_backup (pour billing.js : arriérés + cascade paiement)
 let allBackupsCache = {};
@@ -126,9 +132,15 @@ window.setTab = function(tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tab-' + tabName).classList.add('active');
     displayLimit = 100;
-    // Afficher/masquer la carte de progression pour les onglets Relevés / Non relevés
+    window.applyFilter();
+};
+
+// ✅ v2 : filtre secondaire Relevés / Non relevés (déplacé hors des onglets)
+window.setReleveFilter = function(value) {
+    releveFilter = value;
+    displayLimit = 100;
     const progressCard = document.getElementById('releves-progress-card');
-    if (progressCard) progressCard.style.display = (tabName === 'releves' || tabName === 'non-releves') ? 'block' : 'none';
+    if (progressCard) progressCard.style.display = (value === 'releves' || value === 'non-releves') ? 'block' : 'none';
     window.applyFilter();
 };
 
@@ -145,12 +157,16 @@ window.scrollToTop = function() {
 
 // --- AUDIT TRAIL : MODIFICATION DU STATUT ---
 window.confirmRevoke = function(key) {
+    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
     if (confirm("🚨 ATTENTION !\nÊtes-vous sûr de vouloir marquer cette facture comme NON PAYÉE ?")) {
         window.updateStatus(key, 'impaye');
     }
 };
 
 window.updateStatus = function(key, newStatus) {
+    // ✅ v2 : verrou défensif — la carte ne propose déjà plus ce bouton sur une
+    // archive, mais on bloque aussi l'appel direct (deuxième ligne de défense).
+    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
     if (!currentActivePath) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
@@ -261,31 +277,41 @@ window.exportCSV = function() {
     showToast("✅ Fichier Excel téléchargé !");
 };
 
+// ✅ v2 : libellé humain ("Août 2026 — Archive") au lieu du format technique
+// "Archive : 2026-08" — plus clair pour un responsable non technicien.
+function monthLabelFR(cycle) {
+    if (!cycle || cycle === 'actuel') return 'Données actuelles';
+    const [y, m] = cycle.split('-');
+    const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+    const label = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 // --- INITIALISATION DU MENU DÉROULANT DES MOIS ---
 window.initMonthFilter = async function() {
     const monthSelect = document.getElementById('month-filter');
-    
+
     try {
         const snapshot = await get(ref(db, P.backup));
-        let optionsHtml = '<option value="actuel">🌟 Données Actuelles</option>';
-        
+        let optionsHtml = '<option value="actuel">Données actuelles</option>';
+
         if (snapshot.exists()) {
             const backups = snapshot.val();
             allBackupsCache = backups; // conservé pour billing.js (arriérés + cascade paiement)
             const sortedMonths = Object.keys(backups).sort().reverse();
-            
+
             sortedMonths.forEach(month => {
-                optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`;
+                optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
             });
         }
-        
+
         monthSelect.innerHTML = optionsHtml;
         monthSelect.value = "actuel";
         loadDataForMonth("actuel");
-        
+
     } catch (error) {
         console.error("Erreur lors du chargement des périodes:", error);
-        monthSelect.innerHTML = '<option value="actuel">🌟 Données Actuelles</option>';
+        monthSelect.innerHTML = '<option value="actuel">Données actuelles</option>';
         loadDataForMonth("actuel");
     }
 }
@@ -319,7 +345,16 @@ function loadDataForMonth(selection) {
     }
 
     currentActivePath = dbPath;
-    
+
+    // ✅ v2 : une archive est un état historique figé — on verrouille les
+    // actions de modification (statut, édition) et on l'indique clairement
+    // (bandeau + libellé du bilan), au lieu d'un simple sélecteur technique.
+    isArchiveView = (selection !== "actuel");
+    const banner = document.getElementById('archive-banner');
+    if (banner) banner.classList.toggle('visible', isArchiveView);
+    const recapTitle = document.getElementById('recap-title');
+    if (recapTitle) recapTitle.textContent = isArchiveView ? `Bilan — ${monthLabelFR(selection)}` : 'Bilan du mois';
+
     unsubCurrentMonth = onValue(ref(db, dbPath), (snap) => {
         storeReleves = snap.val() || {};
         document.getElementById('skeleton-loader').style.display = "none";
@@ -509,13 +544,20 @@ window.applyFilter = function() {
 
         if (currentTab === 'paye' && !isPaid) return false;
         if (currentTab === 'impaye' && isPaid) return false;
-        // Onglet Relevés : uniquement les compteurs dont l'index a bien été saisi (new_index > 0)
-        if (currentTab === 'releves') {
+        // ✅ v2 : onglet Anomalies — erreur d'index (nouveau < ancien) ou fuite (> 100 m³)
+        if (currentTab === 'anomalies') {
+            const nIdxA = parseFloat(item.new_index || 0);
+            const lIdxA = parseFloat(item.last_index || 0);
+            const realConsoA = nIdxA - lIdxA;
+            if (!(realConsoA < 0 || realConsoA > 100)) return false;
+        }
+        // ✅ v2 : filtre secondaire (déplacé hors des onglets) — uniquement les
+        // compteurs dont l'index a bien été saisi (new_index > 0), ou l'inverse.
+        if (releveFilter === 'releves') {
             const hasIndex = parseFloat(item.new_index || 0) > 0;
             if (!hasIndex) return false;
         }
-        // Onglet Non relevés : le pendant inverse — compteurs encore sans index saisi ce mois
-        if (currentTab === 'non-releves') {
+        if (releveFilter === 'non-releves') {
             const hasIndex = parseFloat(item.new_index || 0) > 0;
             if (hasIndex) return false;
         }
@@ -536,48 +578,49 @@ window.applyFilter = function() {
     document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
     document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
 
-    const calcTrend = (current, prev, elId) => {
+    // ✅ v2 : barre de recouvrement (remplace le donut) dans la carte Bilan
+    const recapTotal = tCFA_Paye + tCFA_Impaye;
+    const recapPct = recapTotal > 0 ? (tCFA_Paye / recapTotal * 100) : 0;
+    const recapBar = document.getElementById('recap-bar-fill');
+    if (recapBar) recapBar.style.width = Math.min(100, recapPct) + '%';
+    const recapPctEl = document.getElementById('recap-pct');
+    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % recouvré';
+
+    // ✅ v2 : la couleur reflète si la variation est une BONNE ou une MAUVAISE
+    // nouvelle pour cet indicateur — avant, +294,6 % d'impayés s'affichait en
+    // vert (hausse = vert, peu importe le sens), ce qui donnait le message
+    // exactement inverse de la réalité.
+    const calcTrend = (current, prev, elId, goodWhenUp) => {
         const el = document.getElementById(elId);
+        if (!el) return;
         if (prev === 0) { el.innerHTML = ""; return; }
         const diff = ((current - prev) / prev) * 100;
-        const sign = diff >= 0 ? '+' : '';
-        const arrow = diff >= 0 ? '📈' : '📉';
-        const colorClass = diff >= 0 ? 'trend-up' : 'trend-down';
+        const dirUp = diff >= 0;
+        const sign = dirUp ? '+' : '';
+        const arrow = dirUp ? '↑' : '↓';
+        const isGood = dirUp === goodWhenUp;
+        const colorClass = isGood ? 'trend-good' : 'trend-bad';
         el.innerHTML = `<span class="${colorClass}">${arrow} ${sign}${diff.toFixed(1)}% vs mois préc.</span>`;
     };
-    
-    calcTrend(tCFA_Paye, tCFA_Paye_Prev, 'trend-money');
-    calcTrend(tCFA_Impaye, tCFA_Impaye_Prev, 'trend-debt');
+
+    calcTrend(tCFA_Paye, tCFA_Paye_Prev, 'trend-money', true);   // encaissé : une hausse est une bonne nouvelle
+    calcTrend(tCFA_Impaye, tCFA_Impaye_Prev, 'trend-debt', false); // impayés : une hausse est une mauvaise nouvelle
 
     renderList();
     updateCharts(tCFA_Paye, tCFA_Impaye);
     updateRelevesProgress();
 }
 
+// ✅ v2 : le donut (répartition encaissé/impayés) est retiré — cette info est
+// désormais portée par la carte Bilan (chiffres + barre de recouvrement),
+// beaucoup plus lisible et moins gourmande en espace sur mobile.
 function updateCharts(paye, impaye) {
     // ✅ FIX : le thème est porté par [data-theme] sur <html>, pas par une classe
     //   body.dark-theme (qui n'existait jamais → texte des graphiques toujours en
     //   couleur claire, illisible en mode sombre).
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const textColor = isDark ? '#f1f5f9' : '#1e293b';
-
-    const ctxPie = document.getElementById('pieChart');
-    if (chartPieInstance) chartPieInstance.destroy();
-    chartPieInstance = new Chart(ctxPie, {
-        type: 'doughnut',
-        data: {
-            labels: ['Encaissé', 'Impayés'],
-            datasets: [{
-                data: [paye, impaye],
-                backgroundColor: ['#22c55e', '#ef4444'],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { labels: { color: textColor } }, title: { display: true, text: 'Répartition des Recettes', color: textColor } }
-        }
-    });
+    const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
     const zonesConso = {};
     currentFilteredData.forEach(item => {
@@ -589,25 +632,30 @@ function updateCharts(paye, impaye) {
         if (!zonesConso[zone]) zonesConso[zone] = 0;
         zonesConso[zone] += conso;
     });
+    // ✅ v2 : barres horizontales triées (au lieu de barres verticales avec
+    // des noms de zone inclinés, illisibles) — les valeurs se lisent d'un coup d'œil.
+    const sortedZones = Object.entries(zonesConso).sort((a, b) => b[1] - a[1]);
 
     const ctxBar = document.getElementById('barChart');
     if (chartBarInstance) chartBarInstance.destroy();
     chartBarInstance = new Chart(ctxBar, {
         type: 'bar',
         data: {
-            labels: Object.keys(zonesConso),
+            labels: sortedZones.map(z => z[0]),
             datasets: [{
                 label: 'Volume (m³)',
-                data: Object.values(zonesConso),
+                data: sortedZones.map(z => z[1]),
                 backgroundColor: '#0052fe',
                 borderRadius: 5
             }]
         },
         options: {
+            indexAxis: 'y',
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
-                x: { ticks: { color: textColor } },
-                y: { ticks: { color: textColor } }
+                x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                y: { ticks: { color: textColor }, grid: { display: false } }
             },
             plugins: { legend: { display: false }, title: { display: true, text: 'Volume par Zone (m³)', color: textColor } }
         }
@@ -643,54 +691,82 @@ function renderList() {
     dataToShow.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
         const lIdx = parseFloat(item.last_index || 0);
-        const realConso = nIdx - lIdx; 
-        
+        const realConso = nIdx - lIdx;
+        const isIndexError = realConso < 0;
+        const zoneName = esc(zoneOf(item));
+        const div = document.createElement('div');
+
+        // ✅ v2 : une erreur d'index (nouveau < ancien) prend le pas sur le
+        // statut financier — on ne présente jamais une consommation/un
+        // montant négatifs comme s'ils étaient normaux. L'action proposée
+        // est de corriger le relevé, pas de payer/révoquer.
+        if (isIndexError) {
+            const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
+            const fixOrLock = canFix
+                ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
+                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
+            div.className = 'item bg-alerte-index';
+            div.innerHTML = `
+                <div style="flex: 1;">
+                    <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
+                    <small style="color:var(--text-main)">Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
+                    <span class="anomaly-badge"><i class="fa-solid fa-triangle-exclamation"></i> Anomalie de relevé</span>
+                    <div style="margin-top:6px; font-size:0.78rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> · Nouvel index : <b>${nIdx}</b></div>
+                </div>
+                <div style="text-align:right; align-self: flex-start; margin-left: 10px;">${fixOrLock}</div>
+            `;
+            listDiv.appendChild(div);
+            return;
+        }
+
         const calculatedAmount = item.calculatedAmount || 0;
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
         const isPaid = item.status === 'paye';
-        const zoneName = esc(zoneOf(item));
         // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
         const arriereHtml = (!isPaid && arriere > 0)
             ? `<div style="margin-top:4px;font-size:0.68rem;color:var(--danger);font-weight:600;">Mois: ${calculatedAmount.toLocaleString()} F + Arriérés: ${arriere.toLocaleString()} F</div>`
             : '';
 
-        let extraClass = ''; let anomalyHtml = '';
-        if (realConso < 0) {
-            extraClass = 'bg-alerte-index';
-            anomalyHtml = `<div style="margin-top: 8px; font-size: 0.75rem; color: #d97706; font-weight: bold;">⚠️ Erreur d'index (Nouveau < Ancien)</div>`;
-        } else if (realConso > 100) {
-            extraClass = 'bg-alerte-fuite';
-            anomalyHtml = `<div style="margin-top: 8px; font-size: 0.75rem; color: var(--danger); font-weight: bold;">⚠️ Alerte Fuite (> 100 m³)</div>`;
-        }
-
-        let auditHtml = item.last_modified_by 
-            ? `<span class="audit-trail">Modifié par ${esc(item.last_modified_by)} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>` 
+        // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
+        // affichée normalement, avec une simple alerte en plus (contrairement
+        // à l'erreur d'index, ce n'est pas une donnée aberrante).
+        const anomalyHtml = (realConso > 100)
+            ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Alerte fuite (&gt; 100 m³)</div>`
             : '';
 
-        // Badge relevé affiché dans l'onglet Relevés
-        const relevesBadge = (currentTab === 'releves')
+        let auditHtml = item.last_modified_by
+            ? `<span class="audit-trail">Modifié par ${esc(item.last_modified_by)} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>`
+            : '';
+
+        // Badge relevé affiché quand le filtre "Relevés uniquement" est actif
+        const relevesBadge = (releveFilter === 'releves')
             ? `<span class="badge-releve"><i class="fa-solid fa-gauge-high"></i> Relevé</span>`
             : '';
 
-        const editBtn = (currentUser.toLowerCase() === 'président')
+        const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i></button>`
             : '';
 
-        const statusBtn = !isPaid
-            ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
-            : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`;
+        // ✅ v2 : sur une archive, le bouton Payé/Révoquer laisse place à un
+        // simple cadenas — l'historique ne doit pas pouvoir être modifié
+        // accidentellement.
+        const statusBtn = isArchiveView
+            ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
+            : (!isPaid
+                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Payé</button>`
+                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Révoquer</button>`);
 
-        const div = document.createElement('div');
-        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${extraClass}`;
-        
+        // ✅ v2 : carte neutre + badge de statut (le fond plein rose/vert sur
+        // chaque carte rendait toute la page rouge dès qu'une cinquantaine
+        // d'impayés se suivaient).
+        div.className = `item ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
+
         div.innerHTML = `
             <div style="flex: 1;">
                 <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
                 <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
-                <small style="font-size: 0.65rem; font-weight:bold; color:${isPaid ? 'var(--success)' : 'var(--danger)'}">
-                    ${isPaid ? '✅ ENCAISSÉ' : '❌ NON PAYÉ'}
-                </small>
+                <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? 'PAYÉ' : 'IMPAYÉ'}</span>
                 ${arriereHtml}
                 ${auditHtml}
                 ${anomalyHtml}
@@ -716,6 +792,7 @@ function renderList() {
 }
 
 window.openEditModal = function(key) {
+    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
     const item = storeReleves[key];
     if (!item) {
         showToast("Relevé introuvable.", true);
@@ -736,6 +813,11 @@ window.closeEditModal = function() {
 
 // ✅ CORRECTION : submitEdit() exposé globalement (le form est maintenant un div dans le HTML)
 window.submitEdit = function() {
+    if (isArchiveView) {
+        showToast("🔒 Archive : lecture seule, modification impossible.", true);
+        closeEditModal();
+        return;
+    }
     if (currentUser.toLowerCase() !== 'président') {
         showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
         closeEditModal();

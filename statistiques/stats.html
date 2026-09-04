@@ -80,33 +80,50 @@
 
         <div class="filter-row">
             <select id="month-filter" onchange="changeMonth()" title="Sélectionner la période">
-                <option value="actuel">📂 Chargement des périodes...</option>
+                <option value="actuel">Chargement des périodes...</option>
             </select>
         </div>
 
-        <div class="wallet-card">
-            <small>✅ Total Recettes Encaissées</small>
-            <h1 id="total-money">0 CFA</h1>
-            <div id="trend-money" class="trend-indicator"></div>
+        <!-- ✅ v2 : bandeau visible uniquement sur une période archivée —
+             rappelle que les données sont figées (voir statuts verrouillés
+             plus bas dans la liste). -->
+        <div id="archive-banner">
+            <i class="fa-solid fa-lock"></i>
+            <span>Archive — données clôturées, lecture seule.</span>
         </div>
 
-        <div class="debt-card">
-            <small style="font-weight:bold; font-size: 0.75rem; text-transform:uppercase;">🚨 Reste à recouvrer</small>
-            <h2 id="total-debt">0 CFA</h2>
-            <div id="trend-debt" class="trend-indicator"></div>
+        <!-- ✅ v2 : une seule carte "Bilan" (remplace les 2 grandes cartes +
+             le donut) : chiffres clés + barre de recouvrement. -->
+        <div class="recap-card">
+            <div class="recap-title" id="recap-title">Bilan du mois</div>
+            <div class="recap-row">
+                <div class="recap-cell">
+                    <span class="recap-lbl">Encaissé</span>
+                    <span class="recap-val recap-val-good" id="total-money">0 CFA</span>
+                    <div id="trend-money" class="trend-indicator"></div>
+                </div>
+                <div class="recap-cell">
+                    <span class="recap-lbl">Impayé</span>
+                    <span class="recap-val recap-val-bad" id="total-debt">0 CFA</span>
+                    <div id="trend-debt" class="trend-indicator"></div>
+                </div>
+            </div>
+            <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
+            <div class="recap-pct" id="recap-pct">0 % recouvré</div>
         </div>
 
         <div class="charts-container">
-            <div class="chart-box"><canvas id="pieChart"></canvas></div>
             <div class="chart-box"><canvas id="barChart"></canvas></div>
         </div>
 
+        <!-- ✅ v2 : 4 onglets au lieu de 5 — Relevés/Non relevés deviennent un
+             filtre secondaire à côté du tri (voir plus bas), la ligne
+             d'onglets ne débordait plus sur mobile. -->
         <div class="tabs">
-            <button class="tab-btn active" id="tab-all"     onclick="setTab('all')">Tous</button>
-            <button class="tab-btn"        id="tab-paye"    onclick="setTab('paye')">Payés</button>
-            <button class="tab-btn"        id="tab-impaye"  onclick="setTab('impaye')">Impayés</button>
-            <button class="tab-btn tab-btn-releves" id="tab-releves" onclick="setTab('releves')"><i class="fa-solid fa-gauge-high"></i> Relevés</button>
-            <button class="tab-btn" id="tab-non-releves" onclick="setTab('non-releves')"><i class="fa-solid fa-circle-exclamation"></i> Non relevés</button>
+            <button class="tab-btn active" id="tab-all"       onclick="setTab('all')">Tous</button>
+            <button class="tab-btn"        id="tab-paye"      onclick="setTab('paye')">Payés</button>
+            <button class="tab-btn"        id="tab-impaye"    onclick="setTab('impaye')">Impayés</button>
+            <button class="tab-btn"        id="tab-anomalies" onclick="setTab('anomalies')">Anomalies</button>
         </div>
 
         <div id="releves-progress-card" style="display:none;">
@@ -143,13 +160,18 @@
         </div>
 
         <div class="filter-row" style="margin-bottom: 20px;">
+            <select id="releve-filter" onchange="setReleveFilter(this.value)" title="Filtrer par statut de relevé">
+                <option value="all">Tous les relevés</option>
+                <option value="releves">Relevés uniquement</option>
+                <option value="non-releves">Non relevés uniquement</option>
+            </select>
             <select id="sort-spinner" onchange="applyFilter()">
-                <option value="recent">⏱️ Plus récent</option>
-                <option value="max_amount">💰 Plus grand montant</option>
-                <option value="min_amount">🪙 Plus petit montant</option>
-                <option value="zone">📍 Par Zone (A-Z)</option>
-                <option value="name">🔤 Par Nom (A-Z)</option>
-                <option value="compteur">🔢 Par N° Compteur</option>
+                <option value="recent">Plus récent</option>
+                <option value="max_amount">Plus grand montant</option>
+                <option value="min_amount">Plus petit montant</option>
+                <option value="zone">Par Zone (A-Z)</option>
+                <option value="name">Par Nom (A-Z)</option>
+                <option value="compteur">Par N° Compteur</option>
             </select>
         </div>
 

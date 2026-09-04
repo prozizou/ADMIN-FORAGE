@@ -66,34 +66,54 @@ body {
     position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: var(--text-sub); pointer-events: none;
 }
 
-.wallet-card {
-    background: var(--primary); color: white; padding: 25px; border-radius: 24px;
-    margin-bottom: 15px; box-shadow: 0 12px 24px rgba(0, 82, 254, 0.2); position: relative;
+/* ── Bandeau lecture seule (archive) ── */
+#archive-banner {
+    display: none;
+    align-items: center; gap: 10px;
+    background: rgba(100, 116, 139, 0.12);
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+    border-radius: 14px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 15px;
 }
-.wallet-card h1 { margin: 8px 0; font-size: 2rem; font-weight: 800; }
+#archive-banner.visible { display: flex; }
 
-.debt-card {
-    background: #fef2f2; border: 1px solid #fecaca; color: var(--danger);
-    padding: 15px 25px; border-radius: 20px; margin-bottom: 20px;
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1); position: relative;
+/* ── Bilan : une carte compacte (remplace les 2 grandes cartes + le donut) ── */
+.recap-card {
+    background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 22px; padding: 20px; margin-bottom: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
 }
-[data-theme="dark"] .debt-card { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
-.debt-card h2 { margin: 5px 0 0 0; font-size: 1.5rem; font-weight: 800; }
+.recap-title { font-size: 0.78rem; font-weight: 700; color: var(--text-sub); margin-bottom: 12px; }
+.recap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.recap-cell { display: flex; flex-direction: column; }
+.recap-lbl { font-size: 0.7rem; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: .02em; }
+.recap-val { font-size: 1.25rem; font-weight: 800; margin-top: 3px; word-break: break-word; }
+.recap-val-good { color: var(--success); }
+.recap-val-bad  { color: var(--danger); }
+.recap-bar-bg { height: 10px; border-radius: 8px; background: var(--border-color); overflow: hidden; margin-top: 16px; }
+.recap-bar-fill { height: 100%; border-radius: 8px; background: var(--success); transition: width .6s ease; width: 0; }
+.recap-pct { font-size: 0.78rem; font-weight: 700; color: var(--text-sub); margin-top: 6px; text-align: right; }
 
-.trend-indicator { font-size: 0.8rem; margin-top: 5px; font-weight: bold; }
-.trend-up { color: #86efac; }
-.debt-card .trend-up { color: var(--success); }
-.trend-down { color: #fca5a5; }
-.debt-card .trend-down { color: var(--danger); }
+/* ✅ v2 : la couleur de la tendance dépend de si la variation est une bonne
+   ou une mauvaise nouvelle pour CET indicateur (pas seulement du signe) —
+   une hausse des impayés doit rester rouge, pas verte. */
+.trend-indicator { font-size: 0.78rem; margin-top: 4px; font-weight: 700; }
+.trend-good { color: var(--success); }
+.trend-bad  { color: var(--danger); }
 
 .charts-container { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; }
-.chart-box { flex: 1; min-width: 0; background: var(--card-bg); padding: 10px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid var(--border-color); position: relative; overflow: hidden; }
-
-@media (max-width: 450px) { .charts-container { flex-direction: column; } }
+.chart-box { flex: 1; min-width: 0; min-height: 220px; background: var(--card-bg); padding: 10px; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid var(--border-color); position: relative; overflow: hidden; }
+.chart-box canvas { max-height: 240px; }
 
 .tabs { display: flex; gap: 10px; margin-bottom: 15px; background: var(--card-bg); padding: 5px; border-radius: 15px; border: 1px solid var(--border-color); }
 .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 10px; font-size: 0.85rem; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.3s; }
 .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0, 82, 254, 0.2); }
+/* Onglet Anomalies : accent ambre (cohérent avec le badge d'anomalie dans la liste) */
+#tab-anomalies.active { background: #eab308; color: #1e293b; box-shadow: 0 4px 10px rgba(234, 179, 8, 0.3); }
 
 .filter-row { display: flex; gap: 10px; margin-bottom: 15px; }
 .filter-row input, .filter-row select { flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px; font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main); }
@@ -103,18 +123,37 @@ body {
 
 .list-section { background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px; box-shadow: 0 -5px 20px rgba(0,0,0,0.02); transition: background-color 0.3s; }
 
-.item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 16px; margin-bottom: 12px; }
-.bg-paye { background-color: #dcfce7; border: 1px solid #bbf7d0; }
-.bg-impaye { background-color: #fee2e2; border: 1px solid #fecaca; }
-
-[data-theme="dark"] .bg-paye { background-color: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.2); }
-[data-theme="dark"] .bg-impaye { background-color: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.2); }
+/* ✅ v2 : carte neutre (blanche/sombre selon le thème) — avant, un fond
+   rose/vert PLEIN sur chaque carte rendait la page entière rouge dès qu'une
+   cinquantaine d'impayés se suivaient. Seuls le badge et le montant portent
+   désormais la couleur du statut. */
+.item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 16px; margin-bottom: 12px; background: var(--bg); border: 1px solid var(--border-color); }
 
 .bg-alerte-index { background-color: #fef9c3 !important; border: 2px solid #eab308 !important; }
 .bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
 
 [data-theme="dark"] .bg-alerte-index { background-color: rgba(234, 179, 8, 0.1) !important; border-color: rgba(234, 179, 8, 0.4) !important; }
 [data-theme="dark"] .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
+
+/* Badge de statut (remplace le fond de carte coloré) */
+.status-badge {
+    display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: .02em;
+    padding: 2px 9px; border-radius: 20px; margin-top: 6px;
+}
+.status-paid   { background: rgba(34, 197, 94, 0.14); color: var(--success); }
+.status-unpaid { background: rgba(239, 68, 68, 0.14); color: var(--danger); }
+
+/* Badge / notice d'anomalie (erreur d'index, fuite) — prioritaire sur le statut financier */
+.anomaly-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.72rem; font-weight: 800; color: #b45309;
+    background: rgba(234, 179, 8, 0.18); padding: 3px 10px; border-radius: 20px; margin-top: 4px;
+}
+[data-theme="dark"] .anomaly-badge { color: #fbbf24; }
+.leak-alert { margin-top: 8px; font-size: 0.75rem; font-weight: 700; color: var(--danger); display: flex; align-items: center; gap: 5px; }
+
+/* Archive : action verrouillée (remplace le bouton Payé/Révoquer) */
+.archive-lock { color: var(--text-sub); font-size: 0.95rem; padding: 6px; }
 
 .amt { font-weight: 800; font-size: 1.1rem; }
 .action-btns button { border: none; padding: 6px 12px; border-radius: 8px; font-size: 0.75rem; cursor: pointer; font-weight: bold; margin-top: 8px; }
@@ -129,6 +168,8 @@ body {
 [data-theme="dark"] .btn-edit {
     background: #f59e0b; color: #0f172a;
 }
+/* Bouton "Corriger le relevé" (carte anomalie) : même famille que btn-edit, avec libellé */
+.btn-fix { white-space: nowrap; }
 
 .audit-trail { font-size: 0.65rem; color: var(--text-sub); font-style: italic; margin-top: 5px; display: block; }
 .load-more { width: 100%; padding: 15px; background: var(--bg); border: 1px dashed var(--text-sub); color: var(--text-main); border-radius: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
@@ -194,11 +235,6 @@ body {
     .container { max-width: 450px; margin: 0; padding: 0; position: sticky; top: 20px; }
     .list-section { flex: 1; border-radius: 35px; height: calc(100vh - 40px); overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
 }
-
-/* ── Onglet Relevés ── */
-.tab-btn-releves { white-space: nowrap; }
-.tab-btn-releves i { font-size: 0.8rem; }
-.tab-btn-releves.active { background: #7c3aed; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3); }
 
 /* ── Carte de progression des relevés ── */
 #releves-progress-card {
