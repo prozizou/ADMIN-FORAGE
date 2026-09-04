@@ -19,11 +19,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="stylesheet" href="stats.css">
 
-    <!-- ✅ FIX : versions CDN ÉPINGLÉES (Chart.js n'était pas versionné → "latest",
-         une mise à jour majeure pouvait casser les graphiques sans prévenir).
-         NB déploiement : ajouter des hash SRI (integrity=) générés à partir des
-         fichiers servis pour une protection supply-chain complète. -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- ✅ v4 : Chart.js retiré — le donut et le graphique en barres ont été
+         remplacés par des présentations plus simples (carte Bilan, Top 3
+         quartiers), plus lisibles pour un public novice. -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
@@ -92,38 +90,47 @@
             <span>Archive — données clôturées, lecture seule.</span>
         </div>
 
-        <!-- ✅ v2 : une seule carte "Bilan" (remplace les 2 grandes cartes +
-             le donut) : chiffres clés + barre de recouvrement. -->
+        <!-- ✅ v4 : la carte "Bilan" raconte le mois en une phrase simple
+             ("Il reste X F à encaisser") plutôt qu'en pourcentage brut, avec
+             une jauge qui va du rouge au vert. Vocabulaire courant plutôt que
+             "Encaissé"/"Impayé". -->
         <div class="recap-card">
             <div class="recap-title" id="recap-title">Bilan du mois</div>
             <div class="recap-row">
                 <div class="recap-cell">
-                    <span class="recap-lbl">Encaissé</span>
+                    <span class="recap-lbl">Argent reçu</span>
                     <span class="recap-val recap-val-good" id="total-money">0 CFA</span>
                     <div id="trend-money" class="trend-indicator"></div>
                 </div>
                 <div class="recap-cell">
-                    <span class="recap-lbl">Impayé</span>
+                    <span class="recap-lbl">Argent à réclamer</span>
                     <span class="recap-val recap-val-bad" id="total-debt">0 CFA</span>
                     <div id="trend-debt" class="trend-indicator"></div>
                 </div>
             </div>
             <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
-            <div class="recap-pct" id="recap-pct">0 % recouvré</div>
+            <p class="recap-story" id="recap-story">—</p>
+            <div class="recap-pct" id="recap-pct">0 % encaissé</div>
         </div>
 
-        <div class="charts-container">
-            <div class="chart-box"><canvas id="barChart"></canvas></div>
+        <!-- ✅ v4 : remplace le graphique en barres (noms de quartiers
+             illisibles) par une liste "Top 3" simple, avec icônes et jauges
+             douces — plus rapide à lire pour un novice. -->
+        <div class="quartiers-card">
+            <div class="card-title-soft"><i class="fa-solid fa-house"></i> Où consomme-t-on le plus ?</div>
+            <div id="top-quartiers"><p class="muted-note">Chargement…</p></div>
         </div>
 
         <!-- ✅ v2 : 4 onglets au lieu de 5 — Relevés/Non relevés deviennent un
              filtre secondaire à côté du tri (voir plus bas), la ligne
-             d'onglets ne débordait plus sur mobile. -->
+             d'onglets ne débordait plus sur mobile.
+             ✅ v4 : icônes distinctes + libellé "Problèmes" (moins technique
+             qu'"Anomalies"), onglets agrandis et mieux espacés. -->
         <div class="tabs">
-            <button class="tab-btn active" id="tab-all"       onclick="setTab('all')">Tous</button>
-            <button class="tab-btn"        id="tab-paye"      onclick="setTab('paye')">Payés</button>
-            <button class="tab-btn"        id="tab-impaye"    onclick="setTab('impaye')">Impayés</button>
-            <button class="tab-btn"        id="tab-anomalies" onclick="setTab('anomalies')">Anomalies</button>
+            <button class="tab-btn active" id="tab-all"       onclick="setTab('all')"><i class="fa-solid fa-list-ul"></i> Tous</button>
+            <button class="tab-btn"        id="tab-paye"      onclick="setTab('paye')"><i class="fa-solid fa-circle-check"></i> Payés</button>
+            <button class="tab-btn"        id="tab-impaye"    onclick="setTab('impaye')"><i class="fa-solid fa-circle-exclamation"></i> Impayés</button>
+            <button class="tab-btn"        id="tab-anomalies" onclick="setTab('anomalies')"><i class="fa-solid fa-triangle-exclamation"></i> Problèmes</button>
         </div>
 
         <div id="releves-progress-card" style="display:none;">

@@ -37,7 +37,6 @@ let releveFilter = 'all';
 let isArchiveView = false;
 let displayLimit = 100;
 let currentFilteredData = [];
-let chartBarInstance = null;
 let currentActivePath = "";
 
 // Cache de l'arbre complet asufor_backup (pour billing.js : arriérés + cascade paiement)
@@ -110,13 +109,9 @@ window.toggleTheme = function() {
             icon.classList.replace('fa-sun', 'fa-moon');
         }
     }
-    // ✅ CORRECTION : Recalcul depuis les données réelles plutôt que l'innerText
-    let paye = 0; let impaye = 0;
-    currentFilteredData.forEach(item => {
-        if (item.status === 'paye') paye += (item.calculatedAmount || 0);
-        else impaye += (item.totalDu != null ? item.totalDu : (item.calculatedAmount || 0));
-    });
-    updateCharts(paye, impaye);
+    // ✅ v4 : plus rien à recalculer ici — "Top 3 quartiers" et la carte
+    // Bilan sont du HTML/CSS classique, réactifs au thème via les variables
+    // CSS (l'ancien Chart.js redessinait ses propres couleurs de texte).
 };
 
 function showToast(msg, isError = false) {
@@ -156,9 +151,11 @@ window.scrollToTop = function() {
 };
 
 // --- AUDIT TRAIL : MODIFICATION DU STATUT ---
+// ✅ v4 : ton adouci ("Corriger" un paiement, pas une alerte "ATTENTION") —
+// cette action reste réversible, elle ne mérite pas un ton alarmant.
 window.confirmRevoke = function(key) {
     if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
-    if (confirm("🚨 ATTENTION !\nÊtes-vous sûr de vouloir marquer cette facture comme NON PAYÉE ?")) {
+    if (confirm("Remettre cette facture en \"à encaisser\" ? Elle ne sera plus marquée comme payée.")) {
         window.updateStatus(key, 'impaye');
     }
 };
@@ -230,7 +227,7 @@ window.updateStatus = function(key, newStatus) {
     }
 
     update(ref(db), updates)
-        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "⚠️ Facture révoquée !"))
+        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "↩️ Paiement corrigé : facture remise à encaisser."))
         .catch(err => {
             if (previousRecord) {
                 storeReleves[key] = previousRecord;
@@ -581,18 +578,33 @@ window.applyFilter = function() {
     document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
     document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
 
-    // ✅ v2 : barre de recouvrement (remplace le donut) dans la carte Bilan
+    // ✅ v4 : la carte Bilan raconte le mois en une phrase ("Il reste X F à
+    // encaisser") plutôt qu'en pourcentage brut, avec une jauge qui va du
+    // rouge au vert selon le niveau atteint — plus parlant pour un novice
+    // qu'un simple "0,1 % recouvré".
     const recapTotal = tCFA_Paye + tCFA_Impaye;
     const recapPct = recapTotal > 0 ? (tCFA_Paye / recapTotal * 100) : 0;
     const recapBar = document.getElementById('recap-bar-fill');
-    if (recapBar) recapBar.style.width = Math.min(100, recapPct) + '%';
+    if (recapBar) {
+        recapBar.style.width = Math.min(100, recapPct) + '%';
+        recapBar.style.background = recapPct >= 75 ? 'var(--success)' : recapPct >= 40 ? '#f59e0b' : 'var(--danger)';
+    }
+    const recapStoryEl = document.getElementById('recap-story');
+    if (recapStoryEl) {
+        recapStoryEl.textContent = tCFA_Impaye > 0
+            ? `Il reste ${Math.round(tCFA_Impaye).toLocaleString()} F à encaisser ce mois-ci`
+            : '🎉 Tout est encaissé ce mois-ci !';
+    }
     const recapPctEl = document.getElementById('recap-pct');
-    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % recouvré';
+    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % encaissé';
 
     // ✅ v2 : la couleur reflète si la variation est une BONNE ou une MAUVAISE
     // nouvelle pour cet indicateur — avant, +294,6 % d'impayés s'affichait en
     // vert (hausse = vert, peu importe le sens), ce qui donnait le message
     // exactement inverse de la réalité.
+    // ✅ v4 : mène par un mot simple ("Plutôt bien"/"À surveiller") — le
+    // pourcentage exact reste affiché, mais en second plan, moins anxiogène
+    // qu'un chiffre brut du type "+294,6 %".
     const calcTrend = (current, prev, elId, goodWhenUp) => {
         const el = document.getElementById(elId);
         if (!el) return;
@@ -603,66 +615,52 @@ window.applyFilter = function() {
         const arrow = dirUp ? '↑' : '↓';
         const isGood = dirUp === goodWhenUp;
         const colorClass = isGood ? 'trend-good' : 'trend-bad';
-        el.innerHTML = `<span class="${colorClass}">${arrow} ${sign}${diff.toFixed(1)}% vs mois préc.</span>`;
+        const qualifier = isGood ? 'Plutôt bien' : 'À surveiller';
+        el.innerHTML = `<span class="${colorClass}">${arrow} ${qualifier} <span class="trend-detail">(${sign}${diff.toFixed(1)}% vs mois dernier)</span></span>`;
     };
 
     calcTrend(tCFA_Paye, tCFA_Paye_Prev, 'trend-money', true);   // encaissé : une hausse est une bonne nouvelle
     calcTrend(tCFA_Impaye, tCFA_Impaye_Prev, 'trend-debt', false); // impayés : une hausse est une mauvaise nouvelle
 
     renderList();
-    updateCharts(tCFA_Paye, tCFA_Impaye);
+    renderTopQuartiers();
     updateRelevesProgress();
 }
 
-// ✅ v2 : le donut (répartition encaissé/impayés) est retiré — cette info est
-// désormais portée par la carte Bilan (chiffres + barre de recouvrement),
-// beaucoup plus lisible et moins gourmande en espace sur mobile.
-function updateCharts(paye, impaye) {
-    // ✅ FIX : le thème est porté par [data-theme] sur <html>, pas par une classe
-    //   body.dark-theme (qui n'existait jamais → texte des graphiques toujours en
-    //   couleur claire, illisible en mode sombre).
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const textColor = isDark ? '#f1f5f9' : '#1e293b';
-    const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-
+// ✅ v4 : remplace le donut ET le graphique en barres (noms de zone inclinés)
+// par une liste "Top 3 quartiers" toute simple — l'essentiel d'un coup
+// d'œil, sans avoir à lire un graphique.
+function renderTopQuartiers() {
     const zonesConso = {};
     currentFilteredData.forEach(item => {
         const zone = zoneOf(item);
-        // ✅ CORRECTION : item.conso vient de billing.js (calculé dans applyFilter),
-        //   déjà à 0 pour toute lecture invraisemblable (anomalie) — évite qu'un seul
-        //   relevé corrompu écrase l'échelle du graphique (axe en milliards).
+        // item.conso vient de billing.js (calculé dans applyFilter), déjà à 0
+        // pour toute lecture invraisemblable (anomalie).
         const conso = item.conso || 0;
-        if (!zonesConso[zone]) zonesConso[zone] = 0;
-        zonesConso[zone] += conso;
+        zonesConso[zone] = (zonesConso[zone] || 0) + conso;
     });
-    // ✅ v2 : barres horizontales triées (au lieu de barres verticales avec
-    // des noms de zone inclinés, illisibles) — les valeurs se lisent d'un coup d'œil.
-    const sortedZones = Object.entries(zonesConso).sort((a, b) => b[1] - a[1]);
+    const sorted = Object.entries(zonesConso).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const box = document.getElementById('top-quartiers');
+    if (!box) return;
 
-    const ctxBar = document.getElementById('barChart');
-    if (chartBarInstance) chartBarInstance.destroy();
-    chartBarInstance = new Chart(ctxBar, {
-        type: 'bar',
-        data: {
-            labels: sortedZones.map(z => z[0]),
-            datasets: [{
-                label: 'Volume (m³)',
-                data: sortedZones.map(z => z[1]),
-                backgroundColor: '#0052fe',
-                borderRadius: 5
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { ticks: { color: textColor }, grid: { color: gridColor } },
-                y: { ticks: { color: textColor }, grid: { display: false } }
-            },
-            plugins: { legend: { display: false }, title: { display: true, text: 'Volume par Zone (m³)', color: textColor } }
-        }
-    });
+    if (!sorted.length) {
+        box.innerHTML = '<p class="muted-note">Pas encore de données ce mois-ci.</p>';
+        return;
+    }
+
+    const maxVal = sorted[0][1] || 1;
+    box.innerHTML = sorted.map(([zone, val], i) => {
+        const pct = Math.max(4, Math.round(val / maxVal * 100));
+        return `
+        <div class="quartier-row">
+            <span class="quartier-rank">${i + 1}</span>
+            <div class="quartier-info">
+                <div class="quartier-name"><i class="fa-solid fa-house"></i> ${escHtml(zone)}</div>
+                <div class="quartier-bar-bg"><div class="quartier-bar-fill" style="width:${pct}%"></div></div>
+            </div>
+            <span class="quartier-val">${Math.round(val).toLocaleString()} m³</span>
+        </div>`;
+    }).join('');
 }
 
 function updateRelevesProgress() {
@@ -715,7 +713,7 @@ function renderList() {
         if (isNotRead) {
             const arriere = item.arriere || 0;
             const arriereNote = arriere > 0
-                ? `<div style="margin-top:6px;font-size:0.75rem;color:var(--danger);font-weight:600;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
+                ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
                 : '';
             // Permet toujours de saisir l'index depuis cette page (président
             // uniquement, hors archive) — on ne retire pas cette possibilité,
@@ -725,13 +723,17 @@ function renderList() {
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
             div.className = 'item bg-non-releve';
             div.innerHTML = `
-                <div style="flex: 1;">
-                    <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
-                    <small style="color:var(--text-main)">Cpt: ${esc(item.numero_compteur || 'N/A')} · Dernier index : ${lIdx}</small><br>
+                <div class="citem-main">
+                    <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
                     <span class="status-badge status-pending">○ NON RELEVÉ</span>
-                    ${arriereNote}
                 </div>
-                <div style="text-align:right; align-self: flex-start; margin-left: 10px;">${editOrLock}</div>
+                <div class="citem-sub">
+                    <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
+                    <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx}</span>
+                </div>
+                ${arriereNote}
+                ${editOrLock ? `<div class="citem-actions">${editOrLock}</div>` : ''}
             `;
             listDiv.appendChild(div);
             return;
@@ -741,6 +743,7 @@ function renderList() {
         // financier : on ne présente jamais une consommation/un montant
         // négatifs comme s'ils étaient normaux. Fond volontairement différent
         // du rouge "Impayé" pour ne pas confondre les deux situations.
+        // ✅ v4 : "Compteur en erreur" — moins technique qu'"Anomalie de relevé".
         if (isIndexError) {
             const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
             const fixOrLock = canFix
@@ -748,14 +751,17 @@ function renderList() {
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
             div.className = 'item bg-anomalie';
             div.innerHTML = `
-                <div style="flex: 1;">
-                    <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span><br>
-                    <small style="color:var(--text-main)">Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
-                    <span class="anomaly-badge">⚠ ANOMALIE DE RELEVÉ</span>
-                    <div style="margin-top:6px; font-size:0.78rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> → Nouvel index : <b>${nIdx}</b></div>
-                    <div style="margin-top:2px; font-size:0.72rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien.</div>
+                <div class="citem-main">
+                    <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
+                    <span class="anomaly-badge">⚠ Compteur en erreur</span>
                 </div>
-                <div style="text-align:right; align-self: flex-start; margin-left: 10px;">${fixOrLock}</div>
+                <div class="citem-sub">
+                    <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
+                    <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
+                </div>
+                <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> → Nouvel index : <b>${nIdx}</b></div>
+                <div style="font-size:0.78rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
+                ${fixOrLock ? `<div class="citem-actions">${fixOrLock}</div>` : ''}
             `;
             listDiv.appendChild(div);
             return;
@@ -767,14 +773,14 @@ function renderList() {
         const isPaid = item.status === 'paye';
         // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
         const arriereHtml = (!isPaid && arriere > 0)
-            ? `<div style="margin-top:4px;font-size:0.68rem;color:var(--danger);font-weight:600;">Mois: ${calculatedAmount.toLocaleString()} F + Arriérés: ${arriere.toLocaleString()} F</div>`
+            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
             : '';
 
         // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
         // affichée normalement, avec une simple alerte en plus (contrairement
         // à l'erreur d'index, ce n'est pas une donnée aberrante).
         const anomalyHtml = (realConso > 100)
-            ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Alerte fuite (&gt; 100 m³)</div>`
+            ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Consommation inhabituelle, à vérifier (&gt; 100 m³)</div>`
             : '';
 
         let auditHtml = item.last_modified_by
@@ -792,37 +798,41 @@ function renderList() {
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
             : '';
 
-        // ✅ v2 : sur une archive, le bouton Payé/Annuler laisse place à un
-        // simple cadenas — l'historique ne doit pas pouvoir être modifié
-        // accidentellement.
-        // ✅ v3 : « Révoquer » → « Annuler le paiement » — le libellé doit dire
-        // ce qui va se passer, pas juste nommer l'action technique.
+        // ✅ v4 : "Encaisser" est l'action principale de la page pour un
+        // compteur impayé — gros bouton bleu, bien visible sur la carte.
+        // "Annuler le paiement" → "Corriger" : une correction courante, pas
+        // une suppression, n'a pas à être présentée en rouge vif.
         const statusBtn = isArchiveView
             ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
             : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-check"></i> Marquer payé</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-xmark"></i> Annuler le paiement</button>`);
+                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
+                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
         // badge texte explicite (✓/✕), jamais la couleur seule.
         div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
 
+        // ✅ v4 : carte empilée — nom + montant en gros en tête (l'essentiel
+        // d'un coup d'œil), détails (quartier, compteur, relevé) en dessous
+        // en gris avec icônes, actions en pleine largeur en bas.
         div.innerHTML = `
-            <div style="flex: 1;">
-                <b style="color:var(--text-main);">${esc(item.name || 'Inconnu')}</b> <span style="font-size:0.7rem; color:var(--text-sub);">[${zoneName}]</span>${relevesBadge}<br>
-                <small style="color:var(--text-main)">${lIdx} → ${nIdx} (${realConso.toFixed(1)} m³) | Cpt: ${esc(item.numero_compteur || 'N/A')}</small><br>
-                <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? '✓ PAYÉ' : '✕ IMPAYÉ'}</span>
-                ${arriereHtml}
-                ${auditHtml}
-                ${anomalyHtml}
+            <div class="citem-main">
+                <span class="citem-name">${esc(item.name || 'Inconnu')}${relevesBadge}</span>
+                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${totalDu.toLocaleString()} F</span>
             </div>
-            <div style="text-align:right; align-self: flex-start; margin-left: 10px;">
-                <span class="amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${totalDu.toLocaleString()} F</span>
-                <div class="action-btns">
-                    ${editBtn}
-                    ${statusBtn}
-                </div>
+            <div class="citem-sub">
+                <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
+                <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
+                <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
+            </div>
+            <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? '✓ PAYÉ' : '✕ IMPAYÉ'}</span>
+            ${arriereHtml}
+            ${auditHtml}
+            ${anomalyHtml}
+            <div class="citem-actions">
+                ${editBtn}
+                ${statusBtn}
             </div>
         `;
         listDiv.appendChild(div);
