@@ -112,8 +112,8 @@ body {
 .tabs { display: flex; gap: 10px; margin-bottom: 15px; background: var(--card-bg); padding: 5px; border-radius: 15px; border: 1px solid var(--border-color); }
 .tab-btn { flex: 1; padding: 10px; border: none; background: transparent; border-radius: 10px; font-size: 0.85rem; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.3s; }
 .tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0, 82, 254, 0.2); }
-/* Onglet Anomalies : accent ambre (cohérent avec le badge d'anomalie dans la liste) */
-#tab-anomalies.active { background: #eab308; color: #1e293b; box-shadow: 0 4px 10px rgba(234, 179, 8, 0.3); }
+/* Onglet Anomalies : accent orangé (cohérent avec le badge d'anomalie dans la liste) */
+#tab-anomalies.active { background: #f97316; color: #fff; box-shadow: 0 4px 10px rgba(249, 115, 22, 0.3); }
 
 .filter-row { display: flex; gap: 10px; margin-bottom: 15px; }
 .filter-row input, .filter-row select { flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px; font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main); }
@@ -123,33 +123,42 @@ body {
 
 .list-section { background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px; box-shadow: 0 -5px 20px rgba(0,0,0,0.02); transition: background-color 0.3s; }
 
-/* ✅ v2 : carte neutre (blanche/sombre selon le thème) — avant, un fond
-   rose/vert PLEIN sur chaque carte rendait la page entière rouge dès qu'une
-   cinquantaine d'impayés se suivaient. Seuls le badge et le montant portent
-   désormais la couleur du statut. */
+/* ✅ v3 : pour des utilisateurs novices, le fond coloré redevient un vrai
+   repère pédagogique — vert = terminé, rouge = argent à récupérer, saumon =
+   problème à vérifier (volontairement différent du rouge "impayé", pour ne
+   jamais confondre les deux situations), gris = action pas encore faite.
+   La couleur n'est cependant jamais seule : chaque carte porte aussi un
+   badge texte explicite (✓/✕/⚠/○). */
 .item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-radius: 16px; margin-bottom: 12px; background: var(--bg); border: 1px solid var(--border-color); }
 
-.bg-alerte-index { background-color: #fef9c3 !important; border: 2px solid #eab308 !important; }
-.bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
+.bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
+.bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
+/* Anomalie (erreur d'index) : saumon/orangé — jamais le même rouge que "Impayé" */
+.bg-anomalie { background-color: #ffe8de !important; border: 2px solid #f97316 !important; }
+/* Non relevé : gris neutre — une action à venir, pas un problème */
+.bg-non-releve { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
 
-[data-theme="dark"] .bg-alerte-index { background-color: rgba(234, 179, 8, 0.1) !important; border-color: rgba(234, 179, 8, 0.4) !important; }
+[data-theme="dark"] .bg-paye     { background-color: rgba(34, 197, 94, 0.12) !important; border-color: rgba(34, 197, 94, 0.25) !important; }
+[data-theme="dark"] .bg-impaye   { background-color: rgba(239, 68, 68, 0.12) !important; border-color: rgba(239, 68, 68, 0.25) !important; }
+[data-theme="dark"] .bg-anomalie { background-color: rgba(249, 115, 22, 0.14) !important; border-color: rgba(249, 115, 22, 0.45) !important; }
+[data-theme="dark"] .bg-non-releve { background-color: rgba(148, 163, 184, 0.1) !important; border-color: rgba(148, 163, 184, 0.25) !important; }
+
+.bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
 [data-theme="dark"] .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
 
-/* Badge de statut (remplace le fond de carte coloré) */
-.status-badge {
-    display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: .02em;
-    padding: 2px 9px; border-radius: 20px; margin-top: 6px;
-}
-.status-paid   { background: rgba(34, 197, 94, 0.14); color: var(--success); }
-.status-unpaid { background: rgba(239, 68, 68, 0.14); color: var(--danger); }
+/* Badge de statut — texte gras, sans pastille (la carte est déjà colorée) */
+.status-badge { display: inline-block; font-size: 0.74rem; font-weight: 800; letter-spacing: .02em; margin-top: 6px; }
+.status-paid    { color: var(--success); }
+.status-unpaid  { color: var(--danger); }
+.status-pending { color: var(--text-sub); }
 
 /* Badge / notice d'anomalie (erreur d'index, fuite) — prioritaire sur le statut financier */
 .anomaly-badge {
     display: inline-flex; align-items: center; gap: 5px;
-    font-size: 0.72rem; font-weight: 800; color: #b45309;
-    background: rgba(234, 179, 8, 0.18); padding: 3px 10px; border-radius: 20px; margin-top: 4px;
+    font-size: 0.74rem; font-weight: 800; color: #c2410c;
+    margin-top: 4px;
 }
-[data-theme="dark"] .anomaly-badge { color: #fbbf24; }
+[data-theme="dark"] .anomaly-badge { color: #fb923c; }
 .leak-alert { margin-top: 8px; font-size: 0.75rem; font-weight: 700; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
 /* Archive : action verrouillée (remplace le bouton Payé/Révoquer) */
