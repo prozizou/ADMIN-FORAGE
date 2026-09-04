@@ -28,14 +28,19 @@ body {
 .main-layout { display: flex; flex-direction: column; width: 100%; }
 .container { width: 100%; max-width: 500px; margin: 0 auto; padding: 15px; }
 
-.header { padding: 10px 0 15px 0; display: flex; justify-content: space-between; align-items: center; }
-.header-actions { display: flex; gap: 10px; align-items: center; }
+.header { padding: 10px 0 15px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; row-gap: 10px; }
+.header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
+/* ✅ v2 : les exports PDF/CSV sont des actions normales, pas destructrices —
+   un rouge/vert vifs côte à côte créait une fausse hiérarchie de danger.
+   Style neutre (cohérent avec .btn-back), l'accent primaire reste réservé
+   aux vraies actions principales de la page (recettes, onglets actifs...). */
 .btn-export {
-    background: var(--success); color: white; border: none; padding: 8px 15px;
-    border-radius: 12px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
-    box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2); transition: all 0.2s;
+    background: var(--card-bg); color: var(--text-sub); border: 1px solid var(--border-color);
+    padding: 8px 14px; border-radius: 12px; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+    box-shadow: none; transition: all 0.2s;
 }
+.btn-export:hover { color: var(--primary); border-color: var(--primary); }
 .btn-export:active { transform: scale(0.95); }
 .btn-theme { background: none; border: none; color: var(--text-sub); font-size: 1.3rem; cursor: pointer; }
 
