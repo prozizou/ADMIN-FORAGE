@@ -26,6 +26,8 @@
     <!-- ✅ Multi-forage : résolution du super-admin (SUPERADMIN_EMAIL, isSuperadmin) -->
     <script src="admin-config.js"></script>
     <script src="forage-context.js"></script>
+    <!-- ✅ window.clearAppCacheAndReload : filet de secours si la connexion reste bloquée -->
+    <script src="security.js"></script>
 
     <style>
         /* ── Design sobre "outil professionnel" : fond uni, carte opaque, accents nets ──
@@ -310,6 +312,23 @@
             letter-spacing: 0.2px;
         }
 
+        /* ✅ Filet de secours, discret mais toujours accessible */
+        .reset-link {
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+            padding: 0;
+            background: none;
+            border: none;
+            font-size: 11px;
+            color: var(--muted);
+            letter-spacing: 0.2px;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+        .reset-link:hover { color: var(--muted-strong); }
+
         @media (max-width: 360px) {
             .card { padding: 28px 20px; }
             .header-title { font-size: 18px; }
@@ -398,6 +417,10 @@
 
     <!-- ✅ CORRECTION : Le lien "Assistance" ne doit pas être un href vide cliquable -->
     <span class="forgot-link" style="cursor:default;">Assistance administrateur</span>
+    <!-- ✅ Filet de secours : si la connexion reste bloquée (état Firebase
+         local corrompu), l'utilisateur a un moyen de s'en sortir sans avoir
+         besoin des outils du navigateur. -->
+    <button type="button" class="reset-link" id="btnResetApp">La connexion ne fonctionne pas ? Réinitialiser l'application</button>
 </div>
 
 <script>
@@ -731,7 +754,18 @@
             }
         };
 
-        signInSmart()
+        // ✅ CORRECTION : filet de sécurité — si signInSmart() ne se résout ni
+        // n'échoue jamais (état Firebase local corrompu, ex. après une
+        // déconnexion interrompue en plein vol), l'écran restait bloqué sur
+        // "Vérification en cours…" indéfiniment, sans aucun moyen de s'en
+        // sortir. Passé 15s, on abandonne proprement avec un message
+        // actionnable au lieu de rester accroché pour toujours.
+        const SIGNIN_TIMEOUT_MS = 15000;
+        const signInTimeout = new Promise((_, reject) => {
+            setTimeout(() => reject({ code: 'timeout' }), SIGNIN_TIMEOUT_MS);
+        });
+
+        Promise.race([signInSmart(), signInTimeout])
             .then((cred) => resolveSessionProfile(cred.user))
             .then((sessionData) => {
                 if (!sessionData) return; // resolveSessionProfile a déjà géré l'erreur (compte non configuré)
@@ -750,6 +784,21 @@
             })
             .catch((e) => {
                 console.error("Authentification échouée :", e.code);
+
+                // ✅ Un délai dépassé est un problème technique, pas un code
+                // erroné : on ne compte pas d'essai raté (pas de verrouillage
+                // anti-bruteforce), et on oriente vers la réinitialisation.
+                if (e && e.code === 'timeout') {
+                    spinnerEl.hidden = true;
+                    statusEl.textContent = "La connexion prend trop de temps. Réessayez, ou utilisez \"Réinitialiser l'application\" ci-dessous.";
+                    statusEl.className = "status-error";
+                    code = "";
+                    updateDots();
+                    isVerifying = false;
+                    if (!checkLock()) setLockState(false);
+                    return;
+                }
+
                 failCount++;
                 saveLockState();
 
@@ -794,6 +843,29 @@
 
     // Vérifier le verrouillage au chargement
     checkLock();
+
+    // ✅ Filet de secours : réinitialise le Service Worker/Cache Storage/
+    // IndexedDB (état Firebase local potentiellement corrompu) puis recharge
+    // l'écran de connexion. Toujours accessible, même si tout le reste est
+    // bloqué (n'a besoin d'aucune connexion réseau pour s'exécuter).
+    const btnResetAppEl = document.getElementById('btnResetApp');
+    if (btnResetAppEl) {
+        btnResetAppEl.addEventListener('click', function () {
+            if (!confirm("Réinitialiser l'application ?\n\nÀ utiliser si la connexion reste bloquée. Ceci efface les données locales de l'application (pas vos identifiants) et recharge la page.")) {
+                return;
+            }
+            this.disabled = true;
+            this.textContent = 'Réinitialisation…';
+            if (typeof window.clearAppCacheAndReload === 'function') {
+                window.clearAppCacheAndReload('index.html');
+            } else {
+                // ✅ Repli si security.js n'a pas pu charger : au moins purger
+                // la session locale et recharger sans cache.
+                try { localStorage.removeItem('asufor_session'); } catch (_) {}
+                window.location.href = 'index.html?cachebust=' + Date.now();
+            }
+        });
+    }
 </script>
 </body>
 </html>
