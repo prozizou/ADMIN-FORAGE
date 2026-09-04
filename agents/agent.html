@@ -31,166 +31,258 @@
     <script src="../crypto.js"></script>
 
     <style>
+        /* ── v2 : parcours guidé plutôt que formulaire d'administration ──
+           Fond sombre uniforme → titre blanc → explication courte → champs
+           bien contrastés → bouton bleu principal. Moins de transparence/
+           glow que la v1 (le bleu reste la seule couleur d'action). */
         :root {
             --bg-color: #0f172a;
-            --glass-bg: rgba(255, 255, 255, 0.03);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --card-bg: #161f30;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --field-bg: rgba(255, 255, 255, 0.06);
             --accent-blue: #38bdf8;
             --text-white: #f8fafc;
-            --error: #ef4444;
-            --success: #22c55e;
+            --text-muted: rgba(248, 250, 252, 0.6);
+            --error: #f87171;
+            --success: #4ade80;
         }
 
+        * { box-sizing: border-box; }
+
         body {
-            background-color: var(--bg-color);
-            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            background: var(--bg-color);
             color: var(--text-white);
             font-family: 'Segoe UI', system-ui, sans-serif;
             margin: 0;
             min-height: 100vh;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
-            padding: 20px;
-            box-sizing: border-box;
+            padding: 28px 18px 40px;
         }
 
-        .glass-card {
+        /* ✅ v2 : la carte apparaît près du haut de l'écran sur mobile, au
+           lieu de flotter au centre d'un grand vide. */
+        .card {
             width: 100%;
             max-width: 420px;
-            background: var(--glass-bg);
-            backdrop-filter: blur(25px);
-            -webkit-backdrop-filter: blur(25px);
-            border: 1px solid var(--glass-border);
-            border-radius: 30px;
-            padding: 35px 25px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 26px 22px 24px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
         }
 
-        h2 {
-            text-align: center;
-            margin: 0 0 30px 0;
-            font-weight: 600;
-            color: var(--accent-blue);
-            font-size: 1.4rem;
+        h1 {
+            margin: 0 0 4px;
+            font-weight: 700;
+            color: var(--text-white);
+            font-size: 1.3rem;
+        }
+        .subtitle {
+            margin: 0 0 26px;
+            font-size: 0.88rem;
+            color: var(--text-muted);
         }
 
-        .field { margin-bottom: 20px; }
+        .field { margin-bottom: 18px; }
 
         label {
             display: block;
-            margin-bottom: 8px;
-            font-size: 0.7rem;
+            margin-bottom: 7px;
+            font-size: 0.82rem;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.6;
+            color: rgba(248, 250, 252, 0.85);
         }
+        .req { color: var(--accent-blue); }
 
         input {
             width: 100%;
-            padding: 14px 18px;
+            padding: 13px 16px;
             border-radius: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--glass-border);
+            background: var(--field-bg);
+            border: 1px solid var(--border-color);
             color: white;
             font-size: 1rem;
             outline: none;
-            transition: border-color 0.3s, background 0.3s;
+            transition: border-color 0.2s, background 0.2s;
             box-sizing: border-box;
         }
+        /* ✅ v2 : placeholders plus contrastés (avant : gris trop clair,
+           difficile à lire sur fond sombre) */
+        input::placeholder { color: rgba(248, 250, 252, 0.4); }
 
         input:focus {
             border-color: var(--accent-blue);
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.09);
         }
 
         input.error { border-color: var(--error); }
 
+        .field-hint {
+            margin: 7px 2px 0;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+
+        /* Téléphone : indicatif visuel (n'entre pas dans la valeur envoyée) */
+        .tel-row { display: flex; gap: 8px; }
+        .tel-prefix {
+            flex: none;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 12px;
+            border-radius: 12px;
+            background: var(--field-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .tel-row input { flex: 1; min-width: 0; }
+
+        /* Code d'accès : bouton œil pour vérifier avant de valider */
+        .pass-row { position: relative; }
+        .pass-row input { padding-right: 46px; letter-spacing: 3px; }
+        .eye-btn {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            width: 34px; height: 34px;
+            background: none; border: none; border-radius: 8px;
+            color: var(--text-muted); cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .eye-btn:hover { color: var(--accent-blue); background: rgba(255,255,255,0.05); }
+        .eye-btn svg { width: 19px; height: 19px; }
+
+        /* ✅ v2 : explication courte avant de valider — ce qui va se passer */
+        .pre-submit-note {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.18);
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin: 4px 0 18px;
+        }
+
+        /* ✅ v2 : plus de MAJUSCULES sur les libellés / le bouton — moins dur,
+           plus naturel à lire */
         .btn-submit {
             width: 100%;
-            padding: 16px;
-            margin-top: 10px;
+            padding: 15px;
             background: var(--accent-blue);
             border: none;
             border-radius: 12px;
-            color: #0f172a;
-            font-weight: 800;
+            color: #06202e;
+            font-weight: 700;
             font-size: 1rem;
-            text-transform: uppercase;
             cursor: pointer;
             transition: opacity 0.2s, transform 0.1s;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .btn-submit:active { transform: scale(0.97); }
-        .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
+
+        /* État "chargement" du bouton — visible, pas juste un texte changé */
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid rgba(6, 32, 46, 0.35);
+            border-top-color: #06202e;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         .footer-link {
             display: block;
             text-align: center;
-            margin-top: 25px;
-            color: rgba(255, 255, 255, 0.4);
+            margin-top: 20px;
+            color: rgba(248, 250, 252, 0.72);
             text-decoration: none;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 600;
             transition: color 0.2s;
         }
         .footer-link:hover { color: var(--accent-blue); }
 
         #msg {
             text-align: center;
-            font-size: 0.85rem;
-            margin-top: 12px;
-            min-height: 20px;
+            font-size: 0.88rem;
+            margin-top: 14px;
+            min-height: 0;
             font-weight: 600;
+            line-height: 1.4;
         }
-        .msg-success { color: var(--success); }
-        .msg-error   { color: var(--error); }
+        #msg .msg-title { display: block; }
+        #msg .msg-detail { display: block; margin-top: 3px; font-size: 0.82rem; font-weight: 500; opacity: 0.85; }
+        .msg-success .msg-title { color: var(--success); }
+        .msg-error   .msg-title { color: var(--error); }
 
         @media (max-width: 380px) {
-            .glass-card { padding: 25px 15px; }
-            h2 { font-size: 1.2rem; }
+            .card { padding: 22px 16px; }
+            h1 { font-size: 1.15rem; }
         }
     </style>
 </head>
 <body>
 
-    <div class="glass-card">
-        <h2>✚ Nouvel Agent</h2>
+    <div class="card">
+        <h1>Ajouter un agent</h1>
+        <p class="subtitle">Créez l'accès d'un nouvel agent.</p>
 
         <div class="field">
-            <label for="agent_name">Nom complet (Agent)</label>
-            <input type="text" id="agent_name" placeholder="Ex: Abou Diop" autocomplete="off" maxlength="100">
+            <label for="agent_name">Nom complet <span class="req">*</span></label>
+            <input type="text" id="agent_name" placeholder="Ex : Abou Diop" autocomplete="off" maxlength="100">
         </div>
 
         <div class="field">
-            <label for="agent_tel">Numéro Téléphone</label>
-            <input type="tel" id="agent_tel" placeholder="Ex: 775076770" inputmode="tel" maxlength="15">
+            <label for="agent_tel">Numéro de téléphone <span class="req">*</span></label>
+            <div class="tel-row">
+                <span class="tel-prefix">+221</span>
+                <input type="tel" id="agent_tel" placeholder="77 507 67 70" inputmode="tel" maxlength="15">
+            </div>
         </div>
 
         <div class="field">
             <!-- ✅ CORRECTION : passcode agent stocké haché côté serveur (cf. Firebase Rules) -->
             <!-- ⚠️  Le passcode est actuellement stocké en clair dans Firebase.
                       Recommandation : hacher côté Firebase Functions avec bcrypt avant stockage. -->
-            <label for="agent_pass">Passcode (6 chiffres)</label>
-            <input type="password" id="agent_pass" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+            <label for="agent_pass">Code d'accès à 6 chiffres <span class="req">*</span></label>
+            <div class="pass-row">
+                <input type="password" id="agent_pass" placeholder="••••••" maxlength="6" inputmode="numeric" autocomplete="new-password">
+                <button type="button" class="eye-btn" id="btnTogglePass" onclick="togglePasscodeVisibility()" aria-label="Afficher le code">
+                    <svg id="eyeIconShow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <svg id="eyeIconHide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" hidden>
+                        <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.86 21.86 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.9 21.9 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                </button>
+            </div>
+            <p class="field-hint">Ce code permettra à l'agent de se connecter.</p>
         </div>
 
         <div class="field">
-            <label for="agent_zone">Zone / Quartier</label>
-            <input type="text" id="agent_zone" placeholder="Ex: HLM 2" autocomplete="off" maxlength="50">
+            <label for="agent_zone">Zone ou quartier <span class="req">*</span></label>
+            <input type="text" id="agent_zone" placeholder="Ex : HLM 2" autocomplete="off" maxlength="50">
+            <p class="field-hint">Le secteur où l'agent effectuera ses relevés de compteurs.</p>
         </div>
 
+        <p class="pre-submit-note">Une fois créé, l'agent pourra se connecter avec son numéro de téléphone et son code d'accès.</p>
+
         <button class="btn-submit" id="btnEnreg" onclick="sendToFirebase()">
-            <span id="btnText">Enregistrer l'agent</span>
+            <span class="spinner" id="btnSpinner" hidden></span>
+            <span id="btnText">Créer l'agent</span>
         </button>
 
         <div id="msg" role="alert"></div>
 
-        <a href="../home/accueil.html" class="footer-link">← Retourner à l'accueil</a>
+        <a href="../home/accueil.html" class="footer-link">← Retour à l'accueil</a>
     </div>
 
     <script type="module">
@@ -212,14 +304,19 @@
         // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
         if (window.SuperadminVillage) window.SuperadminVillage.init({ db, get, ref, session });
 
-        const msgEl  = document.getElementById('msg');
-        const btn    = document.getElementById('btnEnreg');
-        const btnTxt = document.getElementById('btnText');
+        const msgEl     = document.getElementById('msg');
+        const btn       = document.getElementById('btnEnreg');
+        const btnTxt    = document.getElementById('btnText');
+        const btnSpin   = document.getElementById('btnSpinner');
 
-        function showMsg(text, isError = false) {
-            msgEl.textContent = text;
+        // ✅ v2 : message en deux temps (titre + détail), formulé comme une
+        // phrase humaine plutôt qu'un message technique.
+        function showMsg(title, detail, isError = false) {
+            msgEl.innerHTML = `<span class="msg-title">${title}</span>` +
+                (detail ? `<span class="msg-detail">${detail}</span>` : '');
             msgEl.className = isError ? 'msg-error' : 'msg-success';
         }
+        function clearMsg() { msgEl.innerHTML = ''; msgEl.className = ''; }
 
         function clearErrors() {
             document.querySelectorAll('input.error').forEach(i => i.classList.remove('error'));
@@ -230,6 +327,28 @@
             if (el) el.classList.add('error');
         }
 
+        // ✅ v2 : état "chargement" visible sur le bouton (spinner + libellé
+        // unique "Création…"), pas seulement un texte qui change.
+        function setLoading(isLoading) {
+            btn.disabled = isLoading;
+            btnSpin.hidden = !isLoading;
+            btnTxt.textContent = isLoading ? 'Création…' : "Créer l'agent";
+        }
+
+        // ✅ v2 : icône œil pour vérifier le code avant de valider
+        window.togglePasscodeVisibility = function () {
+            const input = document.getElementById('agent_pass');
+            const showIcon = document.getElementById('eyeIconShow');
+            const hideIcon = document.getElementById('eyeIconHide');
+            const willShow = input.type === 'password';
+            input.type = willShow ? 'text' : 'password';
+            showIcon.hidden = willShow;
+            hideIcon.hidden = !willShow;
+            document.getElementById('btnTogglePass').setAttribute(
+                'aria-label', willShow ? 'Masquer le code' : 'Afficher le code'
+            );
+        };
+
         // ✅ CORRECTION : Normalisation du numéro de téléphone
         function normalizePhone(tel) {
             return tel.replace(/[\s\-\.]/g, '');
@@ -237,6 +356,7 @@
 
         window.sendToFirebase = async function () {
             clearErrors();
+            clearMsg();
             const name  = document.getElementById('agent_name').value.trim();
             const tel   = normalizePhone(document.getElementById('agent_tel').value.trim());
             const pass  = document.getElementById('agent_pass').value;
@@ -248,29 +368,28 @@
             if (!pass)  { markError('agent_pass'); valid = false; }
             if (!zone)  { markError('agent_zone'); valid = false; }
 
-            if (!valid) { showMsg('Veuillez remplir tous les champs.', true); return; }
+            if (!valid) { showMsg('Certains champs sont manquants', 'Merci de remplir tous les champs marqués d\'une *.', true); return; }
 
             if (!/^\d{6}$/.test(pass)) {
                 markError('agent_pass');
-                showMsg('Le passcode doit être exactement 6 chiffres.', true);
+                showMsg('Code d\'accès invalide', 'Il doit contenir exactement 6 chiffres.', true);
                 return;
             }
 
             if (!/^\d{7,15}$/.test(tel)) {
                 markError('agent_tel');
-                showMsg('Numéro de téléphone invalide (7 à 15 chiffres).', true);
+                showMsg('Numéro de téléphone invalide', 'Il doit contenir entre 7 et 15 chiffres, sans l\'indicatif.', true);
                 return;
             }
 
             // ✅ CORRECTION : Validation longueur du nom
             if (name.length < 2 || name.length > 100) {
                 markError('agent_name');
-                showMsg('Le nom doit contenir entre 2 et 100 caractères.', true);
+                showMsg('Nom trop court ou trop long', 'Le nom doit contenir entre 2 et 100 caractères.', true);
                 return;
             }
 
-            btn.disabled = true;
-            btnTxt.textContent = 'Vérification doublon...';
+            setLoading(true);
 
             // ✅ CORRECTION : Vérification doublon par téléphone avant insertion
             try {
@@ -279,9 +398,8 @@
                 );
                 if (existing.exists()) {
                     markError('agent_tel');
-                    showMsg('Un agent avec ce numéro existe déjà.', true);
-                    btn.disabled = false;
-                    btnTxt.textContent = "Enregistrer l'agent";
+                    showMsg('Ce numéro est déjà utilisé', 'Un agent possède déjà ce numéro de téléphone.', true);
+                    setLoading(false);
                     return;
                 }
             } catch (e) {
@@ -289,8 +407,7 @@
                 console.warn('Vérification doublon échouée :', e);
             }
 
-            btnTxt.textContent = 'Enregistrement...';
-            if (window.AsuforLoader) AsuforLoader.show('Enregistrement de l\'agent…');
+            if (window.AsuforLoader) AsuforLoader.show('Création de l\'agent…');
 
             // ✅ Attendre que Firebase Auth soit prêt
             await new Promise((resolve) => {
@@ -332,7 +449,7 @@
                     created_at:     new Date().toISOString()
                 });
 
-                showMsg('✅ Agent ' + name + ' enregistré avec succès !');
+                showMsg('Agent créé avec succès', name + ' peut maintenant accéder à son espace avec son numéro de téléphone et son code.');
                 document.getElementById('agent_name').value = '';
                 document.getElementById('agent_tel').value  = '';
                 document.getElementById('agent_pass').value = '';
@@ -340,11 +457,10 @@
 
             } catch (error) {
                 console.error('Erreur Firebase :', error);
-                showMsg('Erreur : ' + error.message, true);
+                showMsg('Une erreur est survenue', error.message, true);
             } finally {
                 if (window.AsuforLoader) AsuforLoader.hide();
-                btn.disabled = false;
-                btnTxt.textContent = "Enregistrer l'agent";
+                setLoading(false);
             }
         };
     </script>
