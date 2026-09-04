@@ -96,11 +96,14 @@
             transition: background 0.2s;
         }
 
-        /* ── STATS BAR ── */
+        /* ── STATS BAR ──
+           v2 : barre plus fine — chiffre et libellé côte à côte au lieu de
+           deux lignes empilées, qui prenaient une hauteur disproportionnée
+           pour la valeur informative apportée. */
         .stats-bar {
             display: flex;
-            gap: 12px;
-            padding: 16px 20px 0;
+            gap: 8px;
+            padding: 14px 20px 0;
             overflow-x: auto;
             scrollbar-width: none;
         }
@@ -110,21 +113,20 @@
             flex-shrink: 0;
             background: var(--glass);
             border: 1px solid var(--glass-border);
-            border-radius: 14px;
-            padding: 10px 16px;
+            border-radius: 12px;
+            padding: 8px 14px;
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-width: 90px;
+            align-items: baseline;
+            gap: 6px;
         }
-        .stat-chip .val { font-size: 1.5rem; font-weight: 700; line-height: 1; }
-        .stat-chip .lbl { font-size: 0.72rem; opacity: 0.6; margin-top: 4px; text-align: center; }
-        .chip-warn { border-color: rgba(251,191,36,0.4); }
+        .stat-chip .val { font-size: 1.05rem; font-weight: 700; line-height: 1; }
+        .stat-chip .lbl { font-size: 0.72rem; opacity: 0.6; white-space: nowrap; }
+        .chip-warn { border-color: rgba(251,191,36,0.35); }
         .chip-warn .val { color: var(--accent-warn); }
-        .chip-red  { border-color: rgba(248,113,113,0.4); }
-        .chip-red  .val { color: var(--accent-red); }
-        .chip-green { border-color: rgba(74,222,128,0.4); }
+        .chip-green { border-color: rgba(74,222,128,0.35); }
         .chip-green .val { color: var(--accent-green); }
+        .chip-blue { border-color: rgba(56,189,248,0.35); }
+        .chip-blue .val { color: var(--accent-blue); }
 
         /* ── SEARCH + FILTER ── */
         .toolbar {
@@ -149,7 +151,7 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        .search-box input:focus { border-color: var(--accent-warn); }
+        .search-box input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(56,189,248,0.18); }
         .search-box svg {
             position: absolute;
             left: 12px; top: 50%;
@@ -171,9 +173,9 @@
             white-space: nowrap;
         }
         .filter-btn.active, .filter-btn:hover {
-            background: rgba(251,191,36,0.18);
-            border-color: var(--accent-warn);
-            color: var(--accent-warn);
+            background: rgba(56,189,248,0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
         }
 
         /* ── FILTER PILLS ── */
@@ -191,79 +193,148 @@
             padding: 6px 14px;
             border-radius: 20px;
             font-size: 0.8rem;
+            white-space: nowrap;
             cursor: pointer;
             border: 1px solid var(--glass-border);
             background: var(--glass);
             transition: all 0.2s;
         }
-        .pill.active { background: var(--accent-warn); border-color: var(--accent-warn); color: #1a1e21; font-weight: 600; }
+        /* ✅ v2 : accent bleu (sobre) au lieu du jaune vif — cohérent avec le
+           reste de l'application */
+        .pill.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #04202e; font-weight: 600; }
 
         /* ── LIST ── */
         .list-container { padding: 16px 20px 0; }
 
+        /* ✅ v2 : moins criard — le titre "X RÉSULTATS" en capitales n'apporte
+           qu'un repère secondaire, pas la peine de le crier */
         .section-label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.5;
-            margin: 0 0 10px;
+            font-size: 0.72rem;
+            opacity: 0.4;
+            margin: 0 0 8px;
         }
 
         .anomaly-card {
             background: var(--card-bg);
-            border: 1px solid rgba(251,191,36,0.2);
+            border: 1px solid var(--glass-border);
             border-radius: 18px;
             margin-bottom: 12px;
             overflow: hidden;
-            transition: border-color 0.2s, transform 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
         }
-        .anomaly-card:hover { border-color: rgba(251,191,36,0.5); transform: translateY(-2px); }
+        .anomaly-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+        /* ✅ v2 : un seul repère de statut par carte (liseré + badge texte
+           dans l'en-tête) — avant : un émoji "cercle rouge" générique ET une
+           pastille de couleur séparée pour la même information, redondants
+           et sans lien visuel évident avec une action. */
+        .anomaly-card.is-pending  { border-left: 3px solid var(--accent-warn); }
+        .anomaly-card.is-resolved { border-left: 3px solid var(--accent-green); }
 
         .card-header {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             gap: 12px;
             padding: 14px 16px;
             cursor: pointer;
+            transition: background 0.15s;
         }
+        .card-header:hover { background: rgba(255,255,255,0.03); }
 
-        .badge-icon {
+        /* Avatar : initiales sur un fond de couleur dédiée — identifie le
+           client au lieu d'une icône générique (avant : un rond uni, souvent
+           rouge, qui ne signifiait rien). */
+        .avatar {
             width: 42px; height: 42px;
-            border-radius: 12px;
+            border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            font-size: 20px;
+            font-size: 0.85rem; font-weight: 700;
             flex-shrink: 0;
+            border: 1px solid transparent;
         }
-        .badge-anomaly { background: rgba(251,191,36,0.15); }
-        .badge-photo   { background: rgba(56,189,248,0.15); }
-        .badge-both    { background: rgba(248,113,113,0.15); }
 
         .card-info { flex: 1; min-width: 0; }
+
+        /* Ligne 1 : nom + statut ── Ligne 2 : clé + date (grille aérée
+           demandée, au lieu d'infos tassées sur une seule ligne) */
+        .info-row1 { display: flex; align-items: center; gap: 8px; }
         .card-info .name {
             font-weight: 600;
             font-size: 0.95rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-        }
-        .card-info .meta {
-            font-size: 0.78rem;
-            opacity: 0.55;
-            margin-top: 2px;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+            flex: 1;
+            min-width: 0;
         }
 
-        .status-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
+        /* Statut : un seul badge, explicite (résolu / en attente) */
+        .status-badge {
             flex-shrink: 0;
-            margin-top: 4px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 20px;
+            white-space: nowrap;
         }
-        .dot-warn  { background: var(--accent-warn); box-shadow: 0 0 6px var(--accent-warn); }
-        .dot-blue  { background: var(--accent-blue); box-shadow: 0 0 6px var(--accent-blue); }
-        .dot-red   { background: var(--accent-red);  box-shadow: 0 0 6px var(--accent-red); }
+        .status-resolved { background: rgba(74,222,128,0.15); color: var(--accent-green); }
+        .status-pending  { background: rgba(251,191,36,0.15); color: var(--accent-warn); }
+
+        .info-row2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 5px;
+            font-size: 0.78rem;
+        }
+        .info-row2 .date { opacity: 0.65; }
+
+        /* Clé : police mono + contraste renforcé (avant : gris à 55%
+           d'opacité, limite illisible), tronquée et copiable en un clic. */
+        .key-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-family: 'SFMono-Regular', Consolas, monospace;
+            font-size: 0.75rem;
+            color: var(--text-main);
+            opacity: 0.82;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 2px 8px;
+            cursor: pointer;
+            max-width: 160px;
+            transition: opacity 0.15s, border-color 0.15s;
+        }
+        .key-chip:hover { opacity: 1; border-color: var(--accent-blue); }
+        .key-chip .key-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .key-chip .copy-ico { flex-shrink: 0; opacity: 0.6; font-size: 0.8rem; }
+
+        .type-tag {
+            font-size: 0.72rem;
+            opacity: 0.6;
+            background: rgba(255,255,255,0.05);
+            border-radius: 20px;
+            padding: 2px 8px;
+            white-space: nowrap;
+        }
+
+        .header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-top: 2px; }
+
+        /* Action explicite visible sans déplier la carte : résoudre en un clic */
+        .btn-quick-resolve {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            border: 1px solid rgba(74,222,128,0.35);
+            background: rgba(74,222,128,0.12);
+            color: var(--accent-green);
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s, color 0.15s;
+        }
+        .btn-quick-resolve:hover { background: var(--accent-green); color: #06280f; }
 
         .chevron {
             transition: transform 0.25s;
@@ -382,7 +453,7 @@
         .spinner {
             width: 36px; height: 36px;
             border: 3px solid var(--glass-border);
-            border-top-color: var(--accent-warn);
+            border-top-color: var(--accent-blue);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -425,20 +496,20 @@
 
     <!-- STATS -->
     <div class="stats-bar" id="stats-bar">
-        <div class="stat-chip chip-warn">
+        <div class="stat-chip chip-blue">
             <span class="val" id="stat-total">–</span>
             <span class="lbl">Total</span>
         </div>
-        <div class="stat-chip chip-red">
-            <span class="val" id="stat-photo-only">–</span>
-            <span class="lbl">Avec photo</span>
+        <div class="stat-chip chip-warn">
+            <span class="val" id="stat-unresolved">–</span>
+            <span class="lbl">Non résolues</span>
         </div>
         <div class="stat-chip chip-green">
             <span class="val" id="stat-resolved">–</span>
             <span class="lbl">Résolues</span>
         </div>
-        <div class="stat-chip" style="border-color:rgba(56,189,248,0.3);">
-            <span class="val" id="stat-today" style="color:var(--accent-blue);">–</span>
+        <div class="stat-chip chip-blue">
+            <span class="val" id="stat-today">–</span>
             <span class="lbl">Aujourd'hui</span>
         </div>
     </div>
@@ -449,7 +520,9 @@
             <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
             <input type="text" id="search-input" placeholder="Rechercher un client...">
         </div>
-        <button class="filter-btn" id="sort-btn" onclick="toggleSort()">⬇ Date</button>
+        <button class="filter-btn" id="sort-btn" onclick="toggleSort()" title="Trier par date">
+            <svg viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:4px;fill:currentColor;"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg><span id="sort-label">Plus récentes</span>
+        </button>
     </div>
 
     <!-- FILTER PILLS -->
@@ -518,6 +591,36 @@
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
         };
+
+        // ✅ Avatar : initiales + couleur dédiée déterministe (au lieu d'une
+        // icône générique) — donne une identité visuelle à chaque client.
+        function getInitials(name) {
+            const n = String(name || '?').trim();
+            if (!n) return '?';
+            const parts = n.split(/\s+/).filter(Boolean);
+            if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+            return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        const AVATAR_PALETTE = ['#3b82f6', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6'];
+        function avatarColor(seed) {
+            let h = 0;
+            const s = String(seed);
+            for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+            return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+        }
+
+        // ✅ Copie de la clé complète (contraste renforcé + tronquée dans la
+        // carte, on évite de faire chercher l'utilisateur dans un ID illisible)
+        function copyKey(key) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(key).then(
+                    () => showToast('🔑 Clé copiée'),
+                    () => showToast('❌ Copie impossible')
+                );
+            } else {
+                showToast('❌ Copie non supportée par ce navigateur');
+            }
+        }
 
         // ✅ CORRECTION XSS : stocker les données en mémoire, référencer par clé dans le HTML
         const anomalyMap = new Map();
@@ -620,14 +723,16 @@
 
         // ── STATS ──
         function updateStats() {
-            const withPhoto  = allAnomalies.filter(a => a.photo_url).length;
-            const resolved   = allAnomalies.filter(a => a.anomaly_resolved).length;
-            const todayCount = allAnomalies.filter(a => isToday(a.anomaly_date || a.last_modified)).length;
+            // ✅ v2 : "Non résolues" remplace "Avec photo" (déjà couvert par le
+            // filtre 📷) — c'est l'indicateur qui appelle vraiment une action.
+            const unresolved  = allAnomalies.filter(a => !a.anomaly_resolved).length;
+            const resolved    = allAnomalies.filter(a => a.anomaly_resolved).length;
+            const todayCount  = allAnomalies.filter(a => isToday(a.anomaly_date || a.last_modified)).length;
 
-            document.getElementById('stat-total').textContent     = allAnomalies.length;
-            document.getElementById('stat-photo-only').textContent = withPhoto;
-            document.getElementById('stat-resolved').textContent  = resolved;
-            document.getElementById('stat-today').textContent     = todayCount;
+            document.getElementById('stat-total').textContent      = allAnomalies.length;
+            document.getElementById('stat-unresolved').textContent = unresolved;
+            document.getElementById('stat-resolved').textContent   = resolved;
+            document.getElementById('stat-today').textContent      = todayCount;
 
             document.getElementById('subtitle').textContent =
                 allAnomalies.length === 0
@@ -645,7 +750,7 @@
 
         function toggleSort() {
             sortDesc = !sortDesc;
-            document.getElementById('sort-btn').textContent = sortDesc ? '⬇ Date' : '⬆ Date';
+            document.getElementById('sort-label').textContent = sortDesc ? 'Plus récentes' : 'Plus anciennes';
             render();
         }
 
@@ -715,34 +820,46 @@
             const dateTs   = a.anomaly_date || a.last_modified;
             // ✅ CORRECTION XSS : la clé est utilisée pour les actions, jamais l'URL directement dans onclick
             const safeKey  = esc(a.key);
-
-            const iconEmoji  = hasNote && hasPhoto ? '🔴' : hasPhoto ? '📷' : '⚠️';
-            const badgeClass = hasNote && hasPhoto ? 'badge-both' : hasPhoto ? 'badge-photo' : 'badge-anomaly';
-            const dotClass   = hasNote && hasPhoto ? 'dot-red'    : hasPhoto ? 'dot-blue'   : 'dot-warn';
+            const displayName = a.name || a.key;
+            const initials = getInitials(displayName);
+            const avColor  = avatarColor(String(displayName));
 
             // ✅ CORRECTION XSS : src et onclick ne contiennent plus de données dynamiques non échappées
             const photoBlock = hasPhoto
                 ? `<img class="photo-thumb" src="${esc(a.photo_url)}" alt="Photo compteur" onclick="openLightboxByKey('${safeKey}')">`
                 : `<div class="no-photo">📷 Aucune photo jointe</div>`;
 
-            const resolvedBadge = resolved
-                ? `<span style="color:var(--accent-green);font-size:0.78rem;">✅ Résolue</span>`
+            // ✅ v2 : type d'anomalie en étiquettes neutres (au lieu d'une
+            // icône colorée redondante avec le statut) — purement informatif
+            const typeTags = (hasNote ? '<span class="type-tag">📝 Note</span>' : '') +
+                              (hasPhoto ? '<span class="type-tag">📷 Photo</span>' : '');
+
+            // ✅ v2 : action explicite visible sans déplier la carte
+            const quickResolveBtn = !resolved
+                ? `<button class="btn-quick-resolve" onclick="event.stopPropagation(); resolveAnomaly('${safeKey}')" title="Marquer résolue">✓</button>`
                 : '';
 
             return `
-            <div class="anomaly-card" id="card-${safeKey}">
+            <div class="anomaly-card ${resolved ? 'is-resolved' : 'is-pending'}" id="card-${safeKey}">
                 <div class="card-header">
-                    <div class="badge-icon ${badgeClass}">${iconEmoji}</div>
+                    <div class="avatar" style="background:${avColor}26;color:${avColor};border-color:${avColor}55;">${esc(initials)}</div>
                     <div class="card-info">
-                        <div class="name">${esc(a.name) || esc(a.key)}</div>
-                        <div class="meta">
-                            <span>🔑 ${esc(a.key)}</span>
-                            <span>📅 ${formatDate(dateTs)}</span>
-                            ${resolvedBadge}
+                        <div class="info-row1">
+                            <span class="name">${esc(displayName)}</span>
+                            <span class="status-badge ${resolved ? 'status-resolved' : 'status-pending'}">${resolved ? '✅ Résolue' : '⏳ En attente'}</span>
+                        </div>
+                        <div class="info-row2">
+                            <span class="key-chip" onclick="event.stopPropagation(); copyKey('${safeKey}')" title="Copier la clé complète">
+                                <span class="key-text">${esc(a.key)}</span><span class="copy-ico">⧉</span>
+                            </span>
+                            <span class="date">📅 ${formatDate(dateTs)}</span>
+                            ${typeTags}
                         </div>
                     </div>
-                    <div class="status-dot ${dotClass}"></div>
-                    <span class="chevron">▾</span>
+                    <div class="header-actions">
+                        ${quickResolveBtn}
+                        <span class="chevron">▾</span>
+                    </div>
                 </div>
                 <div class="card-detail">
                     ${photoBlock}
