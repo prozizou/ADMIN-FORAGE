@@ -20,8 +20,9 @@
         /* ── v2 : tableau de bord sobre "corporate" ──
            • En-tête compact (plus de titre géant chevauchant le bouton thème).
            • Une seule couleur d'accent (bleu) ; le rouge reste réservé à l'action
-             destructrice (Réinitialiser), reléguée avec Impression/Déconnexion
-             dans une liste "Paramètres" discrète en bas de page.
+             destructrice (Réinitialiser), reléguée avec Vider le cache/Déconnexion
+             dans une liste "Paramètres" discrète en bas de page. Impression est
+             une action fréquente : elle vit dans la grille principale.
            • Cartes moins volumineuses (moins de vide), icônes uniformes sur
              fond rond teinté au lieu de gros carrés semi-transparents. */
         :root {
@@ -256,6 +257,13 @@
                 <span class="tile-label">Rapports &amp; Bilan</span>
             </a>
 
+            <a href="../impression/impression.html" id="btn-impression" class="tile nav-action">
+                <div class="icon-circle">
+                    <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+                </div>
+                <span class="tile-label">Impression</span>
+            </a>
+
             <a href="../anomalies/bugs.html" id="btn-anomalies" class="tile nav-action">
                 <div class="icon-circle">
                     <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
@@ -283,9 +291,9 @@
         <section class="settings" aria-label="Paramètres">
             <p class="section-label">Paramètres</p>
 
-            <a href="../impression/impression.html" id="btn-impression" class="list-row nav-action">
-                <svg class="row-icon" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
-                <span class="row-label">Impression</span>
+            <a href="#" class="list-row nav-action" id="btn-clear-cache" role="button" title="À utiliser si l'application affiche des données anciennes ou reste bloquée au chargement">
+                <svg class="row-icon" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a5.99 5.99 0 0 1-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                <span class="row-label">Vider le cache</span>
                 <span class="row-chevron" aria-hidden="true">›</span>
             </a>
 
@@ -343,7 +351,7 @@
                 // super-admin, les statistiques et les rapports & bilan ont un sens
                 // pour lui. On masque tout le reste (y compris ce qu'un président
                 // verrait normalement), à l'exception de la déconnexion.
-                const allowed = ['btn-superadmin', 'btn-stats', 'btn-rapports', 'btn-logout'];
+                const allowed = ['btn-superadmin', 'btn-stats', 'btn-rapports', 'btn-clear-cache', 'btn-logout'];
                 document.querySelectorAll('.nav-action').forEach(action => {
                     if (!allowed.includes(action.id)) action.classList.add('restricted');
                 });
@@ -368,6 +376,37 @@
             e.preventDefault();
             if (confirm('Voulez-vous vraiment vous déconnecter ?')) {
                 window.logout();
+            }
+        });
+
+        // ✅ Vider le cache : désinscrit le service worker et purge le Cache
+        // Storage géré par l'appli, puis recharge la page. C'est l'équivalent
+        // (accessible depuis l'appli) de « Vider le cache et actualiser » dans
+        // les outils du navigateur — utile quand une ancienne version de
+        // l'appli reste servie et empêche Firebase (base de données,
+        // authentification) de se charger correctement. La session ne
+        // pas touchée : une reconnexion n'est pas systématiquement nécessaire.
+        document.getElementById('btn-clear-cache').addEventListener('click', async function (e) {
+            e.preventDefault();
+            if (!confirm("Vider le cache de l'application et recharger la page ?\n\nÀ faire si l'écran reste bloqué au chargement ou affiche des données anciennes.")) {
+                return;
+            }
+            const label = this.querySelector('.row-label');
+            label.textContent = 'Nettoyage…';
+            this.style.pointerEvents = 'none';
+            try {
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map(r => r.unregister()));
+                }
+                if (window.caches) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(k => caches.delete(k)));
+                }
+            } catch (err) {
+                console.warn('[ASUFOR] Vidage du cache :', err);
+            } finally {
+                window.location.href = window.location.pathname + '?cachebust=' + Date.now();
             }
         });
     </script>
