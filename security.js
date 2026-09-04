@@ -90,11 +90,90 @@ window.logout = function () {
     // déconnexion (sinon le prochain compte connecté sur cet appareil hérite
     // silencieusement du dernier village consulté).
     safeRemoveItem('asufor_superadmin_forageKey');
-    // Déconnexion Firebase si le SDK compat est chargé
+
+    const goToIndex = () => window.location.replace(getIndexPath());
+
+    // ✅ CORRECTION : on attend la fin réelle de la déconnexion Firebase avant
+    // de naviguer — partir immédiatement (comme avant) pouvait interrompre en
+    // plein vol l'écriture IndexedDB de persistance de session, la laissant
+    // dans un état incohérent. Symptôme observé : après s'être déconnecté, se
+    // reconnecter restait bloqué indéfiniment sur "Vérification en cours…"
+    // (l'initialisation Firebase Auth de la page suivante restait accrochée à
+    // cet état corrompu). Un filet de sécurité (4s) évite aussi de bloquer la
+    // déconnexion elle-même si jamais signOut() ne se résolvait pas.
     if (typeof firebase !== 'undefined' && firebase.auth) {
-        firebase.auth().signOut().catch(() => {});
+        let done = false;
+        const finish = () => { if (!done) { done = true; goToIndex(); } };
+        firebase.auth().signOut().then(finish).catch(finish);
+        setTimeout(finish, 4000);
+    } else {
+        goToIndex();
     }
-    window.location.replace(getIndexPath());
+};
+
+/**
+ * ✅ NOUVEAU : "Vider le cache" accessible depuis l'appli (accueil, écran de
+ * connexion…). Désinscrit le service worker, purge le Cache Storage géré par
+ * l'appli, ET supprime les bases IndexedDB de Firebase (persistance de
+ * l'authentification) — le simple vidage du cache HTTP/Service Worker ne
+ * suffit pas quand c'est cet état IndexedDB qui est corrompu (voir logout()
+ * ci-dessus) : un utilisateur pouvait "vider le cache" sans que rien ne
+ * change, précisément parce que le vrai problème vivait ailleurs.
+ * La session locale est également purgée : une reconnexion est nécessaire
+ * après ce nettoyage complet.
+ *
+ * @param {string} [targetPath] - Page vers laquelle recharger (par défaut :
+ *        l'écran de connexion, calculé depuis la profondeur du dossier).
+ */
+function clearFirebaseIndexedDb() {
+    const knownNames = [
+        'firebaseLocalStorageDb',
+        'firebase-installations-database',
+        'firebase-messaging-database',
+        'firebase-heartbeat-database'
+    ];
+    const collectNames = async () => {
+        try {
+            if (window.indexedDB && typeof indexedDB.databases === 'function') {
+                const dbs = await indexedDB.databases();
+                (dbs || []).forEach((d) => { if (d && d.name) knownNames.push(d.name); });
+            }
+        } catch (_) { /* indexedDB.databases() indisponible sur certains navigateurs */ }
+        return Array.from(new Set(knownNames));
+    };
+    return collectNames().then((names) => Promise.all(names.map((name) => new Promise((resolve) => {
+        try {
+            const req = indexedDB.deleteDatabase(name);
+            req.onsuccess = () => resolve();
+            req.onerror = () => resolve();
+            // "blocked" (un autre onglet garde la base ouverte) : on n'attend pas
+            // indéfiniment, l'utilisateur ne doit jamais rester bloqué ici.
+            req.onblocked = () => resolve();
+        } catch (_) { resolve(); }
+    }))));
+}
+
+window.clearAppCacheAndReload = async function (targetPath) {
+    try {
+        if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => r.unregister()));
+        }
+        if (window.caches) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+        if (window.indexedDB) {
+            await clearFirebaseIndexedDb();
+        }
+    } catch (err) {
+        console.warn('[ASUFOR] Vidage du cache :', err);
+    } finally {
+        safeRemoveItem('asufor_session');
+        safeRemoveItem('asufor_superadmin_forageKey');
+        const dest = targetPath || getIndexPath();
+        window.location.href = dest + (dest.indexOf('?') === -1 ? '?' : '&') + 'cachebust=' + Date.now();
+    }
 };
 
 /**

@@ -379,35 +379,21 @@
             }
         });
 
-        // ✅ Vider le cache : désinscrit le service worker et purge le Cache
-        // Storage géré par l'appli, puis recharge la page. C'est l'équivalent
-        // (accessible depuis l'appli) de « Vider le cache et actualiser » dans
-        // les outils du navigateur — utile quand une ancienne version de
-        // l'appli reste servie et empêche Firebase (base de données,
-        // authentification) de se charger correctement. La session ne
-        // pas touchée : une reconnexion n'est pas systématiquement nécessaire.
-        document.getElementById('btn-clear-cache').addEventListener('click', async function (e) {
+        // ✅ Vider le cache : voir window.clearAppCacheAndReload (security.js).
+        // Désinscrit le service worker, purge le Cache Storage ET les bases
+        // IndexedDB de Firebase (persistance de l'authentification) — un
+        // simple vidage de cache ne suffisait pas quand le vrai problème
+        // était une session Firebase corrompue en IndexedDB. Une reconnexion
+        // est nécessaire après ce nettoyage complet.
+        document.getElementById('btn-clear-cache').addEventListener('click', function (e) {
             e.preventDefault();
-            if (!confirm("Vider le cache de l'application et recharger la page ?\n\nÀ faire si l'écran reste bloqué au chargement ou affiche des données anciennes.")) {
+            if (!confirm("Vider le cache de l'application et recharger la page ?\n\nÀ faire si l'écran reste bloqué au chargement ou affiche des données anciennes. Une reconnexion sera nécessaire.")) {
                 return;
             }
             const label = this.querySelector('.row-label');
             label.textContent = 'Nettoyage…';
             this.style.pointerEvents = 'none';
-            try {
-                if ('serviceWorker' in navigator) {
-                    const regs = await navigator.serviceWorker.getRegistrations();
-                    await Promise.all(regs.map(r => r.unregister()));
-                }
-                if (window.caches) {
-                    const keys = await caches.keys();
-                    await Promise.all(keys.map(k => caches.delete(k)));
-                }
-            } catch (err) {
-                console.warn('[ASUFOR] Vidage du cache :', err);
-            } finally {
-                window.location.href = window.location.pathname + '?cachebust=' + Date.now();
-            }
+            window.clearAppCacheAndReload();
         });
     </script>
 </body>
