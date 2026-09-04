@@ -222,16 +222,19 @@ function renderDashboard() {
 
     setText('kpi-taux', cur.taux.toFixed(1) + ' %');
     setText('kpi-recettes', fMoney(cur.encaisse));
+    // ✅ v2 : mêmes valeurs mirroées dans la ligne compacte Facturé/Encaissé/Impayé
+    // de la synthèse — évite de dupliquer un id déjà utilisé par le gros chiffre.
+    setText('kpi-facture', fMoney(cur.facture));
+    setText('kpi-recettes-mini', fMoney(cur.encaisse));
     // ✅ « Reste à recouvrer » (facture du mois + arriérés), aligné sur stats.js —
     //   avant : facture du mois seule, en désaccord avec l'écran Statistiques.
     setText('kpi-impayes', fMoney(cur.impayesTotal));
     setText('kpi-volume', fNumber(cur.volume) + ' m³');
 
-    // ✅ Écart entre le m³ total facturé et le m³ des factures payées, valorisé en
-    //   argent (= impayés du mois, calculé sur le même périmètre par billing.js).
-    setText('kpi-ecart-m3', fNumber(cur.volumeImpaye) + ' m³');
+    // ✅ v2 : formulation orientée décision (« X m³ facturés mais non payés »)
+    //   au lieu du libellé technique « écart m³ facturé/payé ».
     setText('kpi-ecart-m3-fcfa',
-        `${fNumber(cur.volume)} m³ facturés − ${fNumber(cur.volumePaye)} m³ payés ≈ ${fMoney(cur.impayes)}`);
+        `${fNumber(cur.volumeImpaye)} m³ facturés mais non payés (≈ ${fMoney(cur.impayes)})`);
 
     const bar = document.getElementById('kpi-taux-bar');
     if (bar) {
@@ -241,6 +244,7 @@ function renderDashboard() {
 
     // Deltas de comparaison
     renderDeltaPct('d-taux', cur.taux, cmp && cmp.taux, true);
+    renderDelta('d-facture', cur.facture, cmp && cmp.facture, true);
     renderDelta('d-recettes', cur.encaisse, cmp && cmp.encaisse, true);
     renderDelta('d-impayes', cur.impayesTotal, cmp && cmp.impayesTotal, false);
     renderDelta('d-volume', cur.volume, cmp && cmp.volume, true, ' m³');
@@ -328,6 +332,7 @@ function renderFinanceChart() {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: true, labels: { color: textColor } },
                 title: { display: true, text: 'Encaissé, dépenses & solde net — 12 derniers cycles', color: textColor }
@@ -340,6 +345,8 @@ function renderFinanceChart() {
     });
 }
 
+// ✅ v2 : n'affiche que les 5 premiers débiteurs par défaut (liste
+// potentiellement longue) + un bouton « Voir tous » qui révèle le reste.
 function renderTopDebiteurs() {
     const debiteurs = activeRecords
         .filter(r => !B.isPaid(r))
@@ -348,20 +355,44 @@ function renderTopDebiteurs() {
             return { name: r.name || 'Inconnu', zone: zoneOf(r), compteur: r.numero_compteur || 'N/A', total: stmt.total };
         })
         .filter(d => d.total > 0)
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 10);
+        .sort((a, b) => b.total - a.total);
 
     const box = document.getElementById('top-debiteurs');
-    box.innerHTML = debiteurs.length
-        ? debiteurs.map((d, i) => `
-            <div class="row-item">
-                <span class="rank">${i + 1}</span>
-                <div class="row-main"><b>${esc(d.name)}</b><small>${esc(d.zone)} · Cpt ${esc(d.compteur)}</small></div>
-                <span class="row-amt">${fMoney(d.total)}</span>
-            </div>`).join('')
-        : '<p class="muted">Aucun débiteur — tout est réglé 🎉</p>';
+    if (!debiteurs.length) {
+        box.innerHTML = '<p class="muted">Aucun débiteur — tout est réglé 🎉</p>';
+        return;
+    }
+
+    const VISIBLE = 5;
+    const rowHtml = (d, i) => `
+        <div class="row-item">
+            <span class="rank">${i + 1}</span>
+            <div class="row-main"><b>${esc(d.name)}</b><small>${esc(d.zone)} · Cpt ${esc(d.compteur)}</small></div>
+            <span class="row-amt">${fMoney(d.total)}</span>
+        </div>`;
+
+    const head = debiteurs.slice(0, VISIBLE).map(rowHtml).join('');
+    const rest = debiteurs.slice(VISIBLE);
+    const restHtml = rest.map((d, i) => rowHtml(d, i + VISIBLE)).join('');
+    const showLabel = `Voir tous les débiteurs (${debiteurs.length}) ▾`;
+    const toggleHtml = rest.length
+        ? `<button type="button" class="btn-see-all" id="btn-toggle-debiteurs" data-show-label="${esc(showLabel)}" onclick="window.toggleAllDebiteurs()">${esc(showLabel)}</button>
+           <div id="debiteurs-rest" hidden>${restHtml}</div>`
+        : '';
+
+    box.innerHTML = head + toggleHtml;
 }
 
+window.toggleAllDebiteurs = function () {
+    const rest = document.getElementById('debiteurs-rest');
+    const btn  = document.getElementById('btn-toggle-debiteurs');
+    if (!rest || !btn) return;
+    rest.hidden = !rest.hidden;
+    btn.textContent = rest.hidden ? btn.dataset.showLabel : 'Voir moins ▴';
+};
+
+// ✅ v2 : une barre de progression par zone (comparaison instantanée) en plus
+// du badge chiffré — au lieu d'une simple liste de badges 0 %, 95 %, 97 %…
 function renderZonesRisque(zones) {
     const rows = Object.entries(zones).map(([zone, z]) => ({
         zone, taux: z.facture > 0 ? (z.encaisse / z.facture * 100) : 0, impaye: z.impaye, nb: z.nb
@@ -370,9 +401,14 @@ function renderZonesRisque(zones) {
     const box = document.getElementById('zones-risque');
     box.innerHTML = rows.length ? rows.map(r => {
         const cls = r.taux >= 75 ? 'ok' : r.taux >= 50 ? 'warn' : 'bad';
-        return `<div class="row-item">
-            <div class="row-main"><b>${esc(r.zone)}</b><small>${r.nb} compteur(s) · Impayés : ${fMoney(r.impaye)}</small></div>
-            <span class="tag tag-${cls}">${r.taux.toFixed(0)} %</span>
+        const pct = Math.max(0, Math.min(100, r.taux));
+        return `<div class="zone-row">
+            <div class="zone-row-top">
+                <b>${esc(r.zone)}</b>
+                <span class="tag tag-${cls}">${r.taux.toFixed(0)} %</span>
+            </div>
+            <div class="zone-bar-bg"><div class="zone-bar-fill zone-bar-${cls}" style="width:${pct}%"></div></div>
+            <small class="zone-row-sub">${r.nb} compteur(s) · Impayés : ${fMoney(r.impaye)}</small>
         </div>`;
     }).join('') : '<p class="muted">Aucune donnée de zone.</p>';
 }
@@ -398,6 +434,7 @@ function renderExpenses() {
             </div>`).join('');
     }
     setText('expense-total', fMoney(total));
+    setText('expense-summary-total', fMoney(total)); // ✅ v2 : mirroir affiché hors modale
     setText('expense-period', monthLabel(selCycle));
 }
 
@@ -463,6 +500,7 @@ function renderMotivations(curMetrics) {
     const net = encaisseMois - total;
     setText('motivation-encaisse', fMoney(encaisseMois));
     setText('motivation-total', fMoney(total));
+    setText('motivation-summary-total', fMoney(total)); // ✅ v2 : mirroir affiché hors modale
     setText('motivation-net', fMoney(net));
     setText('motivation-period', monthLabel(selCycle));
     const netEl = document.getElementById('motivation-net');
@@ -505,10 +543,12 @@ window.deleteMotivation = async function (ck, key) {
 // ── Sélecteurs de période ────────────────────────────────────
 function populateSelectors() {
     const cyclesDesc = allCyclesAsc().slice().reverse();
+    // ✅ v2 : plus d'emoji dans les options (🌟/📅) — un simple préfixe textuel,
+    // plus institutionnel pour un rapport d'Assemblée Générale.
     const optFor = (c) => {
         const isCur = (c === currentMonthStr());
         const val = isCur ? 'actuel' : c;
-        return `<option value="${val}">${isCur ? '🌟 Mois courant — ' : '📅 '}${monthLabel(c)}</option>`;
+        return `<option value="${val}">${isCur ? 'Mois courant — ' : ''}${monthLabel(c)}</option>`;
     };
     document.getElementById('dash-period').innerHTML = cyclesDesc.map(optFor).join('');
     document.getElementById('dash-compare').innerHTML =
@@ -532,6 +572,29 @@ window.onCompareChange = function () {
     const v = document.getElementById('dash-compare').value;
     cmpCycle = v || null;
     renderDashboard();
+};
+
+// ✅ v2 : le panneau de comparaison reste replié tant qu'on n'en a pas besoin —
+// avant : le sélecteur « Comparer avec » occupait une zone importante en
+// permanence, même sans comparaison active.
+window.toggleComparePanel = function () {
+    const panel = document.getElementById('compare-panel');
+    const btn   = document.getElementById('compare-toggle');
+    if (!panel || !btn) return;
+    panel.hidden = !panel.hidden;
+    btn.classList.toggle('on', !panel.hidden);
+    if (!panel.hidden) document.getElementById('dash-compare').focus();
+};
+
+// ✅ v2 : les formulaires « Ajouter une dépense/motivation » ne sont plus
+// intégrés en permanence dans le rapport — ils s'ouvrent dans une modale
+// dédiée, pour garder le rapport comme un espace de consultation/décision.
+window.openExpenseModal = function () { document.getElementById('expense-modal-overlay').classList.add('open'); };
+window.closeExpenseModal = function () { document.getElementById('expense-modal-overlay').classList.remove('open'); };
+window.openMotivationModal = function () { document.getElementById('motivation-modal-overlay').classList.add('open'); };
+window.closeMotivationModal = function () { document.getElementById('motivation-modal-overlay').classList.remove('open'); };
+window.closeModalIfOutside = function (e, id) {
+    if (e.target && e.target.id === id) document.getElementById(id).classList.remove('open');
 };
 
 window.toggleReportMode = function () {
