@@ -47,32 +47,65 @@
 
         body { margin:0; font-family:'Inter',sans-serif; background:var(--bg-dark); color:white; min-height:100vh; padding:20px; }
 
-        /* ── Barre de navigation ── */
-        .top-bar {
-            display:flex; gap:15px; justify-content:space-between; align-items:center; flex-wrap:wrap;
-            background:#1a2235; padding:15px 25px; border-radius:40px;
-            margin:0 auto 30px auto; max-width:1000px; box-shadow:0 10px 30px rgba(0,0,0,0.4);
+        /* ── Barre d'outils : recherche + impression + filtres ──
+           v2 : bloc allégé (deux lignes compactes au lieu d'un pavé qui
+           occupait près de la moitié de l'écran), avec un contour "barre
+           d'outils" plus net (moins arrondi qu'une carte flottante) pour que
+           le contenu qui défile en dessous se lise comme "sous un bandeau
+           fixe" plutôt que comme un défaut d'affichage. */
+        .toolbar {
+            display:flex; flex-direction:column; gap:10px;
+            background:#1a2235; padding:14px 18px; border-radius:22px;
+            margin:0 auto 18px auto; max-width:1000px; box-shadow:0 12px 24px -6px rgba(0,0,0,0.5);
             position:sticky; top:10px; z-index:1000;
         }
-        .search-box { flex:1; position:relative; min-width:200px; max-width:300px; }
+        .toolbar-row { display:flex; gap:10px; align-items:center; }
+
+        .search-box { flex:1; position:relative; min-width:0; }
         .search-box input {
-            width:100%; padding:12px 12px 12px 45px; border-radius:20px;
-            border:none; background:#242c40; color:white; outline:none; font-size:1rem; box-sizing:border-box;
+            width:100%; padding:10px 12px 10px 40px; border-radius:14px;
+            border:1px solid transparent; background:#242c40; color:white; outline:none;
+            font-size:0.92rem; box-sizing:border-box; transition:border-color .15s, box-shadow .15s;
         }
-        .search-box i { position:absolute; left:18px; top:50%; transform:translateY(-50%); color:var(--text-gray); }
-        .releveur-select {
-            padding:12px 18px; border-radius:20px; border:none; background:#242c40; color:white;
-            outline:none; font-size:1rem; cursor:pointer; flex:1; min-width:150px; max-width:200px;
+        /* ✅ v2 : état focus visible (contour bleu) — absent jusqu'ici */
+        .search-box input:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
+        .search-box input.filter-active { border-color:rgba(59,130,246,0.5); }
+        .search-box i { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.9rem; }
+
+        .tb-select {
+            padding:10px 14px; border-radius:14px; border:1px solid transparent; background:#242c40; color:white;
+            outline:none; font-size:0.88rem; cursor:pointer; flex:1; min-width:0;
+            transition:border-color .15s, box-shadow .15s;
         }
-        .releveur-select option { background:var(--card-dark); }
+        .tb-select:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
+        .tb-select option { background:var(--card-dark); }
+        /* ✅ v2 : indique qu'un agent précis est filtré (pas "Tous les agents") */
+        #releveurFilter.filter-active { border-color:var(--accent-blue); background:rgba(59,130,246,0.12); }
+
+        /* ✅ v2 : une seule couleur d'accent (bleu) pour l'action principale —
+           le vert saturé jurait avec le fond sombre. Bouton compact et
+           discret plutôt qu'un pavé géant au milieu des filtres. */
         .btn-print {
-            background:var(--accent-green); color:white; border:none; padding:10px 25px;
-            border-radius:20px; cursor:pointer; font-weight:bold;
-            display:flex; flex-direction:column; align-items:center; gap:4px; transition:0.3s; min-width:90px;
+            background:var(--accent-blue); color:white; border:none; padding:10px 16px;
+            border-radius:14px; cursor:pointer; font-weight:700; font-size:0.88rem;
+            display:flex; align-items:center; gap:8px; transition:0.2s; flex:none; white-space:nowrap;
         }
-        .btn-print:hover { transform:scale(1.05); background:#16a34a; box-shadow:0 0 20px rgba(34,197,94,0.4); }
-        .master-selection { background:#2d3748; padding:12px 20px; border-radius:20px; display:flex; align-items:center; gap:10px; font-weight:bold; }
-        .master-selection input { width:22px; height:22px; cursor:pointer; accent-color:var(--accent-green); }
+        .btn-print:hover { background:#2563eb; box-shadow:0 0 16px rgba(59,130,246,0.4); }
+        .btn-print:active { transform:scale(0.97); }
+
+        /* ── Sélection globale : déplacée au-dessus de la liste qu'elle
+           contrôle, au lieu d'être isolée dans la barre de filtres. ── */
+        .select-bar {
+            max-width:1000px; margin:0 auto 14px auto; display:flex; justify-content:flex-end;
+        }
+        .select-all {
+            display:flex; align-items:center; gap:8px; cursor:pointer;
+            background:#1a2235; border:1px solid rgba(255,255,255,0.08);
+            padding:8px 14px; border-radius:12px; font-size:0.85rem; font-weight:600; color:#cbd5e1;
+            transition:border-color .15s;
+        }
+        .select-all:hover { border-color:var(--accent-blue); }
+        .select-all input { width:18px; height:18px; cursor:pointer; accent-color:var(--accent-blue); }
 
         /* ── En-tête de page : titre + retour accueil (donne une hiérarchie
               claire sur PC ; masqué à l'impression via body * { visibility:hidden }) ── */
@@ -136,19 +169,30 @@
             padding:2px 10px; border-radius:20px; margin-top:5px;
         }
 
-        /* Zone droite : montants + boutons */
-        .item-right { display:flex; align-items:center; gap:14px; }
+        /* Zone droite : montants + actions */
+        .item-right { display:flex; align-items:center; gap:16px; }
         .item-amounts { text-align:right; }
-        .item-amounts .amounts-detail { color:var(--text-gray); font-size:0.82rem; }
+        /* ✅ v2 : contraste renforcé — le gris précédent était limite illisible
+           sur le fond sombre de la carte */
+        .item-amounts .amounts-detail { color:#b6c2d9; font-size:0.85rem; font-weight:500; }
         .item-amounts .total-val { font-size:1.1rem; font-weight:700; }
-        .total-green { color:var(--accent-green); }
+        /* ✅ v2 : accent bleu au lieu d'un vert saturé — une seule couleur
+           d'accent dans toute la page */
+        .total-green { color:var(--accent-blue); }
         .total-gray  { color:var(--text-gray); }
 
-        /* Bouton crayon */
+        /* Actions groupées : modifier + case à cocher vivent dans un même
+           bloc visuel, pour que leur lien soit évident au premier coup d'œil
+           (avant : le crayon flottait seul, sans contexte). */
+        .item-actions {
+            display:flex; align-items:center; gap:10px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06);
+            padding:6px 10px; border-radius:16px; flex-shrink:0;
+        }
         .btn-edit {
             background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4);
-            color:var(--accent-blue); width:36px; height:36px; border-radius:50%;
-            cursor:pointer; font-size:0.85rem; display:flex; align-items:center; justify-content:center;
+            color:var(--accent-blue); width:32px; height:32px; border-radius:50%;
+            cursor:pointer; font-size:0.8rem; display:flex; align-items:center; justify-content:center;
             transition:0.2s; flex-shrink:0;
         }
         .btn-edit:hover { background:var(--accent-blue); color:white; }
@@ -191,12 +235,12 @@
         .edit-input-wrap .unit { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.85rem; pointer-events:none; }
         
         .edit-preview {
-            background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.3);
+            background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3);
             border-radius:12px; padding:12px 16px; margin-top:8px;
             display:flex; justify-content:space-between; align-items:center;
         }
         .edit-preview span { color:var(--text-gray); font-size:0.9rem; }
-        .edit-preview strong { color:var(--accent-green); font-size:1.1rem; }
+        .edit-preview strong { color:var(--accent-blue); font-size:1.1rem; }
 
         .edit-buttons { display:flex; gap:10px; margin-top:22px; }
         .btn-confirm {
@@ -244,13 +288,14 @@
 
         /* ── Responsive mobile ── */
         @media (max-width:768px) {
-            .top-bar { flex-direction:column; align-items:stretch; border-radius:20px; padding:15px; }
-            .search-box { max-width:100%; margin-bottom:5px; }
-            .releveur-select { max-width:100%; width:100%; margin-bottom:5px; box-sizing:border-box; }
-            .btn-print { width:100%; flex-direction:row; justify-content:center; margin-bottom:5px; padding:15px; font-size:1.1rem; }
-            .master-selection { justify-content:center; }
+            .toolbar { padding:12px 14px; border-radius:18px; }
             .facture-item { flex-direction:column; align-items:flex-start; }
             .item-right { width:100%; justify-content:space-between; }
+        }
+        @media (max-width:380px) {
+            /* Écrans très étroits uniquement : les deux filtres (Mois / Agent)
+               repassent l'un sous l'autre plutôt que de se comprimer. */
+            .toolbar-row-filters { flex-direction:column; }
         }
     </style>
 </head>
@@ -269,25 +314,25 @@
     <span class="spacer"></span>
 </header>
 
-<!-- ── Barre de navigation ── -->
-<div class="top-bar">
-    <div class="search-box">
-        <i class="fas fa-search"></i>
-        <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="window.filterList()">
+<!-- ── Barre d'outils : recherche + impression (ligne 1), filtres (ligne 2) ── -->
+<div class="toolbar">
+    <div class="toolbar-row">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="window.filterList()">
+        </div>
+        <button class="btn-print" onclick="window.print()" title="Imprimer les factures sélectionnées">
+            <i class="fas fa-print"></i>
+            <span>Imprimer</span>
+        </button>
     </div>
-    <select id="monthFilter" onchange="window.changeMonth()" class="releveur-select" style="border-left:3px solid var(--accent-blue);">
-        <option value="actuel">📂 Chargement des périodes...</option>
-    </select>
-    <select id="releveurFilter" onchange="window.filterList()" class="releveur-select">
-        <option value="">Tous les agents</option>
-    </select>
-    <button class="btn-print" onclick="window.print()">
-        <i class="fas fa-print"></i>
-        <span>Imprimer</span>
-    </button>
-    <div class="master-selection">
-        <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)">
-        <label for="master-cb">Tout</label>
+    <div class="toolbar-row toolbar-row-filters">
+        <select id="monthFilter" onchange="window.changeMonth()" class="tb-select">
+            <option value="actuel">📅 Chargement des périodes...</option>
+        </select>
+        <select id="releveurFilter" onchange="window.filterList()" class="tb-select">
+            <option value="">Tous les agents</option>
+        </select>
     </div>
 </div>
 
@@ -300,6 +345,15 @@
     <button id="btn-reset-all" onclick="window.resetAllOverrides()">
         <i class="fas fa-undo"></i> Tout réinitialiser
     </button>
+</div>
+
+<!-- ── Sélection globale : juste au-dessus de la liste qu'elle contrôle
+     (avant : isolée dans la barre de filtres, sans lien visuel avec elle) ── -->
+<div class="select-bar">
+    <label class="select-all" for="master-cb">
+        <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)">
+        <span>Tout sélectionner</span>
+    </label>
 </div>
 
 <!-- ── Liste des factures ── -->
@@ -449,17 +503,19 @@
         const monthSelect = document.getElementById('monthFilter');
         try {
             const snapshot = await get(ref(db, P.backup));
-            let optionsHtml = '<option value="actuel">🌟 Mois Actuel</option>';
+            // ✅ v2 : icône calendrier au lieu d'une étoile/soleil — plus adaptée
+            // à une appli de gestion utilitaire.
+            let optionsHtml = '<option value="actuel">📅 Mois Actuel</option>';
             if (snapshot.exists()) {
                 allBackups = snapshot.val();
                 Object.keys(allBackups).sort().reverse().forEach(month => {
-                    optionsHtml += `<option value="${month}">📅 Archive : ${month}</option>`;
+                    optionsHtml += `<option value="${month}">🗂️ Archive : ${month}</option>`;
                 });
             }
             monthSelect.innerHTML = optionsHtml;
             window.changeMonth();
         } catch (e) {
-            monthSelect.innerHTML = '<option value="actuel">🌟 Mois Actuel</option>';
+            monthSelect.innerHTML = '<option value="actuel">📅 Mois Actuel</option>';
             window.changeMonth();
         }
     }
@@ -538,7 +594,7 @@
 
             const checkboxHtml = d.total > 0
                 ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.renderPrint()"
-                          style="width:20px;height:20px;accent-color:var(--accent-green);cursor:pointer;">`
+                          style="width:20px;height:20px;accent-color:var(--accent-blue);cursor:pointer;">`
                 : `<span style="font-size:0.8rem;color:var(--text-gray);font-style:italic;">Rien à payer</span>`;
 
             div.innerHTML = `
@@ -556,10 +612,12 @@
                             ${fPrice(d.total)}
                         </div>
                     </div>
-                    <button class="btn-edit" onclick="window.openEditModal('${key}')" title="Modifier les arriérés">
-                        <i class="fas fa-pencil-alt"></i>
-                    </button>
-                    ${checkboxHtml}
+                    <div class="item-actions">
+                        <button class="btn-edit" onclick="window.openEditModal('${key}')" title="Modifier les arriérés">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                        ${checkboxHtml}
+                    </div>
                 </div>`;
             listContainer.appendChild(div);
         });
@@ -749,7 +807,8 @@
         }
 
         // Checkbox si total est passé à 0 (rare)
-        const right = div.querySelector('.item-right');
+        const right   = div.querySelector('.item-right');
+        const actions = div.querySelector('.item-actions');
         let cb = right.querySelector('.bill-cb, span');
         if (d.total > 0 && (!cb || cb.tagName === 'SPAN')) {
             if (cb) cb.remove();
@@ -757,8 +816,8 @@
             newCb.type = 'checkbox'; newCb.className = 'bill-cb';
             newCb.setAttribute('data-id', key);
             newCb.setAttribute('onchange', 'window.renderPrint()');
-            newCb.style.cssText = "width:20px;height:20px;accent-color:var(--accent-green);cursor:pointer;";
-            right.appendChild(newCb);
+            newCb.style.cssText = "width:20px;height:20px;accent-color:var(--accent-blue);cursor:pointer;";
+            (actions || right).appendChild(newCb);
         }
     }
 
@@ -766,8 +825,15 @@
     // FILTRES
     // ══════════════════════════════════════════
     window.filterList = function() {
-        const q   = document.getElementById('searchInput').value.toLowerCase();
-        const sel = document.getElementById('releveurFilter').value;
+        const searchEl = document.getElementById('searchInput');
+        const relEl    = document.getElementById('releveurFilter');
+        const q   = searchEl.value.toLowerCase();
+        const sel = relEl.value;
+        // ✅ v2 : feedback visuel qu'un filtre est appliqué (contour bleu),
+        // absent jusqu'ici — on ne voyait pas si "Tous les agents" avait été
+        // changé pour un agent précis.
+        searchEl.classList.toggle('filter-active', q.trim() !== '');
+        relEl.classList.toggle('filter-active', sel !== '');
         document.querySelectorAll('.facture-item').forEach(it => {
             const mText = it.getAttribute('data-search').includes(q);
             const mRel  = sel === "" || it.getAttribute('data-releveur') === sel;
