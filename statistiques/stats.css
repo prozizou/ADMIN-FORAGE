@@ -161,7 +161,7 @@ body {
 /* ✅ v4 : carte empilée (nom + montant en gros en tête, détails secondaires
    en dessous en gris, actions en pleine largeur en bas) — plus aérée, plus
    facile à parcourir qu'une mise en page tassée sur 2 colonnes serrées. */
-.item { display: flex; flex-direction: column; gap: 7px; padding: 16px 18px; border-radius: 16px; margin-bottom: 12px; background: var(--bg); border: 1px solid var(--border-color); }
+.item { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 16px; margin-bottom: 10px; background: var(--bg); border: 1px solid var(--border-color); }
 .citem-main { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .citem-name { font-size: 1.05rem; font-weight: 800; color: var(--text-main); }
 .citem-amt { font-size: 1.2rem; font-weight: 800; white-space: nowrap; }
@@ -170,17 +170,43 @@ body {
 .citem-actions { display: flex; gap: 8px; margin-top: 4px; }
 .citem-actions button, .citem-actions a, .citem-actions span.archive-lock { flex: 1; }
 
-/* ✅ Bouton "Appeler l'agent" (compteur non relevé) : vert comme le seul
-   canal d'action réellement disponible tant que le relevé n'est pas fait —
-   un <a href="tel:..."> stylé comme les autres boutons de la carte. */
+/* ✅ Bouton "Appeler l'agent" (compteur non relevé) : action secondaire —
+   "Saisir le relevé" (.btn-relever) reste l'action principale de la carte,
+   l'appel est donc un contour discret, pas un pavé plein qui écrase tout.
+   Libellé volontairement court ("Appeler" seul, sans le nom de l'agent, qui
+   est affiché à part sur sa propre ligne) pour ne jamais forcer de retour
+   à la ligne quel que soit la longueur du nom. */
 .btn-call {
     display: flex; align-items: center; justify-content: center; gap: 6px;
-    border: none; padding: 11px 14px; border-radius: 12px; font-size: 0.85rem;
+    padding: 11px 14px; border-radius: 12px; font-size: 0.85rem;
     cursor: pointer; font-weight: 700; text-decoration: none;
-    background: var(--success); color: white; box-shadow: 0 3px 8px rgba(34, 197, 94, 0.3);
-    transition: transform .1s;
+    background: var(--card-bg); color: var(--success);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    transition: transform .1s, background .15s;
 }
+.btn-call:hover { background: rgba(34, 197, 94, 0.1); }
 .btn-call:active { transform: scale(0.97); }
+
+/* ✅ "Saisir le relevé" : action principale d'un compteur non relevé — même
+   traitement visuel que .btn-paye (bouton plein bleu), sous un nom propre
+   au contexte "relève" plutôt que "paiement". */
+.btn-relever { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(0, 82, 254, 0.3); }
+
+/* Ligne "Agent : Nom" — identité de l'agent en charge, dissociée du bouton
+   d'appel pour que celui-ci reste court et ne s'étale jamais sur 2 lignes. */
+.citem-agent { font-size: 0.8rem; color: var(--text-sub); display: flex; align-items: center; gap: 6px; }
+.citem-agent i { opacity: .8; width: 14px; text-align: center; }
+
+/* Badge de statut en pastille (plus visible qu'un simple texte coloré) —
+   utilisé pour "À relever" : ambre, volontairement distinct de l'orange
+   de .anomaly-badge pour ne pas confondre "à faire" et "erreur à corriger". */
+.status-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 0.72rem; font-weight: 800; letter-spacing: .02em;
+    padding: 4px 10px; border-radius: 20px; white-space: nowrap;
+}
+.status-pill-warn { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+[data-theme="dark"] .status-pill-warn { background: rgba(217, 119, 6, 0.15); color: #fbbf24; border-color: rgba(217, 119, 6, 0.35); }
 
 .bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
 .bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
