@@ -715,37 +715,47 @@ function renderList() {
             const arriereNote = arriere > 0
                 ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
                 : '';
-            // Permet toujours de saisir l'index depuis cette page (président
-            // uniquement, hors archive) — on ne retire pas cette possibilité,
-            // on clarifie seulement l'état "pas encore fait".
+            // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
+            // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
+            // l'objectif de la page. Elle reste réservée au président, hors
+            // archive ; on ne retire pas cette possibilité, on la met juste
+            // en avant plutôt que l'appel, qui n'est qu'un moyen d'y arriver.
             const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
-                ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
+                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
-            // ✅ Appel de l'agent en charge : numéro figé sur le relevé en
-            // priorité (agent_tel, écrit à la création du compteur), sinon
-            // repli sur la fiche agent actuelle (storeAgents) — même logique
-            // de repli que zoneOf() ci-dessus. Non destructif : affiché même
-            // en archive et pour tout utilisateur, dès qu'un numéro existe.
+            // ✅ Appel de l'agent en charge, en action SECONDAIRE (contour,
+            // pas un pavé plein) : numéro figé sur le relevé en priorité
+            // (agent_tel, écrit à la création du compteur), sinon repli sur
+            // la fiche agent actuelle (storeAgents) — même logique de repli
+            // que zoneOf() ci-dessus. Non destructif : affiché même en
+            // archive et pour tout utilisateur, dès qu'un numéro existe.
+            // Le nom de l'agent est affiché à part (ligne dédiée) pour que
+            // le libellé du bouton reste court et ne retombe jamais sur 2
+            // lignes, quelle que soit la longueur du nom.
             const agentInfo = storeAgents[item.agent_id] || {};
             const agentTelRaw = String(item.agent_tel || agentInfo.agent_tel || '').trim();
             const agentTel = agentTelRaw.replace(/[^0-9+]/g, '');
-            const agentName = String(item.agent_name || agentInfo.agent || '').trim() || 'l\'agent';
+            const agentName = String(item.agent_name || agentInfo.agent || '').trim();
+            const agentLine = agentName
+                ? `<div class="citem-agent"><i class="fa-solid fa-user"></i>Agent : ${esc(agentName)}</div>`
+                : '';
             const callBtn = agentTel
-                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName)} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler ${esc(agentName)}</a>`
+                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler</a>`
                 : '';
             div.className = 'item bg-non-releve';
             div.innerHTML = `
                 <div class="citem-main">
                     <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
-                    <span class="status-badge status-pending">○ NON RELEVÉ</span>
+                    <span class="status-pill status-pill-warn">● À relever</span>
                 </div>
                 <div class="citem-sub">
                     <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
-                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx}</span>
+                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx} m³</span>
                 </div>
                 ${arriereNote}
-                ${(callBtn || editOrLock) ? `<div class="citem-actions">${callBtn}${editOrLock}</div>` : ''}
+                ${agentLine}
+                ${(callBtn || editOrLock) ? `<div class="citem-actions">${editOrLock}${callBtn}</div>` : ''}
             `;
             listDiv.appendChild(div);
             return;
