@@ -168,7 +168,19 @@ body {
 .citem-sub { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 0.85rem; color: var(--text-sub); }
 .citem-sub i { margin-right: 5px; opacity: .8; width: 14px; text-align: center; }
 .citem-actions { display: flex; gap: 8px; margin-top: 4px; }
-.citem-actions button, .citem-actions span.archive-lock { flex: 1; }
+.citem-actions button, .citem-actions a, .citem-actions span.archive-lock { flex: 1; }
+
+/* ✅ Bouton "Appeler l'agent" (compteur non relevé) : vert comme le seul
+   canal d'action réellement disponible tant que le relevé n'est pas fait —
+   un <a href="tel:..."> stylé comme les autres boutons de la carte. */
+.btn-call {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border: none; padding: 11px 14px; border-radius: 12px; font-size: 0.85rem;
+    cursor: pointer; font-weight: 700; text-decoration: none;
+    background: var(--success); color: white; box-shadow: 0 3px 8px rgba(34, 197, 94, 0.3);
+    transition: transform .1s;
+}
+.btn-call:active { transform: scale(0.97); }
 
 .bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
 .bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
