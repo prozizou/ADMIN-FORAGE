@@ -34,47 +34,52 @@
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        /* ── Variables globales ── */
+        /* ── Variables globales ──
+           ✅ v6 : thème bleu nuit conservé, contraste renforcé (surfaces plus
+           distinctes du fond, texte secondaire plus lisible) et grille de 8px
+           pour tous les espacements de la refonte. */
         :root {
             --bg-dark:      #0f172a;
             --card-dark:    #1e293b;
+            --surface-2:    #182236;   /* surface intermédiaire (barres, toolbar) */
+            --border-soft:  rgba(255,255,255,0.08);
             --accent-green: #22c55e;
             --accent-blue:  #3b82f6;
             --accent-amber: #f59e0b;
             --accent-red:   #ef4444;
-            --text-gray:    #94a3b8;
+            --text-gray:    #a3b0c7;  /* ✅ v6 : plus clair que #94a3b8 pour plus de contraste sur fond sombre */
         }
 
-        body { margin:0; font-family:'Inter',sans-serif; background:var(--bg-dark); color:white; min-height:100vh; padding:20px; }
+        body { margin:0; font-family:'Inter',sans-serif; background:var(--bg-dark); color:white; min-height:100vh; padding:16px; padding-bottom:16px; }
 
-        /* ── Barre d'outils : recherche + impression + filtres ──
-           v2 : bloc allégé (deux lignes compactes au lieu d'un pavé qui
-           occupait près de la moitié de l'écran), avec un contour "barre
-           d'outils" plus net (moins arrondi qu'une carte flottante) pour que
-           le contenu qui défile en dessous se lise comme "sous un bandeau
-           fixe" plutôt que comme un défaut d'affichage. */
+        /* ── Barre d'outils : recherche + tri + filtres + compteur de résultats ──
+           v6 : le bouton "Imprimer" quitte la barre — l'impression est
+           désormais liée à la sélection via la barre d'action fixe en bas
+           d'écran (.action-bar), jamais accessible "à vide". La barre reste
+           compacte (grille 8px), avec un contour net plutôt qu'une carte
+           flottante pour bien lire "bandeau fixe" au défilement. */
         .toolbar {
-            display:flex; flex-direction:column; gap:10px;
-            background:#1a2235; padding:14px 18px; border-radius:22px;
-            margin:0 auto 18px auto; max-width:1000px; box-shadow:0 12px 24px -6px rgba(0,0,0,0.5);
-            position:sticky; top:10px; z-index:1000;
+            display:flex; flex-direction:column; gap:8px;
+            background:var(--surface-2); padding:12px 16px; border-radius:18px;
+            margin:0 auto 10px auto; max-width:1000px; box-shadow:0 12px 24px -6px rgba(0,0,0,0.5);
+            position:sticky; top:8px; z-index:1000;
         }
-        .toolbar-row { display:flex; gap:10px; align-items:center; }
+        .toolbar-row { display:flex; gap:8px; align-items:center; }
 
-        .search-box { flex:1; position:relative; min-width:0; }
+        .search-box { flex:2; position:relative; min-width:0; }
         .search-box input {
-            width:100%; padding:10px 12px 10px 40px; border-radius:14px;
+            width:100%; padding:9px 12px 9px 38px; border-radius:12px;
             border:1px solid transparent; background:#242c40; color:white; outline:none;
-            font-size:0.92rem; box-sizing:border-box; transition:border-color .15s, box-shadow .15s;
+            font-size:0.88rem; box-sizing:border-box; transition:border-color .15s, box-shadow .15s;
         }
         /* ✅ v2 : état focus visible (contour bleu) — absent jusqu'ici */
         .search-box input:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
         .search-box input.filter-active { border-color:rgba(59,130,246,0.5); }
-        .search-box i { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.9rem; }
+        .search-box i { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.85rem; }
 
         .tb-select {
-            padding:10px 14px; border-radius:14px; border:1px solid transparent; background:#242c40; color:white;
-            outline:none; font-size:0.88rem; cursor:pointer; flex:1; min-width:0;
+            padding:9px 12px; border-radius:12px; border:1px solid transparent; background:#242c40; color:white;
+            outline:none; font-size:0.84rem; cursor:pointer; flex:1; min-width:0;
             transition:border-color .15s, box-shadow .15s;
         }
         .tb-select:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
@@ -82,49 +87,75 @@
         /* ✅ v2 : indique qu'un agent précis est filtré (pas "Tous les agents") */
         #releveurFilter.filter-active { border-color:var(--accent-blue); background:rgba(59,130,246,0.12); }
 
-        /* ✅ v2 : une seule couleur d'accent (bleu) pour l'action principale —
-           le vert saturé jurait avec le fond sombre. Bouton compact et
-           discret plutôt qu'un pavé géant au milieu des filtres. */
-        .btn-print {
-            background:var(--accent-blue); color:white; border:none; padding:10px 16px;
-            border-radius:14px; cursor:pointer; font-weight:700; font-size:0.88rem;
-            display:flex; align-items:center; gap:8px; transition:0.2s; flex:none; white-space:nowrap;
+        /* Compteur de résultats — répond immédiatement à la recherche/aux
+           filtres, sans avoir à compter les cartes soi-même. */
+        .result-count {
+            font-size:0.78rem; color:var(--text-gray); font-weight:600;
+            white-space:nowrap; flex:none; padding:0 2px;
         }
-        .btn-print:hover { background:#2563eb; box-shadow:0 0 16px rgba(59,130,246,0.4); }
-        .btn-print:active { transform:scale(0.97); }
 
-        /* ── Sélection globale : déplacée au-dessus de la liste qu'elle
-           contrôle, au lieu d'être isolée dans la barre de filtres. ── */
+        /* ── Sélection globale + tri : une seule ligne compacte au-dessus de
+           la liste (avant : "Tout sélectionner" isolé, aucun tri possible). ── */
         .select-bar {
-            max-width:1000px; margin:0 auto 14px auto; display:flex; justify-content:flex-end;
+            max-width:1000px; margin:0 auto 10px auto; display:flex; justify-content:space-between;
+            align-items:center; gap:8px; flex-wrap:wrap;
         }
         .select-all {
             display:flex; align-items:center; gap:8px; cursor:pointer;
-            background:#1a2235; border:1px solid rgba(255,255,255,0.08);
-            padding:8px 14px; border-radius:12px; font-size:0.85rem; font-weight:600; color:#cbd5e1;
+            background:var(--surface-2); border:1px solid var(--border-soft);
+            padding:7px 14px; border-radius:12px; font-size:0.82rem; font-weight:600; color:#cbd5e1;
             transition:border-color .15s;
         }
         .select-all:hover { border-color:var(--accent-blue); }
-        .select-all input { width:18px; height:18px; cursor:pointer; accent-color:var(--accent-blue); }
+        .select-all input { width:17px; height:17px; cursor:pointer; accent-color:var(--accent-blue); }
 
-        /* ── En-tête de page : titre + retour accueil (donne une hiérarchie
-              claire sur PC ; masqué à l'impression via body * { visibility:hidden }) ── */
-        .page-head {
-            max-width:1000px; margin:0 auto 16px auto;
-            display:flex; align-items:center; gap:14px;
+        /* ── Total à payer : mis en évidence immédiatement, avant la liste —
+           reflète toujours l'ensemble actuellement filtré (recherche/agent),
+           pas un total figé au chargement. ── */
+        .summary-bar {
+            max-width:1000px; margin:0 auto 14px auto;
+            background:var(--surface-2); border:1px solid var(--border-soft);
+            border-radius:18px; padding:14px 18px;
+            display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+            box-shadow:0 8px 20px -8px rgba(0,0,0,0.4);
         }
-        .page-head .page-title { font-size:1.35rem; margin:0; font-weight:700; }
+        .summary-total { flex:1; min-width:180px; }
+        .summary-total .lbl { font-size:0.72rem; font-weight:700; color:var(--text-gray); text-transform:uppercase; letter-spacing:.04em; }
+        .summary-total .val { font-size:1.55rem; font-weight:800; color:var(--accent-blue); margin-top:2px; line-height:1.1; }
+        .summary-chips { display:flex; gap:8px; flex-wrap:wrap; }
+        .summary-chip {
+            display:flex; align-items:center; gap:6px; font-size:0.78rem; font-weight:700;
+            padding:6px 12px; border-radius:20px; white-space:nowrap;
+        }
+        .summary-chip .n { font-size:0.9rem; }
+        .summary-chip.chip-ajour   { background:rgba(34,197,94,0.14);  color:var(--accent-green); border:1px solid rgba(34,197,94,0.3); }
+        .summary-chip.chip-arriere{ background:rgba(245,158,11,0.14); color:var(--accent-amber); border:1px solid rgba(245,158,11,0.3); }
+        .summary-chip.chip-impaye { background:rgba(239,68,68,0.14); color:var(--accent-red);   border:1px solid rgba(239,68,68,0.3); }
+        @media (max-width:520px) {
+            .summary-bar { padding:12px 14px; gap:12px; }
+            .summary-total .val { font-size:1.3rem; }
+        }
+
+        /* ── En-tête de page : titre + retour accueil — compactée en v6
+              (padding/police réduits, un seul niveau de hiérarchie visuelle
+              avant la barre d'outils qui, elle, concentre l'essentiel de
+              l'attention). Masquée à l'impression via body * { visibility:hidden } ── */
+        .page-head {
+            max-width:1000px; margin:0 auto 12px auto;
+            display:flex; align-items:center; gap:12px;
+        }
+        .page-head .page-title { font-size:1.1rem; margin:0; font-weight:700; }
         .page-head .spacer { flex:1; }
         .btn-back {
             display:inline-flex; align-items:center; gap:8px; text-decoration:none;
-            color:#cbd5e1; background:#1a2235; border:1px solid rgba(255,255,255,0.08);
-            padding:10px 16px; border-radius:14px; font-weight:600; font-size:.9rem;
+            color:#cbd5e1; background:#1a2235; border:1px solid var(--border-soft);
+            padding:8px 14px; border-radius:12px; font-weight:600; font-size:.85rem;
             transition:.2s; white-space:nowrap;
         }
         .btn-back:hover { color:#fff; border-color:var(--accent-blue); transform:translateX(-2px); }
         @media (max-width:768px) {
-            .page-head { flex-wrap:wrap; gap:10px; }
-            .page-head .page-title { font-size:1.1rem; order:2; width:100%; }
+            .page-head { flex-wrap:wrap; gap:8px; }
+            .page-head .page-title { font-size:1rem; order:2; width:100%; }
         }
 
         /* ── Bannière modifications en attente ── */
@@ -145,37 +176,55 @@
         }
         #btn-reset-all:hover { background:var(--accent-amber); color:#000; }
 
-        /* ── Liste des factures ── */
+        /* ── Liste des factures ──
+           ✅ v6 : cartes nettement plus compactes (padding et marge réduits
+           d'environ un tiers) pour parcourir beaucoup plus de clients à
+           l'écran sans donner une impression de vide. */
         .list-container { max-width:900px; margin:auto; }
         .facture-item {
-            background:var(--card-dark); padding:15px 20px; border-radius:20px;
-            margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;
+            background:var(--card-dark); padding:12px 16px; border-radius:16px;
+            margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;
             border:1px solid rgba(255,255,255,0.05); transition:border-color 0.2s;
-            flex-wrap:wrap; gap:12px;
+            flex-wrap:wrap; gap:10px;
         }
         .facture-item:hover { border-color:var(--accent-blue); }
         .facture-item.is-modified { border-color:var(--accent-amber) !important; }
 
         /* Infos à gauche */
         .item-info { flex:1; min-width:180px; }
-        .item-info strong { font-size:1.05rem; }
-        .item-info .sub { color:var(--text-gray); font-size:0.88rem; margin-top:2px; }
+        .item-info .name-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .item-info strong { font-size:0.98rem; }
+        .item-info .sub { color:var(--text-gray); font-size:0.82rem; margin-top:2px; }
 
         /* Badge "Modifié" */
         .badge-modifie {
             display:inline-flex; align-items:center; gap:5px;
             background:rgba(245,158,11,0.15); border:1px solid var(--accent-amber);
-            color:var(--accent-amber); font-size:0.75rem; font-weight:600;
-            padding:2px 10px; border-radius:20px; margin-top:5px;
+            color:var(--accent-amber); font-size:0.72rem; font-weight:600;
+            padding:2px 10px; border-radius:20px; margin-top:4px;
         }
 
+        /* Pastilles de statut sémantique — même logique que sur la page
+           Statistiques : un état honnête, dérivé des seules données
+           disponibles (montant total dû + arriérés calculés). Pas de
+           "Partiellement payé" : l'appli ne suit aucun paiement partiel par
+           facture, un badge de ce type afficherait une info inventée. */
+        .status-chip {
+            display:inline-flex; align-items:center; gap:4px;
+            font-size:0.68rem; font-weight:800; letter-spacing:.02em;
+            padding:2px 9px; border-radius:20px; white-space:nowrap;
+        }
+        .chip-ajour   { background:rgba(34,197,94,0.14);  color:var(--accent-green); border:1px solid rgba(34,197,94,0.3); }
+        .chip-arriere { background:rgba(245,158,11,0.14); color:var(--accent-amber); border:1px solid rgba(245,158,11,0.3); }
+        .chip-impaye  { background:rgba(239,68,68,0.14);  color:var(--accent-red);   border:1px solid rgba(239,68,68,0.3); }
+
         /* Zone droite : montants + actions */
-        .item-right { display:flex; align-items:center; gap:16px; }
+        .item-right { display:flex; align-items:center; gap:14px; }
         .item-amounts { text-align:right; }
         /* ✅ v2 : contraste renforcé — le gris précédent était limite illisible
            sur le fond sombre de la carte */
-        .item-amounts .amounts-detail { color:#b6c2d9; font-size:0.85rem; font-weight:500; }
-        .item-amounts .total-val { font-size:1.1rem; font-weight:700; }
+        .item-amounts .amounts-detail { color:#b6c2d9; font-size:0.8rem; font-weight:500; }
+        .item-amounts .total-val { font-size:1.05rem; font-weight:700; }
         /* ✅ v2 : accent bleu au lieu d'un vert saturé — une seule couleur
            d'accent dans toute la page */
         .total-green { color:var(--accent-blue); }
@@ -261,36 +310,134 @@
         }
         .btn-reset-one:hover { background:var(--accent-red); color:white; }
 
-        /* ── Zone d'impression ── */
+        /* ── Zone d'impression ──
+           ✅ v6 : le contenu (une page par facture) garde son apparence
+           "papier" en permanence (plus seulement sous @media print) — c'est
+           ce qui permet l'aperçu à l'écran ci-dessous. Seule la zone reste
+           masquée hors impression/aperçu (display:none), et @media print
+           se limite désormais à la géométrie et à la visibilité exclusive
+           de #print-zone au moment d'imprimer réellement. */
         #print-zone { display:none; }
+        .invoice-page { width:210mm; max-width:100%; min-height:297mm; box-sizing:border-box; background:white; color:black; padding:12mm 18mm; }
+        .p-header { text-align:center; margin-bottom:5px; font-size:19px; font-weight:bold; line-height:1.4; }
+        .section-title { font-family:'Dancing Script',cursive; font-size:26px; text-align:center; margin:12px 0 6px 0; }
+        .info-box { border:2.5px solid #333; border-radius:18px; padding:15px 25px; margin-bottom:18px; }
+        .p-row { display:flex; justify-content:space-between; margin-bottom:8px; font-size:18px; }
+        .bold { font-weight:900; }
+        .deadline { margin-top:15px; font-size:18px; font-weight:bold; }
+        .tresorier { font-family:'Dancing Script',cursive; font-size:28px; text-align:right; margin-top:-30px; }
+        .p-dashed { border-top:2px dashed #000; margin:35px 0; position:relative; }
+        .scissors { position:absolute; top:-14px; background:white; padding:0 10px; font-size:22px; }
+        .sc-left { left:10%; } .sc-right { right:10%; }
+        .footer-line { border-top:4px solid black; margin-top:15px; padding-top:15px; }
+        /* Mention "arriérés corrigés" sur facture imprimée si modifié manuellement */
+        .modif-notice { font-size:11px; color:#888; font-style:italic; margin-top:4px; }
 
-        /* ── IMPRESSION PAPIER ── */
+        /* ── Aperçu avant impression ──
+           Réutilise #print-zone tel quel (aucune duplication de contenu) :
+           en mode aperçu, on le sort de son display:none et on le pose en
+           overlay plein écran, scrollable, avec une mini barre d'outils
+           séparée (fermer / imprimer) qui ne sera jamais écrasée par les
+           re-rendus de renderPrint(). */
+        body.preview-mode { overflow:hidden; }
+        body.preview-mode #print-zone {
+            display:flex !important; flex-direction:column; align-items:center; gap:24px;
+            position:fixed; inset:0; overflow:auto; z-index:5000;
+            background:rgba(2,6,23,0.92); padding:80px 16px 40px 16px;
+        }
+        body.preview-mode .invoice-page { box-shadow:0 20px 50px rgba(0,0,0,0.5); border-radius:4px; flex-shrink:0; }
+        .preview-toolbar {
+            display:none; position:fixed; top:0; left:0; right:0; z-index:5001;
+            align-items:center; justify-content:space-between; gap:12px;
+            background:var(--surface-2); border-bottom:1px solid var(--border-soft);
+            padding:14px 20px; box-shadow:0 4px 16px rgba(0,0,0,0.4);
+        }
+        body.preview-mode .preview-toolbar { display:flex; }
+        .preview-toolbar strong { font-size:0.92rem; }
+        .preview-toolbar .ptb-actions { display:flex; gap:10px; }
+        @media (max-width:768px) {
+            body.preview-mode #print-zone { transform-origin:top center; padding:70px 8px 30px 8px; }
+            body.preview-mode .invoice-page { transform:scale(0.42); margin-bottom:-380px; }
+        }
+
+        /* ── IMPRESSION PAPIER : géométrie + visibilité exclusive uniquement —
+           l'apparence de la facture elle-même est définie plus haut, hors
+           media query, pour être partagée avec l'aperçu à l'écran. ── */
         @media print {
             @page { size:A4; margin:0; }
             body * { visibility:hidden; }
             #print-zone, #print-zone * { visibility:visible; }
-            #print-zone { display:block !important; position:absolute; left:0; top:0; width:100%; color:black; background:white; }
-            .invoice-page { width:210mm; height:297mm; padding:12mm 18mm; box-sizing:border-box; background:white; page-break-after:always; }
-            .p-header { text-align:center; margin-bottom:5px; font-size:19px; font-weight:bold; line-height:1.4; }
-            .section-title { font-family:'Dancing Script',cursive; font-size:26px; text-align:center; margin:12px 0 6px 0; }
-            .info-box { border:2.5px solid #333; border-radius:18px; padding:15px 25px; margin-bottom:18px; }
-            .p-row { display:flex; justify-content:space-between; margin-bottom:8px; font-size:18px; }
-            .bold { font-weight:900; }
-            .deadline { margin-top:15px; font-size:18px; font-weight:bold; }
-            .tresorier { font-family:'Dancing Script',cursive; font-size:28px; text-align:right; margin-top:-30px; }
-            .p-dashed { border-top:2px dashed #000; margin:35px 0; position:relative; }
-            .scissors { position:absolute; top:-14px; background:white; padding:0 10px; font-size:22px; }
-            .sc-left { left:10%; } .sc-right { right:10%; }
-            .footer-line { border-top:4px solid black; margin-top:15px; padding-top:15px; }
-            /* Mention "arriérés corrigés" sur facture imprimée si modifié manuellement */
-            .modif-notice { font-size:11px; color:#888; font-style:italic; margin-top:4px; }
+            #print-zone {
+                display:block !important; position:absolute; left:0; top:0; width:100%;
+                color:black; background:white; padding:0;
+            }
+            .invoice-page { height:297mm; page-break-after:always; box-shadow:none !important; transform:none !important; margin:0 !important; }
         }
+
+        /* ── Barre d'action fixe, liée à la sélection ──
+           N'apparaît que lorsqu'au moins une facture est cochée — impossible
+           de lancer une impression "à vide" ou de se demander ce qui va
+           sortir de l'imprimante. */
+        .action-bar {
+            position:fixed; left:16px; right:16px; bottom:-100px; z-index:1500;
+            max-width:968px; margin:0 auto;
+            background:var(--card-dark); border:1px solid rgba(59,130,246,0.35);
+            border-radius:18px; padding:14px 18px;
+            display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+            box-shadow:0 16px 40px -8px rgba(0,0,0,0.6);
+            transition:bottom .25s ease;
+        }
+        .action-bar.visible { bottom:16px; }
+        .action-bar .ab-info { font-size:0.88rem; font-weight:600; color:#e2e8f0; }
+        .action-bar .ab-info .ab-total { color:var(--accent-blue); font-weight:800; }
+        .action-bar .ab-actions { display:flex; gap:10px; }
+        .btn-preview {
+            background:transparent; color:#cbd5e1; border:1px solid var(--border-soft); padding:10px 16px;
+            border-radius:14px; cursor:pointer; font-weight:600; font-size:0.85rem;
+            display:flex; align-items:center; gap:8px; transition:0.2s; white-space:nowrap;
+        }
+        .btn-preview:hover { border-color:var(--accent-blue); color:#fff; }
+        .btn-print {
+            background:var(--accent-blue); color:white; border:none; padding:10px 18px;
+            border-radius:14px; cursor:pointer; font-weight:700; font-size:0.85rem;
+            display:flex; align-items:center; gap:8px; transition:0.2s; flex:none; white-space:nowrap;
+        }
+        .btn-print:hover { background:#2563eb; box-shadow:0 0 16px rgba(59,130,246,0.4); }
+        .btn-print:active { transform:scale(0.97); }
+        /* La liste ne doit jamais rester cachée sous la barre fixe une fois visible */
+        body.has-selection .list-container { padding-bottom:78px; }
+
+        /* ── Chargement : skeleton loaders ──
+           Remplacent le texte "Calcul en cours..." — la silhouette des
+           cartes à venir est plus rassurante qu'un message d'attente nu. */
+        .skeleton-card {
+            background:var(--card-dark); border:1px solid rgba(255,255,255,0.05);
+            border-radius:16px; padding:12px 16px; margin-bottom:8px;
+            display:flex; justify-content:space-between; align-items:center; gap:14px;
+        }
+        .skeleton-line { height:12px; border-radius:6px; background:linear-gradient(90deg,#1e293b,#2a3750,#1e293b); background-size:200% 100%; animation:sk-shimmer 1.4s infinite; }
+        .skeleton-card .sk-a { width:45%; }
+        .skeleton-card .sk-b { width:30%; margin-top:8px; }
+        .skeleton-card .sk-c { width:80px; height:32px; border-radius:10px; flex-shrink:0; }
+        @keyframes sk-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+
+        /* ── Retour visuel (toast) — confirmation après impression ── */
+        #toast {
+            visibility:hidden; position:fixed; left:50%; bottom:30px; transform:translateX(-50%);
+            background:var(--accent-green); color:#04210f; font-weight:700; font-size:0.88rem;
+            padding:14px 22px; border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,0.4);
+            z-index:6000; opacity:0; transition:opacity .3s, bottom .3s;
+        }
+        #toast.show { visibility:visible; opacity:1; bottom:50px; }
 
         /* ── Responsive mobile ── */
         @media (max-width:768px) {
-            .toolbar { padding:12px 14px; border-radius:18px; }
+            .toolbar { padding:10px 12px; border-radius:16px; }
             .facture-item { flex-direction:column; align-items:flex-start; }
             .item-right { width:100%; justify-content:space-between; }
+            .action-bar { left:8px; right:8px; flex-direction:column; align-items:stretch; }
+            .action-bar .ab-actions { width:100%; }
+            .action-bar .ab-actions button { flex:1; justify-content:center; }
         }
         @media (max-width:380px) {
             /* Écrans très étroits uniquement : les deux filtres (Mois / Agent)
@@ -314,17 +461,23 @@
     <span class="spacer"></span>
 </header>
 
-<!-- ── Barre d'outils : recherche + impression (ligne 1), filtres (ligne 2) ── -->
+<!-- ── Barre d'outils : recherche + tri (ligne 1), filtres (ligne 2) ── -->
+<!-- ✅ v6 : le bouton "Imprimer" n'est plus ici — il n'apparaît qu'une fois
+     des factures sélectionnées (voir .action-bar en fin de page). -->
 <div class="toolbar">
     <div class="toolbar-row">
         <div class="search-box">
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" placeholder="Nom ou N° Compteur..." onkeyup="window.filterList()">
         </div>
-        <button class="btn-print" onclick="window.print()" title="Imprimer les factures sélectionnées">
-            <i class="fas fa-print"></i>
-            <span>Imprimer</span>
-        </button>
+        <select id="sortSelect" onchange="window.filterList()" class="tb-select" style="flex:none; width:auto;" title="Trier la liste">
+            <option value="none">Ordre naturel</option>
+            <option value="total-desc">Montant ↓</option>
+            <option value="total-asc">Montant ↑</option>
+            <option value="name-asc">Nom (A→Z)</option>
+            <option value="zone-asc">Zone (A→Z)</option>
+        </select>
+        <span class="result-count" id="resultCount">—</span>
     </div>
     <div class="toolbar-row toolbar-row-filters">
         <select id="monthFilter" onchange="window.changeMonth()" class="tb-select">
@@ -347,6 +500,20 @@
     </button>
 </div>
 
+<!-- ── Total à payer : mis en évidence avant la liste, recalculé à chaque
+     recherche/filtre pour ne jamais afficher un chiffre obsolète. ── -->
+<div class="summary-bar">
+    <div class="summary-total">
+        <div class="lbl">Total à recouvrer (liste affichée)</div>
+        <div class="val" id="summaryTotal">0 FCFA</div>
+    </div>
+    <div class="summary-chips">
+        <span class="summary-chip chip-ajour"><span class="n" id="countAjour">0</span> À jour</span>
+        <span class="summary-chip chip-arriere"><span class="n" id="countArriere">0</span> Arriéré</span>
+        <span class="summary-chip chip-impaye"><span class="n" id="countImpaye">0</span> Impayé</span>
+    </div>
+</div>
+
 <!-- ── Sélection globale : juste au-dessus de la liste qu'elle contrôle
      (avant : isolée dans la barre de filtres, sans lien visuel avec elle) ── -->
 <div class="select-bar">
@@ -358,11 +525,41 @@
 
 <!-- ── Liste des factures ── -->
 <div class="list-container" id="list-container">
-    <p style="text-align:center; padding:20px;">Analyse de l'historique et calcul des factures en cours...</p>
+    <div class="skeleton-card"><div><div class="skeleton-line sk-a"></div><div class="skeleton-line sk-b"></div></div><div class="skeleton-line sk-c"></div></div>
+    <div class="skeleton-card"><div><div class="skeleton-line sk-a"></div><div class="skeleton-line sk-b"></div></div><div class="skeleton-line sk-c"></div></div>
+    <div class="skeleton-card"><div><div class="skeleton-line sk-a"></div><div class="skeleton-line sk-b"></div></div><div class="skeleton-line sk-c"></div></div>
+    <div class="skeleton-card"><div><div class="skeleton-line sk-a"></div><div class="skeleton-line sk-b"></div></div><div class="skeleton-line sk-c"></div></div>
 </div>
 
-<!-- ── Zone d'impression (cachée à l'écran) ── -->
+<!-- ── Barre d'action fixe, liée à la sélection ── -->
+<div class="action-bar" id="actionBar">
+    <div class="ab-info">
+        <span id="abCount">0 facture</span> sélectionnée(s) · Total : <span class="ab-total" id="abTotal">0 FCFA</span>
+    </div>
+    <div class="ab-actions">
+        <button class="btn-preview" onclick="window.openPreview()" title="Aperçu avant impression">
+            <i class="fas fa-eye"></i> Aperçu
+        </button>
+        <button class="btn-print" onclick="window.confirmPrint()" title="Imprimer les factures sélectionnées">
+            <i class="fas fa-print"></i> Imprimer
+        </button>
+    </div>
+</div>
+
+<!-- ── Aperçu avant impression : réutilise #print-zone en overlay ── -->
+<div class="preview-toolbar">
+    <strong><i class="fas fa-eye"></i> Aperçu avant impression</strong>
+    <div class="ptb-actions">
+        <button class="btn-preview" onclick="window.closePreview()"><i class="fas fa-times"></i> Fermer</button>
+        <button class="btn-print" onclick="window.confirmPrint()"><i class="fas fa-print"></i> Imprimer maintenant</button>
+    </div>
+</div>
+
+<!-- ── Zone d'impression (cachée à l'écran, sauf en mode aperçu) ── -->
 <div id="print-zone"></div>
+
+<!-- ── Retour visuel (toast) ── -->
+<div id="toast"></div>
 
 <!-- ── Modal d'édition des arriérés ── -->
 <div class="edit-overlay" id="edit-overlay" onclick="window.closeEditIfOutside(event)">
@@ -459,6 +656,39 @@
     // ── Formateurs ──
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(Math.round(val)) + " FCFA";
 
+    // ── Skeleton loader (chargement/changement de mois) ──
+    const SKELETON_HTML = Array.from({ length: 4 }).map(() =>
+        `<div class="skeleton-card"><div><div class="skeleton-line sk-a"></div><div class="skeleton-line sk-b"></div></div><div class="skeleton-line sk-c"></div></div>`
+    ).join('');
+
+    // ── Retour visuel (toast) — même logique que statistiques/stats.js ──
+    function showToast(msg, isError = false) {
+        const toast = document.getElementById('toast');
+        if (!toast) return;
+        toast.innerText = msg;
+        toast.style.backgroundColor = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+        toast.style.color = isError ? '#fff' : '#04210f';
+        toast.classList.add('show');
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+    // ✅ Retour visuel après impression réelle (le navigateur ferme/valide la
+    // boîte de dialogue d'impression) — l'utilisateur sait que l'action a
+    // bien été envoyée, sans avoir à deviner.
+    window.addEventListener('afterprint', () => showToast('✅ Impression envoyée à l\'imprimante'));
+
+    // ── Statut sémantique d'une facture ──
+    // À jour   : rien à payer (total <= 0).
+    // Arriéré  : un solde antérieur impayé est reporté sur cette facture.
+    // Impayé   : seul le mois courant est dû, sans solde reporté.
+    // (Pas de "Partiellement payé" : aucun paiement partiel n'est suivi par
+    // facture dans cette appli — l'inventer afficherait une donnée fausse.)
+    window.billStatusChip = function(d) {
+        if (d.total <= 0)   return { cls: 'chip-ajour',   label: '✓ À jour' };
+        if (d.arrieres > 0) return { cls: 'chip-arriere', label: '⏱ Arriéré' };
+        return { cls: 'chip-impaye', label: '✕ Impayé' };
+    };
+
     // ✅ CORRECTION XSS : échapper toutes les valeurs dynamiques insérées dans innerHTML
     const esc = (str) => {
         if (str == null) return '—';
@@ -526,7 +756,7 @@
         // Réinitialise les overrides manuels lors d'un changement de mois
         manualOverrides = {};
         updateBanner();
-        document.getElementById('list-container').innerHTML = "<p style='text-align:center'>Calcul des arriérés en cours...</p>";
+        document.getElementById('list-container').innerHTML = SKELETON_HTML;
         if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
         const path = currentSelectedMonth === "actuel"
             ? P.compteurs
@@ -587,26 +817,37 @@
             div.setAttribute('data-id',       key);
             div.setAttribute('data-search',   `${(d.name || '').toLowerCase()} ${String(d.numero_compteur || '').trim().toLowerCase()}`);
             div.setAttribute('data-releveur', d.agent_id || '');
+            div.setAttribute('data-total',    d.total);
+            div.setAttribute('data-name',     (d.name || '').toLowerCase());
+            div.setAttribute('data-zone',     (d.zone || '').toLowerCase());
 
             const badgeHtml = isModified
                 ? `<div><span class="badge-modifie"><i class="fas fa-pencil-alt"></i> Arriérés modifiés</span></div>`
                 : '';
 
+            // ✅ Badge sémantique honnête — dérivé des seules données
+            // disponibles (voir note sur .status-chip : pas de "Partiellement
+            // payé", non supporté par le modèle de données actuel).
+            const chip = window.billStatusChip(d);
+
             const checkboxHtml = d.total > 0
-                ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.renderPrint()"
+                ? `<input type="checkbox" class="bill-cb" data-id="${key}" onchange="window.updateSelectionBar()"
                           style="width:20px;height:20px;accent-color:var(--accent-blue);cursor:pointer;">`
                 : `<span style="font-size:0.8rem;color:var(--text-gray);font-style:italic;">Rien à payer</span>`;
 
             div.innerHTML = `
                 <div class="item-info">
-                    <strong>${d.name || 'Inconnu'}</strong>
-                    <div class="sub">Cpt: ${d.numero_compteur || 'N/A'} | Zone: ${d.zone || 'N/A'}</div>
+                    <div class="name-row">
+                        <strong>${d.name || 'Inconnu'}</strong>
+                        <span class="status-chip ${chip.cls}">${chip.label}</span>
+                    </div>
+                    <div class="sub">Compteur n°${d.numero_compteur || 'N/A'} · Zone : ${d.zone || 'N/A'}</div>
                     ${badgeHtml}
                 </div>
                 <div class="item-right">
                     <div class="item-amounts">
                         <div class="amounts-detail" id="detail-${key}">
-                            Mois: ${fPrice(montantMois)} | Arr: <span id="arr-${key}">${fPrice(d.arrieres)}</span>
+                            Mois : ${fPrice(montantMois)} · Arr : <span id="arr-${key}">${fPrice(d.arrieres)}</span>
                         </div>
                         <div class="total-val ${d.total > 0 ? 'total-green' : 'total-gray'}" id="total-${key}">
                             ${fPrice(d.total)}
@@ -734,7 +975,7 @@
         // Met à jour la carte dans le DOM sans recharger toute la liste
         refreshCard(key);
         updateBanner();
-        window.renderPrint();
+        window.filterList();
         window.closeEditModal();
     };
 
@@ -751,7 +992,7 @@
 
         refreshCard(key);
         updateBanner();
-        window.renderPrint();
+        window.filterList();
         window.closeEditModal();
     };
 
@@ -766,7 +1007,7 @@
         });
         manualOverrides = {};
         updateBanner();
-        window.renderPrint();
+        window.filterList();
     };
 
     window.closeEditModal = function() {
@@ -786,6 +1027,7 @@
 
         const isModified = manualOverrides[key] !== undefined;
         div.classList.toggle('is-modified', isModified);
+        div.setAttribute('data-total', d.total);
 
         // Badge
         const info = div.querySelector('.item-info');
@@ -795,6 +1037,14 @@
             const bdiv = document.createElement('div');
             bdiv.innerHTML = `<span class="badge-modifie"><i class="fas fa-pencil-alt"></i> Arriérés modifiés</span>`;
             info.appendChild(bdiv);
+        }
+
+        // Pastille de statut (peut changer : un arriéré réglé repasse "À jour")
+        const chipEl = info.querySelector('.status-chip');
+        if (chipEl) {
+            const chip = window.billStatusChip(d);
+            chipEl.className = `status-chip ${chip.cls}`;
+            chipEl.textContent = chip.label;
         }
 
         // Montants
@@ -815,18 +1065,36 @@
             const newCb = document.createElement('input');
             newCb.type = 'checkbox'; newCb.className = 'bill-cb';
             newCb.setAttribute('data-id', key);
-            newCb.setAttribute('onchange', 'window.renderPrint()');
+            newCb.setAttribute('onchange', 'window.updateSelectionBar()');
             newCb.style.cssText = "width:20px;height:20px;accent-color:var(--accent-blue);cursor:pointer;";
             (actions || right).appendChild(newCb);
         }
     }
 
     // ══════════════════════════════════════════
-    // FILTRES
+    // TRI, FILTRES, TOTAL À PAYER
     // ══════════════════════════════════════════
+
+    // Réordonne les cartes dans le DOM selon le tri choisi (aucune donnée
+    // recalculée, juste un déplacement des noeuds déjà en place).
+    function applySort(listContainer) {
+        const sortBy = document.getElementById('sortSelect').value;
+        if (sortBy === 'none') return;
+        const items = Array.from(listContainer.querySelectorAll('.facture-item'));
+        const cmp = {
+            'total-desc': (a, b) => parseFloat(b.getAttribute('data-total')) - parseFloat(a.getAttribute('data-total')),
+            'total-asc':  (a, b) => parseFloat(a.getAttribute('data-total')) - parseFloat(b.getAttribute('data-total')),
+            'name-asc':   (a, b) => a.getAttribute('data-name').localeCompare(b.getAttribute('data-name')),
+            'zone-asc':   (a, b) => a.getAttribute('data-zone').localeCompare(b.getAttribute('data-zone')),
+        }[sortBy];
+        if (!cmp) return;
+        items.sort(cmp).forEach(el => listContainer.appendChild(el));
+    }
+
     window.filterList = function() {
         const searchEl = document.getElementById('searchInput');
         const relEl    = document.getElementById('releveurFilter');
+        const listContainer = document.getElementById('list-container');
         const q   = searchEl.value.toLowerCase();
         const sel = relEl.value;
         // ✅ v2 : feedback visuel qu'un filtre est appliqué (contour bleu),
@@ -834,12 +1102,37 @@
         // changé pour un agent précis.
         searchEl.classList.toggle('filter-active', q.trim() !== '');
         relEl.classList.toggle('filter-active', sel !== '');
-        document.querySelectorAll('.facture-item').forEach(it => {
+
+        applySort(listContainer);
+
+        // ✅ v6 : le "Total à recouvrer" et les compteurs À jour/Arriéré/Impayé
+        // reflètent toujours la liste FILTRÉE affichée à l'écran, jamais un
+        // total figé au chargement — sinon le chiffre devient trompeur dès
+        // qu'on cherche un nom ou un agent précis.
+        let visibleCount = 0, sumTotal = 0, nAjour = 0, nArriere = 0, nImpaye = 0;
+        listContainer.querySelectorAll('.facture-item').forEach(it => {
             const mText = it.getAttribute('data-search').includes(q);
             const mRel  = sel === "" || it.getAttribute('data-releveur') === sel;
-            it.style.display = (mText && mRel) ? 'flex' : 'none';
+            const show  = mText && mRel;
+            it.style.display = show ? 'flex' : 'none';
+            if (!show) return;
+            visibleCount++;
+            const d = dataCache[it.getAttribute('data-id')];
+            if (!d) return;
+            sumTotal += d.total;
+            const chip = window.billStatusChip(d);
+            if (chip.cls === 'chip-ajour') nAjour++;
+            else if (chip.cls === 'chip-arriere') nArriere++;
+            else nImpaye++;
         });
-        window.renderPrint();
+
+        document.getElementById('resultCount').textContent = `${visibleCount} résultat(s)`;
+        document.getElementById('summaryTotal').textContent = fPrice(sumTotal);
+        document.getElementById('countAjour').textContent   = nAjour;
+        document.getElementById('countArriere').textContent = nArriere;
+        document.getElementById('countImpaye').textContent  = nImpaye;
+
+        window.updateSelectionBar();
     };
 
     window.toggleAll = function(src) {
@@ -849,7 +1142,26 @@
                 if (cb) cb.checked = src.checked;
             }
         });
-        window.renderPrint();
+        window.updateSelectionBar();
+    };
+
+    // ══════════════════════════════════════════
+    // SÉLECTION → BARRE D'ACTION FIXE
+    // ══════════════════════════════════════════
+    // ✅ La sélection est persistante : elle compte TOUTES les cases cochées,
+    // y compris celles actuellement masquées par un filtre/une recherche —
+    // filtrer pour cocher plusieurs zones l'une après l'autre ne fait jamais
+    // perdre les cases déjà cochées ailleurs.
+    window.updateSelectionBar = function() {
+        const checked = Array.from(document.querySelectorAll('.bill-cb:checked'));
+        const count = checked.length;
+        const total = checked.reduce((sum, cb) => sum + (dataCache[cb.getAttribute('data-id')]?.total || 0), 0);
+
+        document.getElementById('abCount').textContent = count === 1 ? '1 facture' : `${count} factures`;
+        document.getElementById('abTotal').textContent = fPrice(total);
+
+        document.getElementById('actionBar').classList.toggle('visible', count > 0);
+        document.body.classList.toggle('has-selection', count > 0);
     };
 
     // ══════════════════════════════════════════
@@ -859,10 +1171,11 @@
         const printZone = document.getElementById('print-zone');
         let html = "";
 
+        // ✅ Sélection persistante : on imprime TOUT ce qui est coché, même
+        // les factures actuellement masquées par la recherche/le filtre
+        // agent — sinon changer de filtre après avoir coché ferait perdre
+        // silencieusement des factures de l'impression.
         document.querySelectorAll('.bill-cb:checked').forEach(box => {
-            const item = box.closest('.facture-item');
-            if (item.style.display === 'none') return;
-
             const d   = dataCache[box.getAttribute('data-id')];
             const isOnlyArrieres = (d.montantMois === 0 && d.arrieres > 0);
             const dates = formatSmartDates(d.date, currentSelectedMonth, isOnlyArrieres);
@@ -916,6 +1229,38 @@
         });
 
         printZone.innerHTML = html;
+    };
+
+    // ══════════════════════════════════════════
+    // APERÇU ET IMPRESSION — toujours liés à la sélection
+    // ══════════════════════════════════════════
+
+    // "Aperçu" : construit les pages depuis la sélection courante puis les
+    // affiche à l'écran (voir .preview-mode dans le <style>) — aucun contenu
+    // dupliqué, #print-zone sert à la fois à l'aperçu et à l'impression réelle.
+    window.openPreview = function() {
+        const n = document.querySelectorAll('.bill-cb:checked').length;
+        if (n === 0) { showToast('Sélectionnez au moins une facture à prévisualiser.', true); return; }
+        window.renderPrint();
+        document.body.classList.add('preview-mode');
+    };
+
+    window.closePreview = function() {
+        document.body.classList.remove('preview-mode');
+    };
+
+    // "Imprimer" : confirmation explicite du nombre de factures avant
+    // d'ouvrir la boîte de dialogue d'impression du navigateur — on ne veut
+    // jamais qu'un clic déclenche une impression dont l'ampleur surprend.
+    window.confirmPrint = function() {
+        const checked = Array.from(document.querySelectorAll('.bill-cb:checked'));
+        const n = checked.length;
+        if (n === 0) { showToast('Sélectionnez au moins une facture à imprimer.', true); return; }
+        const total = checked.reduce((sum, cb) => sum + (dataCache[cb.getAttribute('data-id')]?.total || 0), 0);
+        const label = n === 1 ? '1 facture' : `${n} factures`;
+        if (!confirm(`Imprimer ${label} ? Total : ${fPrice(total)}`)) return;
+        window.renderPrint();
+        window.print();
     };
 
     // ══════════════════════════════════════════
