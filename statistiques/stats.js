@@ -775,13 +775,13 @@ function renderList() {
             div.innerHTML = `
                 <div class="citem-main">
                     <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
-                    <span class="anomaly-badge">⚠ Compteur en erreur</span>
+                    <span class="status-pill status-pill-anomaly">⚠ Compteur en erreur</span>
                 </div>
                 <div class="citem-sub">
                     <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
                 </div>
-                <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx}</b> → Nouvel index : <b>${nIdx}</b></div>
+                <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx} m³</b> → Nouvel index : <b>${nIdx} m³</b></div>
                 <div style="font-size:0.78rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
                 ${fixOrLock ? `<div class="citem-actions">${fixOrLock}</div>` : ''}
             `;
@@ -816,6 +816,8 @@ function renderList() {
 
         // ✅ v3 : icône + texte (« Modifier ») au lieu d'une icône seule — plus
         // explicite pour un utilisateur novice.
+        // ✅ Action secondaire de la carte (voir statusBtn ci-dessous pour
+        // l'action principale) — même hiérarchie que sur la carte "à relever".
         const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
             : '';
@@ -845,16 +847,16 @@ function renderList() {
             </div>
             <div class="citem-sub">
                 <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                <span><i class="fa-solid fa-gauge"></i>Cpt ${esc(item.numero_compteur || 'N/A')}</span>
+                <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
                 <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
             </div>
-            <span class="status-badge ${isPaid ? 'status-paid' : 'status-unpaid'}">${isPaid ? '✓ PAYÉ' : '✕ IMPAYÉ'}</span>
+            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
             ${arriereHtml}
             ${auditHtml}
             ${anomalyHtml}
             <div class="citem-actions">
-                ${editBtn}
                 ${statusBtn}
+                ${editBtn}
             </div>
         `;
         listDiv.appendChild(div);

@@ -198,8 +198,9 @@ body {
 .citem-agent i { opacity: .8; width: 14px; text-align: center; }
 
 /* Badge de statut en pastille (plus visible qu'un simple texte coloré) —
-   utilisé pour "À relever" : ambre, volontairement distinct de l'orange
-   de .anomaly-badge pour ne pas confondre "à faire" et "erreur à corriger". */
+   même composant partagé par les 4 états de la liste (payé/impayé/erreur/à
+   relever), chacun avec son propre ton pour rester reconnaissable au coup
+   d'œil sans dépendre uniquement du fond de la carte. */
 .status-pill {
     display: inline-flex; align-items: center; gap: 5px;
     font-size: 0.72rem; font-weight: 800; letter-spacing: .02em;
@@ -207,6 +208,18 @@ body {
 }
 .status-pill-warn { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
 [data-theme="dark"] .status-pill-warn { background: rgba(217, 119, 6, 0.15); color: #fbbf24; border-color: rgba(217, 119, 6, 0.35); }
+
+.status-pill-paid { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+[data-theme="dark"] .status-pill-paid { background: rgba(34, 197, 94, 0.15); color: #4ade80; border-color: rgba(34, 197, 94, 0.35); }
+
+.status-pill-unpaid { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+[data-theme="dark"] .status-pill-unpaid { background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.35); }
+
+/* Anomalie (erreur d'index) : même famille orangée que .bg-anomalie, mais
+   volontairement distincte de l'ambre "À relever" — l'une est une routine,
+   l'autre une donnée à corriger. */
+.status-pill-anomaly { background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; }
+[data-theme="dark"] .status-pill-anomaly { background: rgba(249, 115, 22, 0.15); color: #fb923c; border-color: rgba(249, 115, 22, 0.35); }
 
 .bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
 .bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
@@ -223,19 +236,7 @@ body {
 .bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
 [data-theme="dark"] .bg-alerte-fuite { background-color: rgba(239, 68, 68, 0.15) !important; border-color: rgba(239, 68, 68, 0.4) !important; }
 
-/* Badge de statut — texte gras, sans pastille (la carte est déjà colorée) */
-.status-badge { display: inline-block; font-size: 0.74rem; font-weight: 800; letter-spacing: .02em; margin-top: 6px; }
-.status-paid    { color: var(--success); }
-.status-unpaid  { color: var(--danger); }
-.status-pending { color: var(--text-sub); }
-
-/* Badge / notice d'anomalie (erreur d'index, fuite) — prioritaire sur le statut financier */
-.anomaly-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 0.74rem; font-weight: 800; color: #c2410c;
-    margin-top: 4px;
-}
-[data-theme="dark"] .anomaly-badge { color: #fb923c; }
+/* Notice de fuite (consommation > 100 m³) — prioritaire sur le statut financier */
 .leak-alert { margin-top: 8px; font-size: 0.75rem; font-weight: 700; color: var(--danger); display: flex; align-items: center; gap: 5px; }
 
 /* Archive : action verrouillée (remplace le bouton Payé/Révoquer) */
