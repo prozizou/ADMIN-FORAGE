@@ -721,6 +721,18 @@ function renderList() {
             const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
                 ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
+            // ✅ Appel de l'agent en charge : numéro figé sur le relevé en
+            // priorité (agent_tel, écrit à la création du compteur), sinon
+            // repli sur la fiche agent actuelle (storeAgents) — même logique
+            // de repli que zoneOf() ci-dessus. Non destructif : affiché même
+            // en archive et pour tout utilisateur, dès qu'un numéro existe.
+            const agentInfo = storeAgents[item.agent_id] || {};
+            const agentTelRaw = String(item.agent_tel || agentInfo.agent_tel || '').trim();
+            const agentTel = agentTelRaw.replace(/[^0-9+]/g, '');
+            const agentName = String(item.agent_name || agentInfo.agent || '').trim() || 'l\'agent';
+            const callBtn = agentTel
+                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName)} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler ${esc(agentName)}</a>`
+                : '';
             div.className = 'item bg-non-releve';
             div.innerHTML = `
                 <div class="citem-main">
@@ -733,7 +745,7 @@ function renderList() {
                     <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx}</span>
                 </div>
                 ${arriereNote}
-                ${editOrLock ? `<div class="citem-actions">${editOrLock}</div>` : ''}
+                ${(callBtn || editOrLock) ? `<div class="citem-actions">${callBtn}${editOrLock}</div>` : ''}
             `;
             listDiv.appendChild(div);
             return;
