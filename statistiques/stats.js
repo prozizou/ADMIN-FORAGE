@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -66,20 +66,6 @@ async function loadForageBranding() {
 const escHtml = window.escHtml || (s => String(s == null ? '' : s)
     .replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])));
 
-// ✅ CORRECTION : Restaurer le thème enregistré dès le chargement
-(function restoreTheme() {
-    try {
-        const saved = localStorage.getItem('asufor-theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', saved);
-        const icon = document.getElementById('theme-icon');
-        if (icon) {
-            if (saved === 'light') {
-                icon.classList.replace('fa-moon', 'fa-sun');
-            }
-        }
-    } catch(_) {}
-})();
-
 const sessionRaw = localStorage.getItem('asufor_session');
 
 if (sessionRaw) {
@@ -93,27 +79,7 @@ if (sessionRaw) {
     }
 }
 
-// --- FONCTIONS UTILITAIRES & THEME ---
-window.toggleTheme = function() {
-    // ✅ CORRECTION : utiliser data-theme sur html (cohérent avec le reste de l'app)
-    const html = document.documentElement;
-    const current = html.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
-    html.setAttribute('data-theme', next);
-    try { localStorage.setItem('asufor-theme', next); } catch(_) {}
-    const icon = document.getElementById('theme-icon');
-    if (icon) {
-        if (next === 'light') {
-            icon.classList.replace('fa-moon', 'fa-sun');
-        } else {
-            icon.classList.replace('fa-sun', 'fa-moon');
-        }
-    }
-    // ✅ v4 : plus rien à recalculer ici — "Top 3 quartiers" et la carte
-    // Bilan sont du HTML/CSS classique, réactifs au thème via les variables
-    // CSS (l'ancien Chart.js redessinait ses propres couleurs de texte).
-};
-
+// --- FONCTIONS UTILITAIRES ---
 function showToast(msg, isError = false) {
     const toast = document.getElementById("toast");
     toast.innerText = msg;
@@ -285,11 +251,17 @@ function monthLabelFR(cycle) {
 }
 
 // --- INITIALISATION DU MENU DÉROULANT DES MOIS ---
-window.initMonthFilter = async function() {
+window.initMonthFilter = function() {
     const monthSelect = document.getElementById('month-filter');
+    monthSelect.innerHTML = '<option value="actuel">Données actuelles</option>';
+    monthSelect.value = "actuel";
 
-    try {
-        const snapshot = await get(ref(db, P.backup));
+    // ✅ Chargement INSTANTANÉ : la liste des relevés (le plus important à
+    // l'écran) se charge tout de suite, SANS attendre la liste des archives
+    // ci-dessous — les deux se font en parallèle plutôt qu'en série.
+    loadDataForMonth("actuel");
+
+    get(ref(db, P.backup)).then((snapshot) => {
         let optionsHtml = '<option value="actuel">Données actuelles</option>';
 
         if (snapshot.exists()) {
@@ -302,15 +274,12 @@ window.initMonthFilter = async function() {
             });
         }
 
+        const activeValue = monthSelect.value;
         monthSelect.innerHTML = optionsHtml;
-        monthSelect.value = "actuel";
-        loadDataForMonth("actuel");
-
-    } catch (error) {
+        monthSelect.value = activeValue;
+    }).catch((error) => {
         console.error("Erreur lors du chargement des périodes:", error);
-        monthSelect.innerHTML = '<option value="actuel">Données actuelles</option>';
-        loadDataForMonth("actuel");
-    }
+    });
 }
 
 // --- CHARGEMENT DES DONNÉES ---
@@ -319,9 +288,11 @@ window.changeMonth = function() {
     loadDataForMonth(selectedValue);
 };
 
-function loadDataForMonth(selection) {
-    document.getElementById('skeleton-loader').style.display = "flex";
-    document.getElementById('releves-list').innerHTML = "";
+function cacheKeyFor(dbPath) {
+    return 'releves:' + dbPath;
+}
+
+async function loadDataForMonth(selection) {
     storeReleves = {};
 
     if (unsubCurrentMonth) {
@@ -352,17 +323,67 @@ function loadDataForMonth(selection) {
     const recapTitle = document.getElementById('recap-title');
     if (recapTitle) recapTitle.textContent = isArchiveView ? `Bilan — ${monthLabelFR(selection)}` : 'Bilan du mois';
 
-    unsubCurrentMonth = onValue(ref(db, dbPath), (snap) => {
+    // ✅ Chargement INSTANTANÉ : si une copie locale existe déjà (session
+    // précédente ou dernier chargement), on l'affiche immédiatement, sans
+    // attendre le réseau — le skeleton/l'overlay bloquant ne s'affichent que
+    // si on n'a vraiment rien à montrer tout de suite.
+    const cacheKey = cacheKeyFor(dbPath);
+    const cached = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
+    if (cached && typeof cached === 'object') {
+        storeReleves = cached;
+        document.getElementById('skeleton-loader').style.display = "none";
+        document.getElementById('releves-list').innerHTML = "";
+        if (window.AsuforLoader) AsuforLoader.hide();
+        fetchPreviousMonthStats(monthForTrend);
+    } else {
+        document.getElementById('skeleton-loader').style.display = "flex";
+        document.getElementById('releves-list').innerHTML = "";
+    }
+
+    const dataRef = ref(db, dbPath);
+    const thisPath = dbPath; // capture : ignorer une réponse tardive si le mois a changé entre-temps
+
+    try {
+        const snap = await get(dataRef);
+        if (currentActivePath !== thisPath) return; // l'utilisateur a changé de mois pendant le chargement
         storeReleves = snap.val() || {};
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         document.getElementById('skeleton-loader').style.display = "none";
         if (window.AsuforLoader) AsuforLoader.hide();
         fetchPreviousMonthStats(monthForTrend);
-    }, (err) => {
+    } catch (err) {
         console.error('Firebase relevés :', err.code, err.message);
-        if (window.AsuforLoader) {
+        if (cached) {
+            // ✅ Une copie locale est déjà affichée : on prévient sans bloquer l'écran.
+            showToast('⚠️ Connexion indisponible : données locales affichées (peut-être non à jour).', true);
+        } else if (window.AsuforLoader) {
             AsuforLoader.fail('Impossible de charger les relevés (' + err.code + '). Session peut-être expirée.');
         }
+        return;
+    }
+
+    // ✅ Rafraîchissement CIBLÉ : au lieu d'un unique listener sur tout le
+    // nœud (qui renvoyait l'arbre COMPLET au moindre changement, même pour la
+    // modification d'un seul compteur), on écoute désormais les événements
+    // par élément — l'ajout, la modification ou la suppression d'UN compteur
+    // ne transmet et ne retraite plus que CET élément, pas toute la liste.
+    const unsubAdd = onChildAdded(dataRef, (snap) => {
+        if (Object.prototype.hasOwnProperty.call(storeReleves, snap.key)) return; // déjà connu (chargement initial)
+        storeReleves[snap.key] = snap.val();
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
+        window.applyFilter();
     });
+    const unsubChange = onChildChanged(dataRef, (snap) => {
+        storeReleves[snap.key] = snap.val();
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
+        window.applyFilter();
+    });
+    const unsubRemove = onChildRemoved(dataRef, (snap) => {
+        delete storeReleves[snap.key];
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
+        window.applyFilter();
+    });
+    unsubCurrentMonth = () => { unsubAdd(); unsubChange(); unsubRemove(); };
 }
 
 function fetchPreviousMonthStats(baseMonthStr) {
@@ -388,23 +409,64 @@ function fetchPreviousMonthStats(baseMonthStr) {
 }
 
 // --- SYNCHRONISATION INITIALE ---
-window.startSync = function() {
-    onValue(ref(db, P.agents), (snap) => {
-        storeAgents = snap.val() || {};
-        const spinner = document.getElementById('agent-spinner');
-        const active = spinner.value || "all";
-        let html = '<option value="all">🟢 Tous les agents (Global)</option>';
-        // ✅ FIX XSS : échapper nom/zone d'agent injectés dans les <option>
-        const esc2 = escHtml;
-        Object.entries(storeAgents).forEach(([key, a]) => {
-            let name = (a.agent || "Inconnu").trim();
-            let zone = a.zone ? ` [${esc2(a.zone)}]` : "";
-            html += `<option value="${esc2(key)}">👤 ${esc2(name.toUpperCase())}${zone}</option>`;
-        });
-        spinner.innerHTML = html;
-        spinner.value = active;
+function renderAgentSpinner() {
+    const spinner = document.getElementById('agent-spinner');
+    const active = spinner.value || "all";
+    let html = '<option value="all">🟢 Tous les agents (Global)</option>';
+    // ✅ FIX XSS : échapper nom/zone d'agent injectés dans les <option>
+    const esc2 = escHtml;
+    Object.entries(storeAgents).forEach(([key, a]) => {
+        let name = (a.agent || "Inconnu").trim();
+        let zone = a.zone ? ` [${esc2(a.zone)}]` : "";
+        html += `<option value="${esc2(key)}">👤 ${esc2(name.toUpperCase())}${zone}</option>`;
     });
+    spinner.innerHTML = html;
+    spinner.value = active;
+}
 
+async function syncAgents() {
+    const cacheKey = 'agents:' + P.agents;
+    const cachedAgents = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
+    if (cachedAgents && typeof cachedAgents === 'object') {
+        storeAgents = cachedAgents;
+        renderAgentSpinner();
+    }
+
+    const agentsRef = ref(db, P.agents);
+    try {
+        const snap = await get(agentsRef);
+        storeAgents = snap.val() || {};
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+        renderAgentSpinner();
+    } catch (err) {
+        console.error('Firebase agents :', err.code, err.message);
+    }
+
+    // ✅ Rafraîchissement ciblé : un agent ajouté/modifié/supprimé ne renvoie
+    // et ne retraite plus que CET agent, pas la liste complète.
+    onChildAdded(agentsRef, (snap) => {
+        if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
+        storeAgents[snap.key] = snap.val();
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+        renderAgentSpinner();
+    });
+    onChildChanged(agentsRef, (snap) => {
+        storeAgents[snap.key] = snap.val();
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+        renderAgentSpinner();
+    });
+    onChildRemoved(agentsRef, (snap) => {
+        delete storeAgents[snap.key];
+        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+        renderAgentSpinner();
+    });
+}
+
+window.startSync = function() {
+    // ✅ Les agents et les relevés se chargent en PARALLÈLE (l'un n'attend
+    // pas l'autre) : chacun affiche sa propre copie en cache instantanément
+    // pendant que sa version fraîche arrive en tâche de fond.
+    syncAgents();
     window.initMonthFilter();
 }
 
@@ -708,6 +770,14 @@ function renderList() {
         const zoneName = esc(zoneOf(item));
         const div = document.createElement('div');
 
+        // ✅ Anomalie minimale au niveau du compteur : la seule information
+        // utile est la raison (texte libre saisi par l'agent) pour laquelle
+        // ce compteur n'a pas pu être relevé — pas de page dédiée, pas de
+        // photo, pas d'actions de résolution, juste la raison en une ligne.
+        const noteHtml = item.note
+            ? `<div class="citem-note" title="${esc(item.note)}"><i class="fa-solid fa-circle-info"></i> ${esc(item.note)}</div>`
+            : '';
+
         // 1) Compteur pas encore relevé ce mois : ni erreur, ni statut
         // financier à afficher — une simple action à venir, pas un problème.
         if (isNotRead) {
@@ -754,6 +824,7 @@ function renderList() {
                     <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx} m³</span>
                 </div>
                 ${arriereNote}
+                ${noteHtml}
                 ${agentLine}
                 ${(callBtn || editOrLock) ? `<div class="citem-actions">${editOrLock}${callBtn}</div>` : ''}
             `;
@@ -783,6 +854,7 @@ function renderList() {
                 </div>
                 <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx} m³</b> → Nouvel index : <b>${nIdx} m³</b></div>
                 <div style="font-size:0.78rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
+                ${noteHtml}
                 ${fixOrLock ? `<div class="citem-actions">${fixOrLock}</div>` : ''}
             `;
             listDiv.appendChild(div);
@@ -854,6 +926,7 @@ function renderList() {
             ${arriereHtml}
             ${auditHtml}
             ${anomalyHtml}
+            ${noteHtml}
             <div class="citem-actions">
                 ${statusBtn}
                 ${editBtn}

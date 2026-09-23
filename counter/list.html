@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ASUFOR">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
@@ -20,6 +20,8 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <!-- ✅ Cache local des données (affichage instantané + restauration entre sessions) -->
+    <script src="../data-cache.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
@@ -31,38 +33,35 @@
     <style>
         :root {
             --primary:    #2563eb;
-            --bg-dark:    #0f172a;
-            --glass:      rgba(255, 255, 255, 0.05);
-            --border:     rgba(255, 255, 255, 0.1);
-            --text-muted: #94a3b8;
-            --error:      #ef4444;
-            --success:    #22c55e;
+            --bg-dark:    #f0f2f5;
+            --glass:      #ffffff;
+            --border:     rgba(15, 23, 42, 0.1);
+            --text-muted: #64748b;
+            --error:      #dc2626;
+            --success:    #16a34a;
         }
 
         body {
             background-color: var(--bg-dark);
-            background-image: radial-gradient(circle at top right, #1e293b, #0f172a);
             min-height: 100vh;
             margin: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
-            color: white;
+            color: #1e293b;
             padding: 20px;
             box-sizing: border-box;
         }
 
         .card {
             background: var(--glass);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 40px;
             width: 100%;
             max-width: 420px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.1);
         }
 
         h2 {
@@ -80,7 +79,7 @@
             padding: 14px 16px;
             margin-bottom: 20px;
             transition: all 0.2s ease;
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(15, 23, 42, 0.03);
         }
 
         .input-layout:focus-within {
@@ -94,7 +93,7 @@
             position: absolute;
             top: -9px;
             left: 12px;
-            background: var(--bg-dark, #151f32);
+            background: var(--glass);
             padding: 0 6px;
             font-size: 11px;
             text-transform: uppercase;
@@ -107,12 +106,12 @@
             width: 100%;
             background: transparent;
             border: none;
-            color: #f8fafc;
+            color: #1e293b;
             font-size: 15px;
             outline: none;
         }
 
-        option { background: #1e293b; color: white; }
+        option { background: #ffffff; color: #1e293b; }
 
         #btnSubmit {
             width: 100%;
@@ -133,12 +132,12 @@
         }
 
         #btnSubmit:hover:not(:disabled) { opacity: 0.9; }
-        #btnSubmit:disabled { background: #334155; cursor: not-allowed; }
+        #btnSubmit:disabled { background: #94a3b8; cursor: not-allowed; }
 
         .spinner {
             width: 18px;
             height: 18px;
-            border: 2px solid rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.35);
             border-top: 2px solid white;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -161,11 +160,11 @@
             display: block;
             text-align: center;
             margin-top: 20px;
-            color: rgba(255,255,255,0.4);
+            color: rgba(30, 41, 59, 0.5);
             text-decoration: none;
             font-size: 0.8rem;
         }
-        .footer-link:hover { color: #38bdf8; }
+        .footer-link:hover { color: #0284c7; }
 
         @media (max-width: 380px) {
             .card { padding: 25px 15px; }
@@ -211,7 +210,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onValue, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, push, onChildAdded, onChildChanged, onChildRemoved, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification d'accès
@@ -265,39 +264,86 @@
     //    « Chargement des agents… » sans aucune erreur visible.
     if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
-    function loadAgents() {
-        if (window.AsuforLoader) AsuforLoader.update('Chargement des agents…');
-        onValue(ref(db, P.agents), (snapshot) => {
-            const select = document.getElementById('agentSelect');
-            select.innerHTML = '<option value="">Choisir un agent</option>';
-            if (!snapshot.exists()) {
-                select.innerHTML = '<option value="">Aucun agent trouvé</option>';
-                if (window.AsuforLoader) AsuforLoader.hide();
-                return;
-            }
-            snapshot.forEach((child) => {
-                const d = child.val();
-                const opt = document.createElement('option');
-                // ✅ CORRECTION : Utiliser child.key comme id (cohérent avec le reste de l'app)
-                opt.value = JSON.stringify({
-                    id:    child.key,
-                    name:  d.agent || 'Agent',
-                    tel:   d.agent_tel || '',
-                    siege: d.siege || forageSiege,
-                    zone:  d.zone || ''
-                });
-                opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
-                select.appendChild(opt);
+    let storeAgents = {};
+    const agentsCacheKey = 'agents:' + P.agents;
+
+    function renderAgentOptions() {
+        const select = document.getElementById('agentSelect');
+        const activeValue = select.value;
+        const keys = Object.keys(storeAgents);
+        select.innerHTML = '';
+        if (keys.length === 0) {
+            select.innerHTML = '<option value="">Aucun agent trouvé</option>';
+            return;
+        }
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Choisir un agent';
+        select.appendChild(placeholder);
+        keys.forEach((key) => {
+            const d = storeAgents[key] || {};
+            const opt = document.createElement('option');
+            // ✅ CORRECTION : Utiliser la clé Firebase comme id (cohérent avec le reste de l'app)
+            opt.value = JSON.stringify({
+                id:    key,
+                name:  d.agent || 'Agent',
+                tel:   d.agent_tel || '',
+                siege: d.siege || forageSiege,
+                zone:  d.zone || ''
             });
+            opt.textContent = (d.agent || 'Agent').toUpperCase() + (d.zone ? ' – ' + d.zone : '');
+            select.appendChild(opt);
+        });
+        if (activeValue) select.value = activeValue;
+    }
+
+    // ✅ Chargement INSTANTANÉ : une copie locale (session précédente ou
+    // dernier chargement) s'affiche tout de suite, sans attendre le réseau.
+    // ✅ Rafraîchissement CIBLÉ : une fois la liste chargée, un agent
+    // ajouté/modifié/supprimé ne renvoie et ne retraite plus que CET agent
+    // (au lieu de renvoyer toute la liste au moindre changement).
+    async function loadAgents() {
+        const cached = window.AsuforCache ? window.AsuforCache.read(agentsCacheKey) : null;
+        if (cached && typeof cached === 'object') {
+            storeAgents = cached;
+            renderAgentOptions();
             if (window.AsuforLoader) AsuforLoader.hide();
-        }, (err) => {
-            // ✅ Callback d'erreur (absent avant) : rend visible tout échec de lecture.
+        } else {
+            if (window.AsuforLoader) AsuforLoader.update('Chargement des agents…');
+        }
+
+        const agentsRef = ref(db, P.agents);
+        try {
+            const snap = await get(agentsRef);
+            storeAgents = snap.val() || {};
+            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+            renderAgentOptions();
+            if (window.AsuforLoader) AsuforLoader.hide();
+        } catch (err) {
             console.error('Firebase db_agents :', err.code, err.message);
-            if (window.AsuforLoader) {
+            if (!cached && window.AsuforLoader) {
                 AsuforLoader.fail('Impossible de charger les agents (' + err.code + '). Session peut-être expirée.', {
                     retry: loadAgents
                 });
             }
+            return;
+        }
+
+        onChildAdded(agentsRef, (snap) => {
+            if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
+            storeAgents[snap.key] = snap.val();
+            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+            renderAgentOptions();
+        });
+        onChildChanged(agentsRef, (snap) => {
+            storeAgents[snap.key] = snap.val();
+            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+            renderAgentOptions();
+        });
+        onChildRemoved(agentsRef, (snap) => {
+            delete storeAgents[snap.key];
+            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+            renderAgentOptions();
         });
     }
 

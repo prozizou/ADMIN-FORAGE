@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ASUFOR">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
@@ -31,20 +31,19 @@
     <script src="../crypto.js"></script>
 
     <style>
-        /* ── v2 : parcours guidé plutôt que formulaire d'administration ──
-           Fond sombre uniforme → titre blanc → explication courte → champs
-           bien contrastés → bouton bleu principal. Moins de transparence/
-           glow que la v1 (le bleu reste la seule couleur d'action). */
+        /* ── Parcours guidé plutôt que formulaire d'administration ──
+           Fond clair uniforme → titre sombre → explication courte → champs
+           bien contrastés → bouton bleu principal (seule couleur d'action). */
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #161f30;
-            --border-color: rgba(255, 255, 255, 0.08);
-            --field-bg: rgba(255, 255, 255, 0.06);
-            --accent-blue: #38bdf8;
-            --text-white: #f8fafc;
-            --text-muted: rgba(248, 250, 252, 0.6);
-            --error: #f87171;
-            --success: #4ade80;
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --border-color: rgba(15, 23, 42, 0.09);
+            --field-bg: rgba(15, 23, 42, 0.04);
+            --accent-blue: #0284c7;
+            --text-white: #1e293b;
+            --text-muted: rgba(30, 41, 59, 0.6);
+            --error: #dc2626;
+            --success: #16a34a;
         }
 
         * { box-sizing: border-box; }
@@ -70,7 +69,7 @@
             border: 1px solid var(--border-color);
             border-radius: 20px;
             padding: 26px 22px 24px;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
         }
 
         h1 {
@@ -92,7 +91,7 @@
             margin-bottom: 7px;
             font-size: 0.82rem;
             font-weight: 600;
-            color: rgba(248, 250, 252, 0.85);
+            color: rgba(30, 41, 59, 0.85);
         }
         .req { color: var(--accent-blue); }
 
@@ -102,19 +101,17 @@
             border-radius: 12px;
             background: var(--field-bg);
             border: 1px solid var(--border-color);
-            color: white;
+            color: var(--text-white);
             font-size: 1rem;
             outline: none;
             transition: border-color 0.2s, background 0.2s;
             box-sizing: border-box;
         }
-        /* ✅ v2 : placeholders plus contrastés (avant : gris trop clair,
-           difficile à lire sur fond sombre) */
-        input::placeholder { color: rgba(248, 250, 252, 0.4); }
+        input::placeholder { color: rgba(30, 41, 59, 0.4); }
 
         input:focus {
             border-color: var(--accent-blue);
-            background: rgba(255, 255, 255, 0.09);
+            background: rgba(15, 23, 42, 0.02);
         }
 
         input.error { border-color: var(--error); }
@@ -150,7 +147,7 @@
             color: var(--text-muted); cursor: pointer;
             display: flex; align-items: center; justify-content: center;
         }
-        .eye-btn:hover { color: var(--accent-blue); background: rgba(255,255,255,0.05); }
+        .eye-btn:hover { color: var(--accent-blue); background: rgba(15, 23, 42, 0.05); }
         .eye-btn svg { width: 19px; height: 19px; }
 
         /* ✅ v2 : explication courte avant de valider — ce qui va se passer */
@@ -172,7 +169,7 @@
             background: var(--accent-blue);
             border: none;
             border-radius: 12px;
-            color: #06202e;
+            color: #ffffff;
             font-weight: 700;
             font-size: 1rem;
             cursor: pointer;
@@ -189,8 +186,8 @@
         /* État "chargement" du bouton — visible, pas juste un texte changé */
         .spinner {
             width: 16px; height: 16px;
-            border: 2px solid rgba(6, 32, 46, 0.35);
-            border-top-color: #06202e;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-top-color: #ffffff;
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
         }
@@ -200,7 +197,7 @@
             display: block;
             text-align: center;
             margin-top: 20px;
-            color: rgba(248, 250, 252, 0.72);
+            color: rgba(30, 41, 59, 0.72);
             text-decoration: none;
             font-size: 0.85rem;
             font-weight: 600;
