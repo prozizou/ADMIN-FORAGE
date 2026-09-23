@@ -1,8 +1,8 @@
 {
-  "id": "/asufor-diandioly",
-  "name": "ASUFOR — Gestion de l'Eau",
-  "short_name": "ASUFOR",
-  "description": "Application de gérance rurale de l'eau ASUFOR : relevés de compteurs, facturation, arriérés, statistiques et impression.",
+  "id": "/satigue-eau",
+  "name": "Satigué Eau — Gestion de l'Eau",
+  "short_name": "S.E",
+  "description": "Application de gérance rurale de l'eau Satigué Eau : relevés de compteurs, facturation, arriérés, statistiques et impression.",
   "start_url": "index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
@@ -58,7 +58,7 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Accueil ASUFOR"
+      "label": "Accueil Satigué Eau"
     }
   ],
   "shortcuts": [

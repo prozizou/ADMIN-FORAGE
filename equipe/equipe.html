@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
@@ -15,7 +15,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon équipe – ASUFOR</title>
+    <title>Mon équipe – Satigué Eau</title>
 
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
@@ -56,6 +56,10 @@
             margin-bottom: 20px;
         }
         .top-nav a { color: var(--accent-blue); text-decoration: none; font-size: 0.85rem; }
+
+        .page-brand { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 18px; }
+        .page-brand img { width: 32px; height: 32px; }
+        .page-brand span { font-weight: 700; font-size: 0.95rem; }
 
         .glass-card {
             background: var(--glass-bg);
@@ -157,6 +161,11 @@
     <div class="top-nav">
         <a href="../home/accueil.html">← Accueil</a>
         <a href="#" id="btn-logout">Déconnexion</a>
+    </div>
+
+    <div class="page-brand">
+        <img src="../icons/logo.png" alt="">
+        <span>Satigué Eau</span>
     </div>
 
     <div class="glass-card">

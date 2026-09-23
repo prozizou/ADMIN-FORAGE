@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
@@ -15,7 +15,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ajouter un Agent – ASUFOR</title>
+    <title>Ajouter un Agent – Satigué Eau</title>
 
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
@@ -70,6 +70,13 @@
             border-radius: 20px;
             padding: 26px 22px 24px;
             box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        }
+
+        .brand-logo {
+            display: block;
+            width: 48px;
+            height: 48px;
+            margin: 0 0 10px;
         }
 
         h1 {
@@ -227,6 +234,7 @@
 <body>
 
     <div class="card">
+        <img class="brand-logo" src="../icons/logo.png" alt="Satigué Eau">
         <h1>Ajouter un agent</h1>
         <p class="subtitle">Créez l'accès d'un nouvel agent.</p>
 
@@ -418,11 +426,11 @@
                 // ✅ Siège dérivé du forage réel de l'utilisateur (Asufor/{forageKey}/config.siege),
                 // jamais "DIANDIOLY" en dur — sinon un agent créé pour un AUTRE village se
                 // retrouve avec le siège de Diandioly.
-                let siege = 'ASUFOR';
+                let siege = 'SATIGUE EAU';
                 try {
                     const cfgSnap = await get(ref(db, P.config));
                     const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
-                    siege = (cfg.siege || cfg.nom || 'ASUFOR').toUpperCase();
+                    siege = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
                 } catch (_) { /* garde le repli générique */ }
 
                 const agentsRef   = ref(db, P.agents);

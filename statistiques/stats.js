@@ -47,7 +47,7 @@ let currentUser = 'Trésorier/Admin';
 // ✅ Branding par forage : nom affiché (en-tête, titre, PDF impayés) résolu
 // depuis Asufor/{forageKey}/config.nom, jamais "Diandioly" en dur — chaque
 // village doit voir son propre nom.
-let forageBranding = 'ASUFOR';
+let forageBranding = 'Satigué Eau';
 async function loadForageBranding() {
     try {
         const snap = await get(ref(db, P.config));
@@ -235,7 +235,7 @@ window.exportCSV = function() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `ASUFOR_Export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `SatigueEau_Export_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     showToast("✅ Fichier Excel téléchargé !");
 };
@@ -1156,7 +1156,7 @@ window.exportPDFImpayes = function() {
     });
 
     const dateStr = new Date().toISOString().split('T')[0];
-    doc.save(`ASUFOR_Impayes_${dateStr}.pdf`);
+    doc.save(`SatigueEau_Impayes_${dateStr}.pdf`);
     showToast("✅ Fichier PDF des impayés généré avec succès !");
 };
 
