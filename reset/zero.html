@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ASUFOR">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
@@ -30,15 +30,15 @@
 
     <style>
         :root {
-            --bg:       #0f172a;
-            --card:     rgba(30, 41, 59, 0.9);
+            --bg:       #f0f2f5;
+            --card:     #ffffff;
             --primary:  #3b82f6;
             --success:  #10b981;
-            --danger:   #ef4444;
-            --warning:  #f59e0b;
-            --text:     #f8fafc;
-            --text-dim: #94a3b8;
-            --border:   rgba(255, 255, 255, 0.1);
+            --danger:   #dc2626;
+            --warning:  #d97706;
+            --text:     #1e293b;
+            --text-dim: #64748b;
+            --border:   rgba(15, 23, 42, 0.1);
         }
 
         body {
@@ -62,7 +62,7 @@
             padding: 30px;
             width: 100%;
             max-width: 450px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.12);
             text-align: center;
             max-height: 95vh;
             display: flex;
@@ -108,7 +108,7 @@
         }
 
         .status-panel {
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(15, 23, 42, 0.04);
             border-radius: 16px;
             padding: 15px;
             margin: 20px 0;
@@ -144,7 +144,7 @@
         .unpaid-container {
             display: none;
             text-align: left;
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(15, 23, 42, 0.03);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 10px;
@@ -154,7 +154,7 @@
         }
 
         .unpaid-item {
-            background: rgba(15, 23, 42, 0.8);
+            background: #ffffff;
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 10px;
@@ -169,9 +169,9 @@
         
         .unpaid-item input, .unpaid-item select {
             width: 100%;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(15, 23, 42, 0.04);
             border: 1px solid var(--border);
-            color: white;
+            color: var(--text);
             padding: 6px;
             border-radius: 6px;
             font-size: 12px;
@@ -203,11 +203,11 @@
 
         input[type="password"] {
             width: 100%;
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(15, 23, 42, 0.04);
             border: 2px solid var(--border);
             border-radius: 12px;
             padding: 15px;
-            color: white;
+            color: var(--text);
             font-size: 24px;
             text-align: center;
             letter-spacing: 5px;
@@ -238,7 +238,7 @@
         }
 
         button#btn-action:disabled {
-            background: #475569;
+            background: #94a3b8;
             opacity: 0.6;
             cursor: not-allowed;
             box-shadow: none;
@@ -260,7 +260,7 @@
             display: block;
             text-align: center;
             margin-top: 15px;
-            color: rgba(255,255,255,0.3);
+            color: rgba(30, 41, 59, 0.4);
             text-decoration: none;
             font-size: 0.75rem;
             flex-shrink: 0;
@@ -268,9 +268,9 @@
         .footer-link:hover { color: var(--text-dim); }
 
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+        ::-webkit-scrollbar-track { background: rgba(15,23,42,0.05); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.35); }
 
         @media (max-width: 380px) {
             .card { padding: 25px 15px; }

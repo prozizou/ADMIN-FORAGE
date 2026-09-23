@@ -27,11 +27,9 @@ Vercel.
 | `home/accueil.html` | tous | Tableau de bord, accès aux modules selon le rôle |
 | `agents/agent.html` | président, secrétaire | Création/gestion des agents releveurs de terrain |
 | `counter/list.html` | président, secrétaire, trésorier | Liste et saisie des compteurs (relevés d'index) |
-| `statistiques/stats.html` | tous | Statistiques de paiement, marquage payé/impayé |
-| `rapports/rapports.html` | tous | Rapports et bilan (recettes, dépenses, caisse) |
+| `statistiques/stats.html` | tous | Statistiques de paiement, marquage payé/impayé (inclut les anomalies au niveau du compteur) |
 | `impression/impression.html` | tous | Impression des factures et relances d'arriérés |
 | `reset/zero.html` | président | Clôture de cycle mensuel (archivage + remise à zéro) |
-| `anomalies/bugs.html` | tous | Détection et suivi des relevés anormaux |
 | `equipe/equipe.html` | président | Création des comptes secrétaire/trésorier de son forage |
 | `admin/admin.html` | super-admin | Création des présidents, vue à 360° sur tous les forages |
 
@@ -101,7 +99,7 @@ Vercel.
 
 - **Pas de suite de tests pour le frontend** : seul `billing.js` (logique
   pure) est testé. Les 3000+ lignes de HTML/JS des pages (`stats.js`,
-  `rapports.js`, `impression.html`, `zero.html`…) n'ont aucun test
+  `impression.html`, `zero.html`…) n'ont aucun test
   automatisé — les régressions ne sont détectables qu'en manuel.
 - **Comptes Firebase partagés historiques** : les comptes legacy
   (`president@diandioly.com`, etc.) ne permettent aucune traçabilité

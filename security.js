@@ -2,16 +2,16 @@
  * ASUFOR - Sécurité Centralisée (Version Robuste v3)
  *
  * CORRECTIONS v3 :
- * 1. Expiration de session après 8h (évite les sessions éternelles)
- * 2. Redirection relative correcte selon la profondeur du dossier courant
- * 3. checkAccess retourne la session proprement
- * 4. logout() supprime aussi bien 'asufor_session' que le token Firebase
- * 5. ✅ NOUVEAU : Vérification que session.time existe avant calcul d'expiration
- * 6. ✅ NOUVEAU : Protection contre XSS — sanitisation du rôle avant affichage
- * 7. ✅ NOUVEAU : Gestion de l'erreur si localStorage est inaccessible (mode privé strict)
+ * 1. Redirection relative correcte selon la profondeur du dossier courant
+ * 2. checkAccess retourne la session proprement
+ * 3. logout() supprime aussi bien 'asufor_session' que le token Firebase
+ * 4. ✅ NOUVEAU : Protection contre XSS — sanitisation du rôle avant affichage
+ * 5. ✅ NOUVEAU : Gestion de l'erreur si localStorage est inaccessible (mode privé strict)
+ *
+ * ✅ La session reste valide tant que l'utilisateur ne se déconnecte pas
+ * explicitement (ou que Firebase invalide réellement le jeton, voir
+ * handleFirebaseSessionLoss) : plus d'expiration arbitraire après 8h.
  */
-
-const SESSION_DURATION_MS = 8 * 60 * 60 * 1000; // 8 heures
 
 /**
  * Sanitise un texte pour éviter toute injection HTML.
@@ -241,14 +241,6 @@ window.checkAccess = function (authorizedRoles = []) {
         typeof session.role !== 'string' ||
         session.role.trim() === '' ||
         typeof session.time !== 'number') {
-        window.logout();
-        return null;
-    }
-
-    // ✅ CORRECTION : Vérification robuste de l'expiration
-    const now = Date.now();
-    if ((now - session.time) > SESSION_DURATION_MS) {
-        alert('Votre session a expiré. Veuillez vous reconnecter.');
         window.logout();
         return null;
     }

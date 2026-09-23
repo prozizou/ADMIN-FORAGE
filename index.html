@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#0b1120">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ASUFOR">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -34,18 +34,18 @@
            (v2 : remplace le glassmorphisme d'origine — trop de transparence/dégradés
            donnait un rendu prototype plutôt qu'application de gestion.) */
         :root {
-            --bg:      #0a0f1c;
-            --surface: #111a2e;
-            --surface-2: rgba(255, 255, 255, 0.04);
-            --surface-2-hover: rgba(255, 255, 255, 0.07);
-            --border:  rgba(255, 255, 255, 0.10);
-            --fg:      #f8fafc;
-            --muted:   rgba(248, 250, 252, 0.62);
-            --muted-strong: rgba(248, 250, 252, 0.8);
-            --accent:  #38bdf8;
-            --accent-ink: #04202e;
-            --error:   #f87171;
-            --success: #34d399;
+            --bg:      #f0f2f5;
+            --surface: #ffffff;
+            --surface-2: rgba(15, 23, 42, 0.04);
+            --surface-2-hover: rgba(15, 23, 42, 0.07);
+            --border:  rgba(15, 23, 42, 0.10);
+            --fg:      #1e293b;
+            --muted:   rgba(30, 41, 59, 0.62);
+            --muted-strong: rgba(30, 41, 59, 0.8);
+            --accent:  #0284c7;
+            --accent-ink: #ffffff;
+            --error:   #dc2626;
+            --success: #16a34a;
         }
 
         * { box-sizing: border-box; }
@@ -86,7 +86,7 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 20px;
-            box-shadow: 0 20px 40px -16px rgba(0, 0, 0, 0.55);
+            box-shadow: 0 20px 40px -16px rgba(15, 23, 42, 0.16);
             padding: 36px 30px;
             width: 100%;
             max-width: 380px;
@@ -144,7 +144,7 @@
             transition: background 0.15s ease, border-color 0.15s ease;
         }
         #idInput:focus { background: var(--surface-2-hover); border-color: var(--accent); }
-        #idInput::placeholder { color: rgba(248, 250, 252, 0.35); }
+        #idInput::placeholder { color: rgba(30, 41, 59, 0.35); }
 
         .field-hint {
             margin: 8px 2px 0;
@@ -229,7 +229,7 @@
             height: 12px;
             border-radius: 50%;
             background: transparent;
-            border: 2px solid rgba(248, 250, 252, 0.3);
+            border: 2px solid rgba(30, 41, 59, 0.3);
             transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
         .dot.active {
@@ -251,7 +251,7 @@
             width: 13px;
             height: 13px;
             border-radius: 50%;
-            border: 2px solid rgba(248, 250, 252, 0.25);
+            border: 2px solid rgba(30, 41, 59, 0.25);
             border-top-color: var(--accent);
             animation: spin 0.7s linear infinite;
             flex: none;
@@ -432,17 +432,18 @@
     //    valide »). On ne redirige donc plus ici : on se contente de purger une
     //    session locale invalide/expirée. La décision d'entrer dans l'app est
     //    prise par l'observateur onAuthStateChanged (Firebase = source de vérité).
+    // ✅ La session reste valide tant que l'utilisateur ne s'est pas déconnecté
+    // explicitement : plus d'expiration après 8h, seule la structure/le rôle
+    // sont vérifiés ici (Firebase reste la source de vérité pour l'accès aux
+    // données, voir onAuthStateChanged plus bas).
     function localSessionValid() {
         let raw;
         try { raw = localStorage.getItem('asufor_session'); } catch (e) { return false; }
         if (!raw) return false;
         try {
             const s = JSON.parse(raw);
-            const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
             const validRoles = ['président', 'secrétaire', 'trésorier'];
-            const ok = s && s.role && validRoles.includes(s.role) &&
-                typeof s.time === 'number' &&
-                (Date.now() - s.time) < SESSION_DURATION_MS;
+            const ok = !!(s && s.role && validRoles.includes(s.role) && typeof s.time === 'number');
             if (!ok) { try { localStorage.removeItem('asufor_session'); } catch (_) {} }
             return ok;
         } catch (e) {

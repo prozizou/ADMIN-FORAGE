@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr">
 <head>
     <!-- PWA-META -->
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#f8fafc">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="ASUFOR">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
@@ -29,6 +29,8 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <!-- ✅ Cache local des données (affichage instantané + restauration entre sessions) -->
+    <script src="../data-cache.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
@@ -60,9 +62,6 @@
                 <h2 id="forage-title" style="margin:0; font-size: 1.2rem;">ASUFOR</h2>
             </div>
             <div class="header-actions">
-                <button class="btn-theme" onclick="toggleTheme()" title="Changer le thème">
-                    <i id="theme-icon" class="fa-solid fa-moon"></i>
-                </button>
                 <button class="btn-export" onclick="exportPDFImpayes()">
                     <i class="fa-solid fa-file-pdf"></i> PDF Impayés
                 </button>
