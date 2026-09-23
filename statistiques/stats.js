@@ -29,9 +29,21 @@ let unsubCurrentMonth = null;
 
 let currentTab = 'all';
 // ✅ v2 : Relevés/Non relevés quittent la ligne d'onglets pour un filtre
-// secondaire indépendant (voir setReleveFilter) — la ligne d'onglets se
+// secondaire indépendant (voir setQuickFilter) — la ligne d'onglets se
 // limite désormais à Tous / Payés / Impayés / Anomalies.
 let releveFilter = 'all';
+// ✅ v5 : filtre actif quand on clique un quartier dans "Où consomme-t-on le
+// plus ?" — null = pas de filtre de zone.
+let zoneFilter = null;
+// ✅ v5 : hors ligne — bloque les actions financières (jamais d'écriture à
+// l'aveugle), reprise automatique dès le retour du réseau.
+let isOffline = !navigator.onLine;
+// ✅ v5 : micro-interaction — flash discret sur une carte qui vient d'être
+// encaissée (clé → timestamp de l'action optimiste).
+const justPaidKeys = new Map();
+// ✅ v5 : détection de conflit — timestamp de dernière modif au moment où le
+// modal d'édition a été ouvert, pour repérer une écriture concurrente.
+let editingSnapshotModifiedAt = null;
 // ✅ v2 : vrai en consultant une période archivée — verrouille les actions
 // de modification (statut, édition) dans renderList() et les handlers.
 let isArchiveView = false;
@@ -88,22 +100,136 @@ function showToast(msg, isError = false) {
     setTimeout(() => toast.classList.remove("show"), 3000);
 }
 
-window.setTab = function(tabName) {
-    currentTab = tabName;
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById('tab-' + tabName).classList.add('active');
+// ✅ v5 : chips de filtre rapide (remplacent les 4 onglets + le sélecteur
+// Relevés/Non relevés séparé) — "À relever" retrouve le même filtre que
+// l'ancien <select releve-filter value="non-releves">.
+const QUICK_FILTERS = {
+    all:       { tab: 'all',       releve: 'all',          chip: 'chip-all' },
+    paye:      { tab: 'paye',      releve: 'all',          chip: 'chip-paye' },
+    impaye:    { tab: 'impaye',    releve: 'all',          chip: 'chip-impaye' },
+    arelever:  { tab: 'all',       releve: 'non-releves',  chip: 'chip-arelever' },
+    anomalies: { tab: 'anomalies', releve: 'all',          chip: 'chip-anomalies' }
+};
+window.setQuickFilter = function(name) {
+    const cfg = QUICK_FILTERS[name] || QUICK_FILTERS.all;
+    currentTab = cfg.tab;
+    releveFilter = cfg.releve;
     displayLimit = 100;
+    document.querySelectorAll('.chip').forEach(btn => btn.classList.remove('active'));
+    const chipEl = document.getElementById(cfg.chip);
+    if (chipEl) chipEl.classList.add('active');
+    const progressCard = document.getElementById('releves-progress-card');
+    if (progressCard) progressCard.style.display = (releveFilter === 'releves' || releveFilter === 'non-releves') ? 'block' : 'none';
     window.applyFilter();
 };
 
-// ✅ v2 : filtre secondaire Relevés / Non relevés (déplacé hors des onglets)
-window.setReleveFilter = function(value) {
-    releveFilter = value;
+// ✅ v5 : un clic sur un quartier ("Où consomme-t-on le plus ?") filtre la
+// liste sur ce quartier — un petit chip amovible rappelle le filtre actif.
+window.filterByZone = function(zone) {
+    zoneFilter = zone;
     displayLimit = 100;
-    const progressCard = document.getElementById('releves-progress-card');
-    if (progressCard) progressCard.style.display = (value === 'releves' || value === 'non-releves') ? 'block' : 'none';
+    const chip = document.getElementById('zone-filter-chip');
+    const label = document.getElementById('zone-filter-label');
+    if (chip) chip.classList.add('visible');
+    if (label) label.textContent = 'Quartier : ' + zone;
+    window.applyFilter();
+    const listSection = document.getElementById('scrollable-list');
+    if (listSection) listSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+window.clearZoneFilter = function() {
+    zoneFilter = null;
+    const chip = document.getElementById('zone-filter-chip');
+    if (chip) chip.classList.remove('visible');
     window.applyFilter();
 };
+
+// ✅ v5 : action du bouton "Réinitialiser les filtres" de l'état vide.
+window.resetAllFilters = function() {
+    const search = document.getElementById('search-client');
+    const sort = document.getElementById('sort-spinner');
+    const agent = document.getElementById('agent-spinner');
+    if (search) search.value = '';
+    if (sort) sort.value = 'recent';
+    if (agent) agent.value = 'all';
+    window.clearZoneFilter();
+    window.setQuickFilter('all');
+};
+
+// ✅ v5 : menu ⋮ (actions secondaires d'une carte) — un seul menu ouvert à la
+// fois, fermé au clic en dehors (voir l'écouteur global plus bas).
+window.toggleCardMenu = function(event, menuId) {
+    event.stopPropagation();
+    const dropdown = document.getElementById(menuId);
+    if (!dropdown) return;
+    const wasOpen = dropdown.classList.contains('open');
+    document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    if (!wasOpen) dropdown.classList.add('open');
+};
+
+// ✅ v5 : un seul bouton "Exporter" ouvrant PDF / Excel / Imprimer, au lieu
+// de deux boutons fixes qui prenaient beaucoup de largeur sur mobile.
+window.toggleExportMenu = function(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('export-menu');
+    const btn = document.getElementById('btn-export-toggle');
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('open');
+    menu.classList.toggle('open', willOpen);
+    if (btn) btn.classList.toggle('open', willOpen);
+};
+function closeExportMenu() {
+    const menu = document.getElementById('export-menu');
+    const btn = document.getElementById('btn-export-toggle');
+    if (menu) menu.classList.remove('open');
+    if (btn) btn.classList.remove('open');
+}
+window.closeExportMenuAnd = function(fn) {
+    closeExportMenu();
+    if (typeof fn === 'function') fn();
+};
+
+// Ferme les menus ouverts (carte, export) au clic en dehors.
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.card-menu-wrap')) {
+        document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    }
+    if (!e.target.closest('.export-wrap')) closeExportMenu();
+});
+
+// --- ÉTAT DE SYNCHRONISATION (discret, uniquement pour NOS écritures) ---
+function pingSync(ok) {
+    const el = document.getElementById('sync-indicator');
+    const txt = document.getElementById('sync-indicator-text');
+    if (!el) return;
+    el.classList.toggle('sync-error', !ok);
+    if (txt) txt.textContent = ok ? 'Synchronisé' : 'Échec de synchro';
+    el.classList.add('visible');
+    setTimeout(() => el.classList.remove('visible'), 2200);
+}
+
+// --- GESTION HORS LIGNE ---
+// ✅ v5 : on bloque les actions d'écriture (jamais de paiement/edit "à
+// l'aveugle") plutôt que de les mettre en file pour rejouer plus tard — trop
+// risqué pour un système de facturation (double encaissement en cas de
+// conflit). Dès le retour du réseau, on rafraîchit automatiquement les
+// données affichées.
+function updateOfflineBanner() {
+    const banner = document.getElementById('offline-banner');
+    if (banner) banner.classList.toggle('visible', isOffline);
+}
+window.addEventListener('offline', () => {
+    isOffline = true;
+    updateOfflineBanner();
+    showToast('⚠️ Connexion perdue : encaissement et modifications bloqués.', true);
+});
+window.addEventListener('online', () => {
+    isOffline = false;
+    updateOfflineBanner();
+    showToast('✅ Connexion rétablie : actualisation…');
+    const monthSel = document.getElementById('month-filter');
+    loadDataForMonth(monthSel ? monthSel.value : 'actuel');
+});
+updateOfflineBanner();
 
 window.loadMore = function() {
     displayLimit += 100;
@@ -130,6 +256,9 @@ window.updateStatus = function(key, newStatus) {
     // ✅ v2 : verrou défensif — la carte ne propose déjà plus ce bouton sur une
     // archive, mais on bloque aussi l'appel direct (deuxième ligne de défense).
     if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
+    // ✅ v5 : hors ligne, on bloque plutôt que d'écrire à l'aveugle (risque de
+    // double encaissement une fois la connexion revenue).
+    if (isOffline) { showToast("⚠️ Vous êtes hors ligne : action impossible.", true); return; }
     if (!currentActivePath) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
@@ -189,14 +318,22 @@ window.updateStatus = function(key, newStatus) {
             statut: newStatus === 'paye',
             arriere: newStatus === 'paye' ? 0 : storeReleves[key].arriere
         };
+        // ✅ v5 : micro-interaction — flash discret sur la carte dès l'action
+        // optimiste (pas besoin d'attendre la confirmation réseau).
+        if (newStatus === 'paye') justPaidKeys.set(key, Date.now());
         window.applyFilter();
     }
 
     update(ref(db), updates)
-        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "↩️ Paiement corrigé : facture remise à encaisser."))
+        .then(() => {
+            pingSync(true);
+            showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "↩️ Paiement corrigé : facture remise à encaisser.");
+        })
         .catch(err => {
+            pingSync(false);
             if (previousRecord) {
                 storeReleves[key] = previousRecord;
+                justPaidKeys.delete(key);
                 window.applyFilter();
             }
             showToast("Erreur réseau : " + err, true);
@@ -204,6 +341,26 @@ window.updateStatus = function(key, newStatus) {
 };
 
 // --- EXPORT CSV ---
+// ✅ v5 : "Imprimer" — troisième option du menu Exporter. Affiche
+// temporairement TOUTE la liste filtrée (au-delà de displayLimit) pour que
+// l'impression ne se limite pas aux éléments déjà chargés à l'écran.
+window.exportPrint = function() {
+    if (currentFilteredData.length === 0) {
+        showToast("La liste est vide, rien à imprimer.", true);
+        return;
+    }
+    const previousLimit = displayLimit;
+    displayLimit = currentFilteredData.length;
+    renderList();
+    const restore = () => {
+        displayLimit = previousLimit;
+        renderList();
+        window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+};
+
 window.exportCSV = function() {
     if (currentFilteredData.length === 0) {
         showToast("La liste est vide, rien à exporter.", true);
@@ -552,6 +709,8 @@ window.applyFilter = function() {
 
     let filteredBase = entries.filter(item => {
         if (selectedId !== "all" && item.agent_id !== selectedId) return false;
+        // ✅ v5 : filtre de quartier (clic sur "Où consomme-t-on le plus ?")
+        if (zoneFilter && zoneOf(item) !== zoneFilter) return false;
         const rawName = item.name || "";
         const rawCompteur = String(item.numero_compteur || "");
         const queryDigits = searchQuery.replace(/\D/g, '');
@@ -570,7 +729,15 @@ window.applyFilter = function() {
     const useBilling = !!(window.Billing && window.Billing.computeStatement);
     const indexedBackups = useBilling ? window.Billing.indexBackups(allBackupsCache) : [];
 
-    currentFilteredData = filteredBase.filter(item => {
+    // ✅ v5 : PASSE 1 — un seul calcul de facturation par compteur, dont on tire
+    // à la fois les totaux (déjà le cas avant) ET les compteurs des chips de
+    // filtre rapide (Tous/Payés/Impayés/À relever/Problèmes), indépendamment
+    // de l'onglet actif — "Tous 420" reste 420 même sous l'onglet "Payés".
+    let consoTotal = 0;
+    let countAll = 0, countPaye = 0, countImpaye = 0, countARelever = 0, countAnomalies = 0;
+    const computed = [];
+
+    filteredBase.forEach(item => {
         let calculatedAmount, arriere = 0, totalDu;
         if (useBilling) {
             const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle });
@@ -591,39 +758,44 @@ window.applyFilter = function() {
         item.arriere = arriere;
         item.totalDu = totalDu;
 
-        if (isNaN(totalDu)) return false;
+        if (isNaN(totalDu)) return;
 
+        const nIdx = parseFloat(item.new_index || 0);
+        const lIdx = parseFloat(item.last_index || 0);
+        const hasIndex = nIdx > 0;
+        const realConso = nIdx - lIdx;
+        const isNotRead = !hasIndex;
+        const isIndexError = hasIndex && realConso < 0;
+        // ✅ Un compteur pas encore relevé (new_index = 0) n'est pas une
+        // anomalie — l'erreur d'index suppose qu'un index A été saisi.
+        const isAnomaly = (hasIndex && realConso < 0) || realConso > 100;
         const isPaid = item.status === 'paye';
 
-        if (isPaid) {
-            tCFA_Paye += calculatedAmount;
-        } else {
-            tCFA_Impaye += totalDu; // ✅ inclut désormais les arriérés
-        }
+        item._isNotRead = isNotRead;
+        item._isIndexError = isIndexError;
+        item._isAnomaly = isAnomaly;
+        item._isPaid = isPaid;
+        item._realConso = realConso;
 
-        if (currentTab === 'paye' && !isPaid) return false;
-        if (currentTab === 'impaye' && isPaid) return false;
-        // ✅ v2 : onglet Anomalies — erreur d'index (nouveau < ancien) ou fuite (> 100 m³)
-        if (currentTab === 'anomalies') {
-            const nIdxA = parseFloat(item.new_index || 0);
-            const lIdxA = parseFloat(item.last_index || 0);
-            const realConsoA = nIdxA - lIdxA;
-            // ✅ Un compteur pas encore relevé (new_index = 0) n'est pas une
-            // anomalie — l'erreur d'index suppose qu'un index A été saisi.
-            const isAnomalyA = (nIdxA > 0 && realConsoA < 0) || realConsoA > 100;
-            if (!isAnomalyA) return false;
-        }
-        // ✅ v2 : filtre secondaire (déplacé hors des onglets) — uniquement les
-        // compteurs dont l'index a bien été saisi (new_index > 0), ou l'inverse.
-        if (releveFilter === 'releves') {
-            const hasIndex = parseFloat(item.new_index || 0) > 0;
-            if (!hasIndex) return false;
-        }
-        if (releveFilter === 'non-releves') {
-            const hasIndex = parseFloat(item.new_index || 0) > 0;
-            if (hasIndex) return false;
-        }
+        if (isPaid) tCFA_Paye += calculatedAmount; else tCFA_Impaye += totalDu; // ✅ inclut désormais les arriérés
+        consoTotal += (item.conso || 0);
 
+        countAll++;
+        if (isPaid) countPaye++; else countImpaye++;
+        if (isNotRead) countARelever++;
+        if (isAnomaly) countAnomalies++;
+
+        computed.push(item);
+    });
+
+    // ✅ v5 : PASSE 2 — l'onglet actif (chip) + le filtre secondaire filtrent
+    // l'affichage, en réutilisant les champs déjà calculés ci-dessus.
+    currentFilteredData = computed.filter(item => {
+        if (currentTab === 'paye' && !item._isPaid) return false;
+        if (currentTab === 'impaye' && item._isPaid) return false;
+        if (currentTab === 'anomalies' && !item._isAnomaly) return false;
+        if (releveFilter === 'releves' && item._isNotRead) return false;
+        if (releveFilter === 'non-releves' && !item._isNotRead) return false;
         return true;
     });
 
@@ -640,12 +812,32 @@ window.applyFilter = function() {
     document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
     document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
 
+    // ✅ v5 : chips de filtre rapide — compteurs live, indépendants de l'onglet
+    // actif (portée = agent + zone + recherche sélectionnés).
+    const setChipCount = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val.toLocaleString(); };
+    setChipCount('chip-count-all', countAll);
+    setChipCount('chip-count-paye', countPaye);
+    setChipCount('chip-count-impaye', countImpaye);
+    setChipCount('chip-count-arelever', countARelever);
+    setChipCount('chip-count-anomalies', countAnomalies);
+
+    // ✅ v5 : KPI compactes — recouvrement, impayés, consommation totale et
+    // compteurs à relever, en plus des 2 montants déjà affichés.
+    const recapTotal = tCFA_Paye + tCFA_Impaye;
+    const recapPct = recapTotal > 0 ? (tCFA_Paye / recapTotal * 100) : 0;
+    const kpiTauxEl = document.getElementById('kpi-taux');
+    if (kpiTauxEl) kpiTauxEl.textContent = recapPct.toFixed(1) + ' %';
+    const kpiImpayeEl = document.getElementById('kpi-count-impaye');
+    if (kpiImpayeEl) kpiImpayeEl.textContent = countImpaye.toLocaleString();
+    const kpiConsoEl = document.getElementById('kpi-conso');
+    if (kpiConsoEl) kpiConsoEl.textContent = Math.round(consoTotal).toLocaleString() + ' m³';
+    const kpiARelevEl = document.getElementById('kpi-count-arelever');
+    if (kpiARelevEl) kpiARelevEl.textContent = countARelever.toLocaleString();
+
     // ✅ v4 : la carte Bilan raconte le mois en une phrase ("Il reste X F à
     // encaisser") plutôt qu'en pourcentage brut, avec une jauge qui va du
     // rouge au vert selon le niveau atteint — plus parlant pour un novice
     // qu'un simple "0,1 % recouvré".
-    const recapTotal = tCFA_Paye + tCFA_Impaye;
-    const recapPct = recapTotal > 0 ? (tCFA_Paye / recapTotal * 100) : 0;
     const recapBar = document.getElementById('recap-bar-fill');
     if (recapBar) {
         recapBar.style.width = Math.min(100, recapPct) + '%';
@@ -657,8 +849,6 @@ window.applyFilter = function() {
             ? `Il reste ${Math.round(tCFA_Impaye).toLocaleString()} F à encaisser ce mois-ci`
             : '🎉 Tout est encaissé ce mois-ci !';
     }
-    const recapPctEl = document.getElementById('recap-pct');
-    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % encaissé';
 
     // ✅ v2 : la couleur reflète si la variation est une BONNE ou une MAUVAISE
     // nouvelle pour cet indicateur — avant, +294,6 % d'impayés s'affichait en
@@ -711,19 +901,31 @@ function renderTopQuartiers() {
     }
 
     const maxVal = sorted[0][1] || 1;
+    // ✅ v5 : chaque ligne est cliquable (data-zone + délégation d'événement
+    // ci-dessous) — filtre directement la liste sur ce quartier.
     box.innerHTML = sorted.map(([zone, val], i) => {
         const pct = Math.max(4, Math.round(val / maxVal * 100));
         return `
-        <div class="quartier-row">
+        <button type="button" class="quartier-row" data-zone="${escHtml(zone)}" title="Filtrer sur ce quartier">
             <span class="quartier-rank">${i + 1}</span>
             <div class="quartier-info">
                 <div class="quartier-name"><i class="fa-solid fa-house"></i> ${escHtml(zone)}</div>
                 <div class="quartier-bar-bg"><div class="quartier-bar-fill" style="width:${pct}%"></div></div>
             </div>
             <span class="quartier-val">${Math.round(val).toLocaleString()} m³</span>
-        </div>`;
+        </button>`;
     }).join('');
 }
+
+// Délégation : un seul écouteur pour toutes les lignes de quartier (évite
+// d'attacher un onclick par ligne, régénérées à chaque rendu).
+document.addEventListener('DOMContentLoaded', () => {
+    const box = document.getElementById('top-quartiers');
+    if (box) box.addEventListener('click', (e) => {
+        const row = e.target.closest('.quartier-row');
+        if (row && row.dataset.zone) window.filterByZone(row.dataset.zone);
+    });
+});
 
 function updateRelevesProgress() {
     const allEntries = Object.values(storeReleves);
@@ -748,8 +950,13 @@ function renderList() {
     const esc = escHtml;
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
-    document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
+    document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s)`;
     const dataToShow = currentFilteredData.slice(0, displayLimit);
+
+    // ✅ v5 : état vide — évite un écran silencieux quand un filtre/recherche
+    // ne retourne rien (420 clients, une faute de frappe arrive vite).
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) emptyState.style.display = currentFilteredData.length === 0 ? 'flex' : 'none';
 
     // ✅ v3 : pour des utilisateurs novices, la couleur de fond redevient un
     // vrai repère pédagogique (payé=vert, impayé=rouge, anomalie=saumon —
@@ -757,6 +964,9 @@ function renderList() {
     // situations —, non relevé=gris), mais jamais SEULE : chaque carte porte
     // aussi un symbole/texte explicite (✓/✕/⚠/○) pour rester lisible sans
     // interpréter la couleur.
+    // ✅ v5 : carte compactée sur 3-4 courtes lignes + UNE action principale
+    // par situation (Encaisser / Saisir le relevé / Corriger le relevé) — le
+    // reste (Modifier, historique de modification…) passe derrière un menu ⋮.
     dataToShow.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
         const lIdx = parseFloat(item.last_index || 0);
@@ -769,6 +979,7 @@ function renderList() {
         const isNotRead = !hasIndex;
         const zoneName = esc(zoneOf(item));
         const div = document.createElement('div');
+        const menuId = 'menu-' + item.key;
 
         // ✅ Anomalie minimale au niveau du compteur : la seule information
         // utile est la raison (texte libre saisi par l'agent) pour laquelle
@@ -783,35 +994,31 @@ function renderList() {
         if (isNotRead) {
             const arriere = item.arriere || 0;
             const arriereNote = arriere > 0
-                ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
+                ? `<span style="color:var(--danger);font-weight:700;">+${arriere.toLocaleString()} F arriérés</span>`
                 : '';
-            // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
-            // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
-            // l'objectif de la page. Elle reste réservée au président, hors
-            // archive ; on ne retire pas cette possibilité, on la met juste
-            // en avant plutôt que l'appel, qui n'est qu'un moyen d'y arriver.
-            const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
-                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
-                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
-            // ✅ Appel de l'agent en charge, en action SECONDAIRE (contour,
-            // pas un pavé plein) : numéro figé sur le relevé en priorité
-            // (agent_tel, écrit à la création du compteur), sinon repli sur
-            // la fiche agent actuelle (storeAgents) — même logique de repli
-            // que zoneOf() ci-dessus. Non destructif : affiché même en
-            // archive et pour tout utilisateur, dès qu'un numéro existe.
-            // Le nom de l'agent est affiché à part (ligne dédiée) pour que
-            // le libellé du bouton reste court et ne retombe jamais sur 2
-            // lignes, quelle que soit la longueur du nom.
+            // ✅ "Saisir le relevé" reste l'action PRINCIPALE de cette carte
+            // (bouton plein bleu, comme .btn-paye ailleurs) — réservée au
+            // président, hors archive.
+            const primaryOrLock = isArchiveView
+                ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
+                : (currentUser.toLowerCase() === 'président'
+                    ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
+                    : '');
+            // ✅ Appel de l'agent : reste accessible même en archive (non
+            // destructif) — passe en action secondaire (menu ⋮) plutôt qu'un
+            // 2e bouton plein sur la carte.
             const agentInfo = storeAgents[item.agent_id] || {};
             const agentTelRaw = String(item.agent_tel || agentInfo.agent_tel || '').trim();
             const agentTel = agentTelRaw.replace(/[^0-9+]/g, '');
             const agentName = String(item.agent_name || agentInfo.agent || '').trim();
-            const agentLine = agentName
-                ? `<div class="citem-agent"><i class="fa-solid fa-user"></i>Agent : ${esc(agentName)}</div>`
+            const callItem = agentTel
+                ? `<a href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")}"><i class="fa-solid fa-phone"></i> Appeler ${esc(agentName || "l'agent")}</a>`
                 : '';
-            const callBtn = agentTel
-                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler</a>`
-                : '';
+            const menuWrap = callItem ? `
+                <div class="card-menu-wrap">
+                    <button class="btn-kebab" onclick="toggleCardMenu(event,'${menuId}')" title="Autres actions" aria-label="Autres actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                    <div class="card-menu-dropdown" id="${menuId}">${callItem}</div>
+                </div>` : '';
             div.className = 'item bg-non-releve';
             div.innerHTML = `
                 <div class="citem-main">
@@ -820,13 +1027,12 @@ function renderList() {
                 </div>
                 <div class="citem-sub">
                     <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
-                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx} m³</span>
+                    <span><i class="fa-solid fa-gauge"></i>N° ${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-droplet"></i>Dernier : ${lIdx} m³</span>
+                    ${arriereNote}
                 </div>
-                ${arriereNote}
                 ${noteHtml}
-                ${agentLine}
-                ${(callBtn || editOrLock) ? `<div class="citem-actions">${editOrLock}${callBtn}</div>` : ''}
+                ${(primaryOrLock || menuWrap) ? `<div class="citem-actions">${primaryOrLock}${menuWrap}</div>` : ''}
             `;
             listDiv.appendChild(div);
             return;
@@ -850,10 +1056,10 @@ function renderList() {
                 </div>
                 <div class="citem-sub">
                     <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-gauge"></i>N° ${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-rotate"></i>${lIdx} → ${nIdx} m³</span>
                 </div>
-                <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx} m³</b> → Nouvel index : <b>${nIdx} m³</b></div>
-                <div style="font-size:0.78rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
+                <div class="citem-row2" style="font-size:var(--fs-meta);color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
                 ${noteHtml}
                 ${fixOrLock ? `<div class="citem-actions">${fixOrLock}</div>` : ''}
             `;
@@ -865,20 +1071,18 @@ function renderList() {
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
         const isPaid = item.status === 'paye';
-        // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
-        const arriereHtml = (!isPaid && arriere > 0)
-            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
-            : '';
 
-        // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
-        // affichée normalement, avec une simple alerte en plus (contrairement
-        // à l'erreur d'index, ce n'est pas une donnée aberrante).
-        const anomalyHtml = (realConso > 100)
-            ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Consommation inhabituelle, à vérifier (&gt; 100 m³)</div>`
-            : '';
+        // Notes courtes inline (arriérés / fuite) — regroupées sur la ligne du
+        // badge de statut plutôt qu'empilées sur des lignes pleine largeur.
+        const inlineNotes = [];
+        if (!isPaid && arriere > 0) inlineNotes.push(`<span style="color:var(--danger);font-weight:700;">+${arriere.toLocaleString()} F arriérés</span>`);
+        if (realConso > 100) inlineNotes.push(`<span style="color:var(--danger);font-weight:700;"><i class="fa-solid fa-triangle-exclamation"></i> Conso. inhabituelle</span>`);
+        const inlineNotesHtml = inlineNotes.length ? `<span style="font-size:var(--fs-micro);">${inlineNotes.join(' · ')}</span>` : '';
 
-        let auditHtml = item.last_modified_by
-            ? `<span class="audit-trail">Modifié par ${esc(item.last_modified_by)} le ${new Date(item.last_modified_at).toLocaleDateString()}</span>`
+        // "Modifié par…" déplacé dans le menu ⋮ — beaucoup plus discret que la
+        // ligne toujours visible d'avant, tout en restant consultable.
+        const auditText = item.last_modified_by
+            ? `Modifié par ${esc(item.last_modified_by)} le ${new Date(item.last_modified_at).toLocaleDateString()}`
             : '';
 
         // Badge relevé affiché quand le filtre "Relevés uniquement" est actif
@@ -886,32 +1090,38 @@ function renderList() {
             ? `<span class="badge-releve"><i class="fa-solid fa-gauge-high"></i> Relevé</span>`
             : '';
 
-        // ✅ v3 : icône + texte (« Modifier ») au lieu d'une icône seule — plus
-        // explicite pour un utilisateur novice.
-        // ✅ Action secondaire de la carte (voir statusBtn ci-dessous pour
-        // l'action principale) — même hiérarchie que sur la carte "à relever".
-        const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
-            : '';
-
-        // ✅ v4 : "Encaisser" est l'action principale de la page pour un
-        // compteur impayé — gros bouton bleu, bien visible sur la carte.
-        // "Annuler le paiement" → "Corriger" : une correction courante, pas
-        // une suppression, n'a pas à être présentée en rouge vif.
-        const statusBtn = isArchiveView
+        // ✅ v5 : une seule action principale par carte — Encaisser pour un
+        // impayé. Un compteur déjà payé n'a PAS d'action principale ("Corriger
+        // le paiement" devient secondaire, dans le menu ⋮).
+        const primaryOrLock = isArchiveView
             ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
-            : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
+            : (!isPaid ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>` : '');
+
+        const secondaryItems = [];
+        if (!isArchiveView && currentUser.toLowerCase() === 'président') {
+            secondaryItems.push(`<button onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Modifier les données</button>`);
+        }
+        if (!isArchiveView && isPaid) {
+            secondaryItems.push(`<button class="danger" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-rotate-left"></i> Corriger le paiement</button>`);
+        }
+        const menuWrap = (!isArchiveView && (secondaryItems.length || auditText)) ? `
+            <div class="card-menu-wrap">
+                <button class="btn-kebab" onclick="toggleCardMenu(event,'${menuId}')" title="Autres actions" aria-label="Autres actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <div class="card-menu-dropdown" id="${menuId}">
+                    ${secondaryItems.join('')}
+                    ${auditText ? `<div class="card-menu-meta">${auditText}</div>` : ''}
+                </div>
+            </div>` : '';
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
         // badge texte explicite (✓/✕), jamais la couleur seule.
-        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
+        // ✅ v5 : flash discret (0.9s) juste après un encaissement.
+        const shouldFlash = justPaidKeys.has(item.key) && (Date.now() - justPaidKeys.get(item.key) < 1200);
+        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${realConso > 100 ? 'bg-alerte-fuite' : ''} ${shouldFlash ? 'flash-success' : ''}`;
 
-        // ✅ v4 : carte empilée — nom + montant en gros en tête (l'essentiel
-        // d'un coup d'œil), détails (quartier, compteur, relevé) en dessous
-        // en gris avec icônes, actions en pleine largeur en bas.
+        // ✅ v5 : carte compacte — nom + montant, puis zone/compteur/relevé,
+        // puis statut + notes courtes, puis UNE action principale + menu ⋮.
         div.innerHTML = `
             <div class="citem-main">
                 <span class="citem-name">${esc(item.name || 'Inconnu')}${relevesBadge}</span>
@@ -919,18 +1129,15 @@ function renderList() {
             </div>
             <div class="citem-sub">
                 <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                <span><i class="fa-solid fa-gauge"></i>N° ${esc(item.numero_compteur || 'N/A')}</span>
                 <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
             </div>
-            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
-            ${arriereHtml}
-            ${auditHtml}
-            ${anomalyHtml}
-            ${noteHtml}
-            <div class="citem-actions">
-                ${statusBtn}
-                ${editBtn}
+            <div class="citem-row2">
+                <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
+                ${inlineNotesHtml}
             </div>
+            ${noteHtml}
+            ${(primaryOrLock || menuWrap) ? `<div class="citem-actions">${primaryOrLock}${menuWrap}</div>` : ''}
         `;
         listDiv.appendChild(div);
     });
@@ -958,6 +1165,9 @@ window.openEditModal = function(key) {
     document.getElementById('edit-new-index').value = item.new_index || '';
     document.getElementById('edit-facteur').value = item.facteur || '';
     document.getElementById('edit-modal').style.display = 'flex';
+    // ✅ v5 : instantané pris à l'ouverture, pour détecter un conflit si
+    // quelqu'un d'autre modifie ce même compteur pendant l'édition.
+    editingSnapshotModifiedAt = item.last_modified_at || null;
 };
 
 window.closeEditModal = function() {
@@ -976,9 +1186,23 @@ window.submitEdit = function() {
         closeEditModal();
         return;
     }
+    // ✅ v5 : hors ligne, on bloque plutôt que d'écrire à l'aveugle.
+    if (isOffline) { showToast("⚠️ Vous êtes hors ligne : impossible d'enregistrer.", true); return; }
 
     const key = document.getElementById('edit-key').value;
     if (!key) return;
+
+    // ✅ v5 : conflit de modification — quelqu'un d'autre a modifié ce
+    // compteur pendant que ce modal était ouvert.
+    const liveRecord = storeReleves[key];
+    const liveModifiedAt = liveRecord ? (liveRecord.last_modified_at || null) : null;
+    if (liveModifiedAt !== editingSnapshotModifiedAt) {
+        const who = liveRecord && liveRecord.last_modified_by ? ` par ${liveRecord.last_modified_by}` : '';
+        if (!confirm(`⚠️ Ce compteur a été modifié${who} pendant votre édition. Enregistrer quand même et écraser ce changement ?`)) {
+            closeEditModal();
+            return;
+        }
+    }
 
     const nameVal    = document.getElementById('edit-name').value.trim();
     const cptVal     = document.getElementById('edit-compteur').value.trim();
@@ -1013,10 +1237,14 @@ window.submitEdit = function() {
     const dbPath = `${currentActivePath}/${key}`;
     update(ref(db, dbPath), updatedData)
         .then(() => {
+            pingSync(true);
             showToast("✅ Données du compteur mises à jour !");
             closeEditModal();
         })
-        .catch(err => showToast("Erreur lors du mise à jour : " + err, true));
+        .catch(err => {
+            pingSync(false);
+            showToast("Erreur lors du mise à jour : " + err, true);
+        });
 };
 
 // Fermer le modal en cliquant sur l'overlay
@@ -1032,7 +1260,9 @@ function handleScroll() {
     const isBottomWindow = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
     const isBottomDiv = listElement && (listElement.scrollTop + listElement.clientHeight) >= listElement.scrollHeight - 50;
     const topBtn = document.getElementById('back-to-top');
-    if (window.scrollY > 300 || (listElement && listElement.scrollTop > 300)) topBtn.style.display = "block";
+    // ✅ v5 : seuil plus élevé (600 au lieu de 300) — le bouton, déjà rendu
+    // plus discret en CSS, n'apparaît que sur un vrai long défilement.
+    if (window.scrollY > 600 || (listElement && listElement.scrollTop > 600)) topBtn.style.display = "block";
     else topBtn.style.display = "none";
     if ((isBottomWindow || isBottomDiv) && currentFilteredData.length > displayLimit) window.loadMore();
 }
