@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 
     <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="assets/theme.css">
     <script src="pwa.js" defer></script>
 
     <meta charset="UTF-8">
@@ -28,6 +29,8 @@
     <script src="forage-context.js"></script>
     <!-- ✅ window.clearAppCacheAndReload : filet de secours si la connexion reste bloquée -->
     <script src="security.js"></script>
+    <!-- ✅ Bibliothèque d'icônes SVG unique (remplace emojis + Font Awesome) -->
+    <script src="assets/icons.js" defer></script>
 
     <style>
         /* ── Design sobre "outil professionnel" : fond uni, carte opaque, accents nets ──
@@ -42,8 +45,8 @@
             --fg:      #f8fafc;
             --muted:   rgba(248, 250, 252, 0.62);
             --muted-strong: rgba(248, 250, 252, 0.8);
-            --accent:  #38bdf8;
-            --accent-ink: #04202e;
+            --accent:  var(--asufor-action, #ea580c);
+            --accent-ink: var(--asufor-action-ink, #ffffff);
             --error:   #f87171;
             --success: #34d399;
         }
@@ -695,7 +698,7 @@
 
         // ✅ CORRECTION : si la config Firebase n'a pas chargé, message clair plutôt que crash.
         if (!auth) {
-            statusEl.textContent = "⚠️ Configuration non chargée. Rechargez la page.";
+            statusEl.textContent = "Configuration non chargée. Rechargez la page.";
             statusEl.className = "status-error";
             code = "";
             updateDots();
@@ -778,7 +781,7 @@
                     console.error('Impossible de sauvegarder la session :', e);
                 }
                 spinnerEl.hidden = true;
-                statusEl.textContent = "Accès autorisé ✓";
+                statusEl.textContent = "Accès autorisé";
                 statusEl.className = "status-success";
                 setTimeout(() => window.location.replace('home/accueil.html'), 600);
             })

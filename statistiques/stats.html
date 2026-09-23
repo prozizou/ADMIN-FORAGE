@@ -16,7 +16,7 @@
     <title>ASUFOR – Statistiques</title>
 
     <link rel="manifest" href="../manifest.json">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="../assets/theme.css">
     <link rel="stylesheet" href="stats.css">
 
     <!-- ✅ v4 : Chart.js retiré — le donut et le graphique en barres ont été
@@ -38,6 +38,8 @@
     <script src="../forage-context.js"></script>
     <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
     <script src="../superadmin-village.js"></script>
+    <!-- ✅ Bibliothèque d'icônes SVG unique (remplace emojis + Font Awesome) -->
+    <script src="../assets/icons.js"></script>
     <script>
         // ✅ CORRECTION : utiliser window.checkAccess (cohérent avec tous les autres fichiers)
         if (typeof window.checkAccess === 'function') {
@@ -61,7 +63,7 @@
             </div>
             <div class="header-actions">
                 <button class="btn-theme" onclick="toggleTheme()" title="Changer le thème">
-                    <i id="theme-icon" class="fa-solid fa-moon"></i>
+                    <span id="theme-icon" class="ic"></span>
                 </button>
                 <button class="btn-export" onclick="exportPDFImpayes()">
                     <i class="fa-solid fa-file-pdf"></i> PDF Impayés
@@ -151,7 +153,7 @@
                 <input
                     type="text"
                     id="search-client"
-                    placeholder="🔍 Rechercher client ou compteur..."
+                    placeholder="Rechercher client ou compteur..."
                     oninput="applyFilter()"
                     style="padding-right: 45px; width: 100%;"
                 >
@@ -195,7 +197,7 @@
         <div id="releves-list"></div>
 
         <button id="btn-load-more" class="load-more" onclick="loadMore()" style="display:none;">
-            ⬇️ Charger plus (100)
+            <span class="ic" data-ic="arrow-down"></span> Charger plus
         </button>
     </div>
 </div>

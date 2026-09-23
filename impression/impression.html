@@ -30,7 +30,8 @@
     <script src="../forage-context.js"></script>
     <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
     <script src="../superadmin-village.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="../assets/theme.css">
+    <script src="../assets/icons.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -44,7 +45,7 @@
             --surface-2:    #182236;   /* surface intermédiaire (barres, toolbar) */
             --border-soft:  rgba(255,255,255,0.08);
             --accent-green: #22c55e;
-            --accent-blue:  #3b82f6;
+            --accent-blue:  var(--asufor-action, #ea580c);  /* accent principal = orange */
             --accent-amber: #f59e0b;
             --accent-red:   #ef4444;
             --text-gray:    #a3b0c7;  /* ✅ v6 : plus clair que #94a3b8 pour plus de contraste sur fond sombre */
@@ -73,8 +74,8 @@
             font-size:0.88rem; box-sizing:border-box; transition:border-color .15s, box-shadow .15s;
         }
         /* ✅ v2 : état focus visible (contour bleu) — absent jusqu'ici */
-        .search-box input:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
-        .search-box input.filter-active { border-color:rgba(59,130,246,0.5); }
+        .search-box input:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(234,88,12,0.25); }
+        .search-box input.filter-active { border-color:rgba(234,88,12,0.5); }
         .search-box i { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.85rem; }
 
         .tb-select {
@@ -82,10 +83,10 @@
             outline:none; font-size:0.84rem; cursor:pointer; flex:1; min-width:0;
             transition:border-color .15s, box-shadow .15s;
         }
-        .tb-select:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(59,130,246,0.25); }
+        .tb-select:focus { border-color:var(--accent-blue); box-shadow:0 0 0 3px rgba(234,88,12,0.25); }
         .tb-select option { background:var(--card-dark); }
         /* ✅ v2 : indique qu'un agent précis est filtré (pas "Tous les agents") */
-        #releveurFilter.filter-active { border-color:var(--accent-blue); background:rgba(59,130,246,0.12); }
+        #releveurFilter.filter-active { border-color:var(--accent-blue); background:rgba(234,88,12,0.12); }
 
         /* Compteur de résultats — répond immédiatement à la recherche/aux
            filtres, sans avoir à compter les cartes soi-même. */
@@ -239,7 +240,7 @@
             padding:6px 10px; border-radius:16px; flex-shrink:0;
         }
         .btn-edit {
-            background:rgba(59,130,246,0.15); border:1px solid rgba(59,130,246,0.4);
+            background:rgba(234,88,12,0.15); border:1px solid rgba(234,88,12,0.4);
             color:var(--accent-blue); width:32px; height:32px; border-radius:50%;
             cursor:pointer; font-size:0.8rem; display:flex; align-items:center; justify-content:center;
             transition:0.2s; flex-shrink:0;
@@ -284,7 +285,7 @@
         .edit-input-wrap .unit { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:var(--text-gray); font-size:0.85rem; pointer-events:none; }
         
         .edit-preview {
-            background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.3);
+            background:rgba(234,88,12,0.1); border:1px solid rgba(234,88,12,0.3);
             border-radius:12px; padding:12px 16px; margin-top:8px;
             display:flex; justify-content:space-between; align-items:center;
         }
@@ -381,7 +382,7 @@
         .action-bar {
             position:fixed; left:16px; right:16px; bottom:-100px; z-index:1500;
             max-width:968px; margin:0 auto;
-            background:var(--card-dark); border:1px solid rgba(59,130,246,0.35);
+            background:var(--card-dark); border:1px solid rgba(234,88,12,0.35);
             border-radius:18px; padding:14px 18px;
             display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
             box-shadow:0 16px 40px -8px rgba(0,0,0,0.6);
@@ -402,7 +403,7 @@
             border-radius:14px; cursor:pointer; font-weight:700; font-size:0.85rem;
             display:flex; align-items:center; gap:8px; transition:0.2s; flex:none; white-space:nowrap;
         }
-        .btn-print:hover { background:#2563eb; box-shadow:0 0 16px rgba(59,130,246,0.4); }
+        .btn-print:hover { background:#c2410c; box-shadow:0 0 16px rgba(234,88,12,0.4); }
         .btn-print:active { transform:scale(0.97); }
         /* La liste ne doit jamais rester cachée sous la barre fixe une fois visible */
         body.has-selection .list-container { padding-bottom:78px; }
@@ -457,7 +458,7 @@
 <!-- ── En-tête de page ── -->
 <header class="page-head">
     <a href="../home/accueil.html" class="btn-back"><i class="fas fa-arrow-left"></i> Accueil</a>
-    <h1 class="page-title">🖨️ Impression des factures</h1>
+    <h1 class="page-title"><span class="ic" data-ic="printer"></span> Impression des factures</h1>
     <span class="spacer"></span>
 </header>
 
@@ -481,7 +482,7 @@
     </div>
     <div class="toolbar-row toolbar-row-filters">
         <select id="monthFilter" onchange="window.changeMonth()" class="tb-select">
-            <option value="actuel">📅 Chargement des périodes...</option>
+            <option value="actuel">Chargement des périodes...</option>
         </select>
         <select id="releveurFilter" onchange="window.filterList()" class="tb-select">
             <option value="">Tous les agents</option>
@@ -675,7 +676,7 @@
     // ✅ Retour visuel après impression réelle (le navigateur ferme/valide la
     // boîte de dialogue d'impression) — l'utilisateur sait que l'action a
     // bien été envoyée, sans avoir à deviner.
-    window.addEventListener('afterprint', () => showToast('✅ Impression envoyée à l\'imprimante'));
+    window.addEventListener('afterprint', () => showToast('Impression envoyée à l\'imprimante.'));
 
     // ── Statut sémantique d'une facture ──
     // À jour   : rien à payer (total <= 0).
@@ -683,10 +684,11 @@
     // Impayé   : seul le mois courant est dû, sans solde reporté.
     // (Pas de "Partiellement payé" : aucun paiement partiel n'est suivi par
     // facture dans cette appli — l'inventer afficherait une donnée fausse.)
+    const I = (name) => (window.AsuforIcons ? window.AsuforIcons.svg(name) : '');
     window.billStatusChip = function(d) {
-        if (d.total <= 0)   return { cls: 'chip-ajour',   label: '✓ À jour' };
-        if (d.arrieres > 0) return { cls: 'chip-arriere', label: '⏱ Arriéré' };
-        return { cls: 'chip-impaye', label: '✕ Impayé' };
+        if (d.total <= 0)   return { cls: 'chip-ajour',   label: I('check-circle') + ' À jour' };
+        if (d.arrieres > 0) return { cls: 'chip-arriere', label: I('clock') + ' Arriéré' };
+        return { cls: 'chip-impaye', label: I('alert-circle') + ' Impayé' };
     };
 
     // ✅ CORRECTION XSS : échapper toutes les valeurs dynamiques insérées dans innerHTML
@@ -735,17 +737,17 @@
             const snapshot = await get(ref(db, P.backup));
             // ✅ v2 : icône calendrier au lieu d'une étoile/soleil — plus adaptée
             // à une appli de gestion utilitaire.
-            let optionsHtml = '<option value="actuel">📅 Mois Actuel</option>';
+            let optionsHtml = '<option value="actuel">Mois actuel</option>';
             if (snapshot.exists()) {
                 allBackups = snapshot.val();
                 Object.keys(allBackups).sort().reverse().forEach(month => {
-                    optionsHtml += `<option value="${month}">🗂️ Archive : ${month}</option>`;
+                    optionsHtml += `<option value="${month}">Archive : ${month}</option>`;
                 });
             }
             monthSelect.innerHTML = optionsHtml;
             window.changeMonth();
         } catch (e) {
-            monthSelect.innerHTML = '<option value="actuel">📅 Mois Actuel</option>';
+            monthSelect.innerHTML = '<option value="actuel">Mois actuel</option>';
             window.changeMonth();
         }
     }
@@ -764,7 +766,7 @@
         unsubCurrentMonth = onValue(ref(db, path), renderData, (err) => {
             console.error("Firebase:", err.code, err.message);
             document.getElementById('list-container').innerHTML =
-                `<p style='text-align:center;color:#ef4444;'>⚠️ Erreur (${err.code}). Reconnectez-vous.</p>`;
+                `<p style='text-align:center;color:#ef4444;'>Erreur (${err.code}). Reconnectez-vous.</p>`;
         });
     };
 
@@ -872,7 +874,7 @@
         const escOpt = window.escHtml || (s => String(s == null ? '' : s));
         let optionsHtml = '<option value="">Tous les agents</option>';
         agentsMap.forEach((name, id) => {
-            optionsHtml += `<option value="${escOpt(id)}">👤 ${escOpt(String(name).toUpperCase())}</option>`;
+            optionsHtml += `<option value="${escOpt(id)}">${escOpt(String(name).toUpperCase())}</option>`;
         });
         releveurSelect.innerHTML = optionsHtml;
         releveurSelect.value = current;
@@ -1280,7 +1282,7 @@
                 AsuforLoader.fail('Session expirée ou invalide. Reconnexion nécessaire.');
             }
             document.getElementById('list-container').innerHTML =
-                "<p style='text-align:center;color:#ef4444;'>⚠️ Session expirée. <a href='../index.html' style='color:#3b82f6'>Reconnectez-vous</a></p>";
+                "<p style='text-align:center;color:#ef4444;'>Session expirée. <a href='../index.html' style='color:#ea580c'>Reconnectez-vous</a></p>";
         }
     });
 

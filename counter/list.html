@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
 
     <link rel="manifest" href="../manifest.json">
+    <link rel="stylesheet" href="../assets/theme.css">
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,10 +28,12 @@
     <script src="../forage-context.js"></script>
     <!-- ✅ Vue à 360° super-admin : sélecteur de village -->
     <script src="../superadmin-village.js"></script>
+    <!-- ✅ Bibliothèque d'icônes SVG unique (remplace emojis + Font Awesome) -->
+    <script src="../assets/icons.js"></script>
 
     <style>
         :root {
-            --primary:    #2563eb;
+            --primary:    var(--asufor-action, #ea580c);
             --bg-dark:    #0f172a;
             --glass:      rgba(255, 255, 255, 0.05);
             --border:     rgba(255, 255, 255, 0.1);
@@ -176,7 +179,7 @@
 <body>
 
 <div class="card">
-    <h2>📟 Installation Compteur</h2>
+    <h2><span class="ic" data-ic="gauge"></span> Installation Compteur</h2>
 
     <div class="input-layout" id="wrap-agent">
         <label>Agent Responsable</label>
@@ -385,7 +388,7 @@
 
         try {
             await push(ref(db, P.compteurs), payload);
-            showMsg('✅ Compteur n°' + compteur + ' enregistré avec succès !');
+            showMsg('Compteur n°' + compteur + ' enregistré avec succès.');
             document.getElementById('ownerName').value  = '';
             document.getElementById('startIndex').value = '';
             document.getElementById('agentSelect').value = '';

@@ -1,9 +1,9 @@
 /* stats.css – complet avec ajout du modal */
 
 :root {
-    --bg: #f8fafc; --primary: #0052fe; --card-bg: #ffffff;
-    --text-main: #1e293b; --text-sub: #64748b; --success: #22c55e;
-    --danger: #ef4444; --border-color: rgba(0, 0, 0, 0.05);
+    --bg: #f8fafc; --primary: var(--asufor-action, #ea580c); --card-bg: #ffffff;
+    --text-main: #1e293b; --text-sub: #64748b; --success: var(--asufor-success-2, #22c55e);
+    --danger: var(--asufor-danger-2, #ef4444); --border-color: rgba(0, 0, 0, 0.05);
 }
 
 /* ✅ FIX : le thème est piloté par [data-theme] sur <html> (cohérent avec le
@@ -61,9 +61,12 @@ body {
     border: 1px solid var(--border-color); border-radius: 20px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03); cursor: pointer; outline: none; transition: background-color 0.3s;
 }
+/* Chevron du sélecteur — triangle CSS (plus de dépendance à la police Font Awesome) */
 .select-wrapper::after {
-    content: '\f0d7'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
-    position: absolute; right: 20px; top: 50%; transform: translateY(-50%); color: var(--text-sub); pointer-events: none;
+    content: ''; position: absolute; right: 22px; top: 50%;
+    width: 0; height: 0; margin-top: -2px;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid var(--text-sub); transform: translateY(-50%); pointer-events: none;
 }
 
 /* ── Bandeau lecture seule (archive) ── */
@@ -140,9 +143,9 @@ body {
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; background: var(--card-bg); padding: 6px; border-radius: 18px; border: 1px solid var(--border-color); }
 .tab-btn { flex: 1; min-width: 74px; padding: 12px 8px; border: none; background: transparent; border-radius: 13px; font-size: 0.86rem; font-weight: 700; color: var(--text-sub); cursor: pointer; transition: all 0.3s; }
 .tab-btn i { margin-right: 5px; }
-.tab-btn.active { background: var(--primary); color: white; box-shadow: 0 4px 10px rgba(0, 82, 254, 0.2); }
-/* Onglet Problèmes : accent orangé (cohérent avec le badge d'anomalie dans la liste) */
-#tab-anomalies.active { background: #f97316; color: #fff; box-shadow: 0 4px 10px rgba(249, 115, 22, 0.3); }
+.tab-btn.active { background: var(--primary); color: #fff; box-shadow: 0 4px 10px rgba(249, 115, 22, 0.25); }
+/* Onglet Problèmes : rouge (cohérent avec le code couleur — rouge = anomalie) */
+#tab-anomalies.active { background: var(--danger); color: #fff; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3); }
 
 .filter-row { display: flex; gap: 10px; margin-bottom: 15px; }
 .filter-row input, .filter-row select { flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px; font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main); }
@@ -166,9 +169,11 @@ body {
 .citem-name { font-size: 1.05rem; font-weight: 800; color: var(--text-main); }
 .citem-amt { font-size: 1.2rem; font-weight: 800; white-space: nowrap; }
 .citem-sub { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 0.85rem; color: var(--text-sub); }
-.citem-sub i { margin-right: 5px; opacity: .8; width: 14px; text-align: center; }
+.citem-sub i, .citem-sub .ic-svg { margin-right: 5px; opacity: .8; width: 14px; text-align: center; }
 .citem-actions { display: flex; gap: 8px; margin-top: 4px; }
 .citem-actions button, .citem-actions a, .citem-actions span.archive-lock { flex: 1; }
+/* Boutons d'action de carte : icône + libellé centrés sur une seule ligne */
+.citem-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 
 /* ✅ Bouton "Appeler l'agent" (compteur non relevé) : action secondaire —
    "Saisir le relevé" (.btn-relever) reste l'action principale de la carte,
@@ -180,17 +185,17 @@ body {
     display: flex; align-items: center; justify-content: center; gap: 6px;
     padding: 11px 14px; border-radius: 12px; font-size: 0.85rem;
     cursor: pointer; font-weight: 700; text-decoration: none;
-    background: var(--card-bg); color: var(--success);
-    border: 1px solid rgba(34, 197, 94, 0.4);
-    transition: transform .1s, background .15s;
+    background: var(--card-bg); color: var(--text-sub);
+    border: 1px solid var(--border-color);
+    transition: transform .1s, background .15s, color .15s, border-color .15s;
 }
-.btn-call:hover { background: rgba(34, 197, 94, 0.1); }
+.btn-call:hover { color: var(--primary); border-color: var(--primary); }
 .btn-call:active { transform: scale(0.97); }
 
 /* ✅ "Saisir le relevé" : action principale d'un compteur non relevé — même
    traitement visuel que .btn-paye (bouton plein bleu), sous un nom propre
    au contexte "relève" plutôt que "paiement". */
-.btn-relever { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(0, 82, 254, 0.3); }
+.btn-relever { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(249, 115, 22, 0.3); }
 
 /* Ligne "Agent : Nom" — identité de l'agent en charge, dissociée du bouton
    d'appel pour que celui-ci reste court et ne s'étale jamais sur 2 lignes. */
@@ -206,31 +211,34 @@ body {
     font-size: 0.72rem; font-weight: 800; letter-spacing: .02em;
     padding: 4px 10px; border-radius: 20px; white-space: nowrap;
 }
-.status-pill-warn { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-[data-theme="dark"] .status-pill-warn { background: rgba(217, 119, 6, 0.15); color: #fbbf24; border-color: rgba(217, 119, 6, 0.35); }
+/* À relever : orange (invite à l'action principale « Saisir le relevé ») */
+.status-pill-warn { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+[data-theme="dark"] .status-pill-warn { background: rgba(249, 115, 22, 0.15); color: #fb923c; border-color: rgba(249, 115, 22, 0.35); }
 
+/* Payé : vert (succès) */
 .status-pill-paid { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
 [data-theme="dark"] .status-pill-paid { background: rgba(34, 197, 94, 0.15); color: #4ade80; border-color: rgba(34, 197, 94, 0.35); }
 
-.status-pill-unpaid { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-[data-theme="dark"] .status-pill-unpaid { background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.35); }
+/* Impayé : neutre (état d'attente normal — le rouge est réservé aux anomalies) */
+.status-pill-unpaid { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+[data-theme="dark"] .status-pill-unpaid { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border-color: rgba(148, 163, 184, 0.3); }
 
-/* Anomalie (erreur d'index) : même famille orangée que .bg-anomalie, mais
-   volontairement distincte de l'ambre "À relever" — l'une est une routine,
-   l'autre une donnée à corriger. */
-.status-pill-anomaly { background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; }
-[data-theme="dark"] .status-pill-anomaly { background: rgba(249, 115, 22, 0.15); color: #fb923c; border-color: rgba(249, 115, 22, 0.35); }
+/* Anomalie (erreur d'index) : rouge — donnée à corriger */
+.status-pill-anomaly { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+[data-theme="dark"] .status-pill-anomaly { background: rgba(239, 68, 68, 0.15); color: #f87171; border-color: rgba(239, 68, 68, 0.35); }
 
+/* Payé : vert (succès) */
 .bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
-.bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
-/* Anomalie (erreur d'index) : saumon/orangé — jamais le même rouge que "Impayé" */
-.bg-anomalie { background-color: #ffe8de !important; border: 2px solid #f97316 !important; }
+/* Impayé : neutre — état d'attente normal (le rouge est réservé aux anomalies) */
+.bg-impaye { background-color: var(--card-bg) !important; border-color: var(--border-color) !important; }
+/* Anomalie (erreur d'index) : rouge — donnée aberrante à corriger */
+.bg-anomalie { background-color: #fee2e2 !important; border: 2px solid var(--danger) !important; }
 /* Non relevé : gris neutre — une action à venir, pas un problème */
 .bg-non-releve { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
 
 [data-theme="dark"] .bg-paye     { background-color: rgba(34, 197, 94, 0.12) !important; border-color: rgba(34, 197, 94, 0.25) !important; }
-[data-theme="dark"] .bg-impaye   { background-color: rgba(239, 68, 68, 0.12) !important; border-color: rgba(239, 68, 68, 0.25) !important; }
-[data-theme="dark"] .bg-anomalie { background-color: rgba(249, 115, 22, 0.14) !important; border-color: rgba(249, 115, 22, 0.45) !important; }
+[data-theme="dark"] .bg-impaye   { background-color: rgba(148, 163, 184, 0.08) !important; border-color: rgba(148, 163, 184, 0.2) !important; }
+[data-theme="dark"] .bg-anomalie { background-color: rgba(239, 68, 68, 0.14) !important; border-color: rgba(239, 68, 68, 0.5) !important; }
 [data-theme="dark"] .bg-non-releve { background-color: rgba(148, 163, 184, 0.1) !important; border-color: rgba(148, 163, 184, 0.25) !important; }
 
 .bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
@@ -251,7 +259,7 @@ body {
 
 /* ✅ v4 : "Encaisser" est l'action principale de la page — gros bouton bleu
    bien visible, directement sur la carte (au lieu d'un petit bouton vert). */
-.btn-paye { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(0, 82, 254, 0.3); }
+.btn-paye { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(249, 115, 22, 0.3); }
 
 /* ✅ v4 : annuler un paiement est une correction courante, pas une
    suppression — un bouton gris neutre est moins anxiogène que le rouge
@@ -325,7 +333,7 @@ body {
 #toast { visibility: hidden; min-width: 250px; background-color: var(--success); color: #fff; text-align: center; border-radius: 10px; padding: 16px; position: fixed; z-index: 9999; left: 50%; transform: translateX(-50%); bottom: 30px; font-size: 0.9rem; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: visibility 0s, bottom 0.5s, opacity 0.5s; opacity: 0; }
 #toast.show { visibility: visible; bottom: 50px; opacity: 1; }
 
-#back-to-top { position: fixed; bottom: 30px; right: 30px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 1.2rem; cursor: pointer; box-shadow: 0 4px 15px rgba(0, 82, 254, 0.4); display: none; z-index: 1000; transition: transform 0.2s; }
+#back-to-top { position: fixed; bottom: 30px; right: 30px; background: var(--primary); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 1.2rem; cursor: pointer; box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); display: none; z-index: 1000; transition: transform 0.2s; }
 #back-to-top:active { transform: scale(0.9); }
 
 @media (min-width: 850px) {
@@ -342,7 +350,7 @@ body {
     border-radius: 20px;
     padding: 18px 20px;
     margin-bottom: 18px;
-    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.08);
 }
 .releves-progress-header {
     display: flex;
@@ -350,14 +358,14 @@ body {
     align-items: center;
     font-size: 0.9rem;
     font-weight: 700;
-    color: #7c3aed;
+    color: var(--asufor-action, #ea580c);
     margin-bottom: 10px;
 }
 .releves-progress-header i { margin-right: 6px; }
 .releves-progress-bar-bg {
     width: 100%;
     height: 12px;
-    background: rgba(124, 58, 237, 0.12);
+    background: var(--asufor-action-soft, rgba(249, 115, 22, 0.12));
     border-radius: 10px;
     overflow: hidden;
 }
@@ -365,7 +373,7 @@ body {
     height: 100%;
     border-radius: 10px;
     transition: width 0.6s ease, background 0.4s ease;
-    background: #7c3aed;
+    background: var(--asufor-action, #ea580c);
 }
 .releves-progress-pct {
     text-align: right;
@@ -380,9 +388,9 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(124, 58, 237, 0.12);
-    border: 1px solid rgba(124, 58, 237, 0.3);
-    color: #7c3aed;
+    background: var(--asufor-success-soft, rgba(34, 197, 94, 0.14));
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #15803d;
     font-size: 0.7rem;
     font-weight: 700;
     padding: 2px 8px;
@@ -390,7 +398,7 @@ body {
     margin-left: 6px;
 }
 [data-theme="dark"] .badge-releve {
-    background: rgba(167, 139, 250, 0.15);
-    border-color: rgba(167, 139, 250, 0.3);
-    color: #a78bfa;
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
 }

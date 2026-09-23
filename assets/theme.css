@@ -1,0 +1,62 @@
+/* assets/theme.css — Jetons de couleur unique de l'application ASUFOR.
+ *
+ * Refonte "système visuel" : une logique de couleur claire et unique, partagée
+ * par toutes les pages, pour une identité simple et professionnelle.
+ *
+ *   ORANGE  → action principale (boutons d'action, onglet actif, liens)
+ *   VERT    → succès / relevé effectué / encaissé
+ *   ROUGE   → anomalie / erreur (index décroissant, fuite, valeur aberrante)
+ *   GRIS    → neutre (états en attente, actions secondaires, bordures)
+ *
+ * Chaque page réutilise ces jetons ; ses variables locales historiques
+ * (`--primary`, `--accent`…) pointent désormais vers `--asufor-action` afin
+ * que tout l'existant bascule sur l'orange sans réécrire chaque règle.
+ */
+:root {
+    /* Action principale — orange */
+    --asufor-action:      #ea580c;               /* fond de bouton (texte blanc, gras) */
+    --asufor-action-2:    #f97316;               /* accents, jauges, icônes */
+    --asufor-action-soft: rgba(249, 115, 22, 0.12);
+    --asufor-action-ink:  #ffffff;
+
+    /* Succès — vert */
+    --asufor-success:      #16a34a;
+    --asufor-success-2:    #22c55e;
+    --asufor-success-soft: rgba(34, 197, 94, 0.14);
+
+    /* Anomalie / erreur — rouge */
+    --asufor-danger:      #dc2626;
+    --asufor-danger-2:    #ef4444;
+    --asufor-danger-soft: rgba(239, 68, 68, 0.12);
+
+    /* Neutre — gris */
+    --asufor-neutral:      #64748b;
+    --asufor-neutral-2:    #94a3b8;
+    --asufor-neutral-soft: rgba(100, 116, 139, 0.12);
+
+    /* Rayon d'angle standard */
+    --asufor-radius: 16px;
+}
+
+/* Sur fond sombre, l'orange 500 ressort mieux que l'orange 600. */
+:root[data-theme="dark"] {
+    --asufor-action:      #f97316;
+    --asufor-action-soft: rgba(249, 115, 22, 0.16);
+    --asufor-success-soft: rgba(34, 197, 94, 0.16);
+    --asufor-danger-soft:  rgba(239, 68, 68, 0.16);
+    --asufor-neutral-soft: rgba(148, 163, 184, 0.14);
+}
+
+/* ── Icônes SVG (voir assets/icons.js) ──
+   `.ic` est le conteneur inline ; `.ic-svg` le SVG lui-même. La couleur suit
+   `currentColor`, donc l'icône s'aligne toujours sur la couleur du texte. */
+.ic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    vertical-align: -0.125em;
+}
+/* inline-block + vertical-align : l'icône s'aligne au texte même hors conteneur
+   flex (ex. dans un <button> ou une phrase), sans jamais passer à la ligne. */
+.ic-svg { display: inline-block; vertical-align: -0.125em; width: 1em; height: 1em; flex: none; }
