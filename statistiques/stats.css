@@ -12,7 +12,7 @@
     --fs-micro: 0.75rem;    /* 12px */
     --btn-h: 40px;
     --radius-btn: 12px;
-    --radius-card: 14px;
+    --radius-card: 12px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -24,7 +24,7 @@ body {
 }
 
 .main-layout { display: flex; flex-direction: column; width: 100%; }
-.container { width: 100%; max-width: 500px; margin: 0 auto; padding: 15px; }
+.container { width: 100%; max-width: 500px; margin: 0 auto; padding: 14px; }
 
 .header { padding: 10px 0 15px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; row-gap: 10px; }
 .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -166,7 +166,7 @@ body {
 /* ✅ v5 : chips de filtre rapide avec compteur live (Tous 420 / Payés 312 /
    Impayés 72 / À relever 24 / Problèmes 12) — remplace les 4 onglets fixes,
    défile horizontalement sur mobile plutôt que de se tasser. */
-.chip-row { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chip-row { display: flex; flex-wrap: nowrap; gap: 8px; margin-bottom: 15px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; scrollbar-width: none; }
 .chip-row::-webkit-scrollbar { display: none; }
 .chip {
     flex: none; display: inline-flex; align-items: center; gap: 6px;
@@ -187,33 +187,60 @@ body {
 .filter-row { display: flex; gap: 10px; margin-bottom: 15px; }
 .filter-row input, .filter-row select { flex: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 15px; font-size: 0.85rem; outline: none; background-color: var(--card-bg); color: var(--text-main); }
 
-/* ✅ v5 : barre de contrôle sticky — recherche, tri et nombre de résultats
-   restent visibles pendant le défilement de la liste (mobile ET desktop). */
+/* ✅ v6 : barre de contrôle sticky compactée — titre "Clients (420)" (le
+   compteur d'éléments rejoint le titre au lieu d'occuper sa propre ligne),
+   recherche seule sur sa ligne (48-52px), puis tri + bouton filtre. */
 .list-controls-sticky {
     position: sticky; top: 0; z-index: 20; background: var(--card-bg);
-    padding-top: 4px; margin: 0 -20px; padding-left: 20px; padding-right: 20px;
+    padding-top: 6px; margin: 0 -16px; padding-left: 16px; padding-right: 16px;
     box-shadow: 0 8px 12px -8px rgba(15, 23, 42, 0.06);
 }
-.search-row { display: flex; gap: 10px; margin-bottom: 10px; }
-.filter-row-compact { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.filter-row-compact select { flex: 1; padding: 11px 12px; border: 1px solid var(--border-color); border-radius: 14px; font-size: var(--fs-meta); outline: none; background-color: var(--bg); color: var(--text-main); }
-.item-count-inline { flex: none; font-size: var(--fs-micro); font-weight: 700; color: var(--text-sub); white-space: nowrap; }
+.list-heading { display: flex; align-items: baseline; gap: 6px; font-size: 1rem; font-weight: 800; color: var(--text-main); margin: 0 0 8px; }
+.list-heading .count { font-weight: 700; color: var(--text-sub); font-size: var(--fs-meta); }
+.search-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.search-input {
+    height: 50px; width: 100%; padding: 0 45px 0 16px; border: 1px solid var(--border-color);
+    border-radius: 15px; font-size: var(--fs-data); outline: none; background-color: var(--bg); color: var(--text-main);
+    box-sizing: border-box;
+}
+.search-input:focus { border-color: var(--primary); }
+.filter-row-compact { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.filter-row-compact select { flex: 1; height: 44px; padding: 0 12px; border: 1px solid var(--border-color); border-radius: 14px; font-size: var(--fs-meta); outline: none; background-color: var(--bg); color: var(--text-main); }
+
+/* Bouton "Filtres" — options avancées (relevés/non relevés) qui ne tiennent
+   pas dans les chips, repliées derrière une icône plutôt qu'un 3e menu fixe. */
+.btn-filter-toggle {
+    position: relative; flex: none; width: 44px; height: 44px;
+    background: var(--bg); color: var(--text-sub); border: 1px solid var(--border-color);
+    border-radius: 14px; font-size: 0.95rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.btn-filter-toggle:hover, .btn-filter-toggle.open { color: var(--primary); border-color: var(--primary); }
+.btn-filter-toggle .dot { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); display: none; }
+.btn-filter-toggle.active .dot { display: block; }
+
+.filters-popover {
+    display: none; position: absolute; right: 16px; margin-top: 6px; z-index: 25;
+    min-width: 220px; background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 14px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14); padding: 12px; flex-direction: column; gap: 8px;
+}
+.filters-popover.open { display: flex; }
+.filters-popover label { font-size: var(--fs-micro); font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: .02em; }
+.filters-popover select { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 10px; font-size: var(--fs-meta); outline: none; background-color: var(--bg); color: var(--text-main); }
 
 @keyframes pulse-mic { 0% { transform: translateY(-50%) scale(1); opacity: 1; } 50% { transform: translateY(-50%) scale(1.2); opacity: 0.7; } 100% { transform: translateY(-50%) scale(1); opacity: 1; } }
 .mic-active { color: var(--danger) !important; animation: pulse-mic 1.5s infinite; }
 
-.list-section { background: var(--card-bg); border-radius: 35px 35px 0 0; padding: 25px 20px; min-height: 400px; box-shadow: 0 -5px 20px rgba(0,0,0,0.02); transition: background-color 0.3s; }
+.list-section { background: var(--card-bg); border-radius: 28px 28px 0 0; padding: 18px 16px; min-height: 400px; box-shadow: 0 -5px 20px rgba(0,0,0,0.02); transition: background-color 0.3s; }
 
-/* ✅ v3 : pour des utilisateurs novices, le fond coloré redevient un vrai
-   repère pédagogique — vert = terminé, rouge = argent à récupérer, saumon =
-   problème à vérifier (volontairement différent du rouge "impayé", pour ne
-   jamais confondre les deux situations), gris = action pas encore faite.
-   La couleur n'est cependant jamais seule : chaque carte porte aussi un
-   badge texte explicite (✓/✕/⚠/○). */
+/* ✅ v6 : carte blanche + fine bordure gauche colorée (au lieu d'un fond
+   plein vert/rouge sur toute la carte) — le badge de statut porte le sens,
+   la couleur reste un repère d'un coup d'œil sans alourdir visuellement des
+   centaines de cartes à l'écran. */
 /* ✅ v5 : carte compactée de 20-30 % — 3 lignes d'info (nom+montant / zone+
    compteur / index+conso) puis statut + actions, au lieu d'un empilement de
    6-7 lignes. Pensée pour un défilement de masse (des centaines de clients). */
-.item { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: var(--radius-card); margin-bottom: 8px; background: var(--bg); border: 1px solid var(--border-color); position: relative; }
+.item { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: var(--radius-card); margin-bottom: 7px; background: var(--card-bg); border: 1px solid var(--border-color); border-left: 4px solid var(--border-color); position: relative; }
 .citem-main { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .citem-name { font-size: var(--fs-name); font-weight: 800; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .citem-amt { font-size: var(--fs-name); font-weight: 800; white-space: nowrap; }
@@ -223,6 +250,9 @@ body {
 .citem-actions { display: flex; gap: 8px; margin-top: 2px; }
 .citem-actions button, .citem-actions a, .citem-actions span.archive-lock { flex: 1; }
 .citem-actions .btn-kebab { flex: none; }
+/* ✅ v6 : carte payée sans action principale — le ⋮ reste seul à droite, pas
+   de grande zone vide en dessous du badge. */
+.citem-actions .card-menu-wrap { margin-left: auto; }
 
 /* ✅ "Saisir le relevé" : action principale d'un compteur non relevé — même
    traitement visuel que .btn-paye (bouton plein bleu), sous un nom propre
@@ -249,14 +279,17 @@ body {
    l'autre une donnée à corriger. */
 .status-pill-anomaly { background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; }
 
-.bg-paye   { background-color: #dcfce7 !important; border-color: #bbf7d0 !important; }
-.bg-impaye { background-color: #fee2e2 !important; border-color: #fecaca !important; }
-/* Anomalie (erreur d'index) : saumon/orangé — jamais le même rouge que "Impayé" */
-.bg-anomalie { background-color: #ffe8de !important; border: 2px solid #f97316 !important; }
+/* ✅ v6 : la couleur d'état vit désormais sur la bordure gauche (4px), pas
+   sur tout le fond de la carte — le badge de statut (.status-pill-*) reste
+   la source de vérité textuelle, la bordure n'est qu'un repère visuel rapide. */
+.bg-paye   { border-left-color: var(--success); }
+.bg-impaye { border-left-color: var(--danger); }
+/* Anomalie (erreur d'index) : orangé — jamais le même rouge que "Impayé" */
+.bg-anomalie { border-left-color: #f97316; }
 /* Non relevé : gris neutre — une action à venir, pas un problème */
-.bg-non-releve { background-color: #f1f5f9 !important; border-color: #e2e8f0 !important; }
+.bg-non-releve { border-left-color: #94a3b8; }
 
-.bg-alerte-fuite { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; }
+.bg-alerte-fuite { border-left-color: var(--danger); border-left-width: 6px; }
 
 /* ✅ Anomalie minimale au niveau du compteur : raison (une ligne, tronquée)
    pour laquelle il n'a pas pu être relevé — pas de page dédiée. */
@@ -289,9 +322,13 @@ body {
     display: flex; align-items: center; justify-content: center;
 }
 .btn-kebab:hover { color: var(--primary); border-color: var(--primary); }
+/* ✅ v6 : positionné en JS (position: fixed, coordonnées calculées depuis le
+   bouton ⋮ avec détection des bords du viewport) — ne dépend plus du flux de
+   la carte, ne peut donc plus sortir de l'écran ni être coupé par un parent
+   avec overflow. Voir toggleCardMenu() dans stats.js. */
 .card-menu-dropdown {
-    display: none; position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 30;
-    min-width: 190px; background: var(--card-bg); border: 1px solid var(--border-color);
+    display: none; position: fixed; z-index: 1200;
+    min-width: 200px; max-width: calc(100vw - 24px); background: var(--card-bg); border: 1px solid var(--border-color);
     border-radius: 14px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16); padding: 6px; flex-direction: column;
 }
 .card-menu-dropdown.open { display: flex; }
@@ -309,23 +346,6 @@ body {
 /* ✅ v4 : "Encaisser" est l'action principale de la page — gros bouton bleu
    bien visible, directement sur la carte (au lieu d'un petit bouton vert). */
 .btn-paye { background: var(--primary); color: white; box-shadow: 0 3px 8px rgba(0, 82, 254, 0.3); }
-
-/* ✅ v4 : annuler un paiement est une correction courante, pas une
-   suppression — un bouton gris neutre est moins anxiogène que le rouge
-   (réservé aux vraies suppressions définitives ailleurs dans l'appli). */
-.btn-revoquer {
-    background: var(--card-bg); color: var(--text-sub); border: 1px solid var(--border-color);
-}
-.btn-revoquer:hover { color: var(--text-main); border-color: var(--text-sub); }
-
-/* ✅ v4 : "Modifier" en gris neutre (au lieu du jaune moutarde, jugé
-   agressif) — reste distinct grâce au texte, pas besoin d'une couleur vive. */
-.btn-edit {
-    background: var(--card-bg); color: var(--text-sub); border: 1px solid var(--border-color);
-}
-.btn-edit:hover { color: var(--primary); border-color: var(--primary); }
-/* Bouton "Corriger le relevé" (carte anomalie) : même famille que btn-edit, avec libellé */
-.btn-fix { white-space: nowrap; }
 
 .load-more { width: 100%; padding: 15px; background: var(--bg); border: 1px dashed var(--text-sub); color: var(--text-main); border-radius: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
 
@@ -413,16 +433,18 @@ body {
 #toast { visibility: hidden; min-width: 250px; background-color: var(--success); color: #fff; text-align: center; border-radius: 10px; padding: 16px; position: fixed; z-index: 9999; left: 50%; transform: translateX(-50%); bottom: 30px; font-size: 0.9rem; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: visibility 0s, bottom 0.5s, opacity 0.5s; opacity: 0; }
 #toast.show { visibility: visible; bottom: 50px; opacity: 1; }
 
-/* ✅ v5 : plus petit, plus discret et translucide — l'ancienne pastille bleue
-   pleine recouvrait parfois les actions de la dernière carte visible. */
+/* ✅ v6 : rendu encore plus discret — petit cercle fantôme (contour, pas de
+   fond plein) qui ne concurrence plus les couleurs de la page, visible
+   seulement après un long défilement. */
 #back-to-top {
-    position: fixed; bottom: 18px; right: 18px;
-    background: rgba(0, 82, 254, 0.85); backdrop-filter: blur(4px);
-    color: white; border: none; border-radius: 50%; width: 40px; height: 40px;
-    font-size: 0.95rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 82, 254, 0.25);
-    display: none; z-index: 1000; transition: transform 0.2s, opacity .2s; opacity: 0.85;
+    position: fixed; bottom: 16px; right: 16px;
+    background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(4px);
+    color: var(--text-sub); border: 1px solid var(--border-color); border-radius: 50%;
+    width: 34px; height: 34px;
+    font-size: 0.8rem; cursor: pointer; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+    display: none; z-index: 1000; transition: transform 0.2s, opacity .2s; opacity: 0.55;
 }
-#back-to-top:hover { opacity: 1; }
+#back-to-top:hover { opacity: 1; color: var(--primary); border-color: var(--primary); }
 #back-to-top:active { transform: scale(0.9); }
 
 @media print {
