@@ -168,17 +168,20 @@
     </div>
 
     <div class="list-section" id="scrollable-list">
-        <!-- ✅ v5 : barre de contrôle sticky — recherche, tri et nombre de
-             résultats restent visibles pendant le défilement de la liste. -->
+        <!-- ✅ v6 : barre de contrôle sticky compactée — le nombre de résultats
+             rejoint le titre ("Clients (420)"), la recherche est seule sur sa
+             ligne (48-52px), tri + bouton filtre partagent la ligne suivante. -->
         <div class="list-controls-sticky">
+            <h3 class="list-heading">Clients <span class="count" id="item-count">(0)</span></h3>
+
             <div class="search-row">
                 <div style="position: relative; display: flex; flex: 1;">
                     <input
                         type="text"
                         id="search-client"
+                        class="search-input"
                         placeholder="🔍 Rechercher client ou compteur..."
                         oninput="applyFilter()"
-                        style="padding-right: 45px; width: 100%;"
                     >
                     <button
                         id="btn-mic"
@@ -200,7 +203,19 @@
                     <option value="name">Par Nom (A-Z)</option>
                     <option value="compteur">Par N° Compteur</option>
                 </select>
-                <span id="item-count" class="item-count-inline">0 élément(s)</span>
+                <button class="btn-filter-toggle" id="btn-filter-toggle" onclick="toggleFiltersPopover(event)" title="Filtres avancés" aria-label="Filtres avancés">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span class="dot"></span>
+                </button>
+            </div>
+
+            <div class="filters-popover" id="filters-popover">
+                <label for="releve-filter">Statut de relevé</label>
+                <select id="releve-filter" onchange="setReleveFilter(this.value)">
+                    <option value="all">Tous les relevés</option>
+                    <option value="releves">Relevés uniquement</option>
+                    <option value="non-releves">Non relevés uniquement</option>
+                </select>
             </div>
 
             <div id="zone-filter-chip" class="zone-filter-chip">

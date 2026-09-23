@@ -120,8 +120,47 @@ window.setQuickFilter = function(name) {
     if (chipEl) chipEl.classList.add('active');
     const progressCard = document.getElementById('releves-progress-card');
     if (progressCard) progressCard.style.display = (releveFilter === 'releves' || releveFilter === 'non-releves') ? 'block' : 'none';
+    // ✅ v6 : garde le sélecteur "Statut de relevé" du popover avancé en phase
+    // avec la chip cliquée (les deux pilotent la même variable releveFilter).
+    const releveSelect = document.getElementById('releve-filter');
+    if (releveSelect) releveSelect.value = releveFilter;
+    updateFilterToggleDot();
     window.applyFilter();
 };
+
+// ✅ v6 : filtre secondaire du popover "Filtres avancés" — indépendant des
+// chips (ex. combiner l'onglet Impayés avec Non relevés uniquement).
+window.setReleveFilter = function(value) {
+    releveFilter = value;
+    displayLimit = 100;
+    const progressCard = document.getElementById('releves-progress-card');
+    if (progressCard) progressCard.style.display = (value === 'releves' || value === 'non-releves') ? 'block' : 'none';
+    updateFilterToggleDot();
+    window.applyFilter();
+};
+
+function updateFilterToggleDot() {
+    const btn = document.getElementById('btn-filter-toggle');
+    if (btn) btn.classList.toggle('active', releveFilter !== 'all');
+}
+
+// ✅ v6 : bouton "Filtres" (options avancées repliées derrière une icône,
+// à côté du tri, plutôt qu'une 3e ligne de contrôles toujours visible).
+window.toggleFiltersPopover = function(event) {
+    event.stopPropagation();
+    const popover = document.getElementById('filters-popover');
+    const btn = document.getElementById('btn-filter-toggle');
+    if (!popover) return;
+    const willOpen = !popover.classList.contains('open');
+    popover.classList.toggle('open', willOpen);
+    if (btn) btn.classList.toggle('open', willOpen);
+};
+function closeFiltersPopover() {
+    const popover = document.getElementById('filters-popover');
+    const btn = document.getElementById('btn-filter-toggle');
+    if (popover) popover.classList.remove('open');
+    if (btn) btn.classList.remove('open');
+}
 
 // ✅ v5 : un clic sur un quartier ("Où consomme-t-on le plus ?") filtre la
 // liste sur ce quartier — un petit chip amovible rappelle le filtre actif.
@@ -148,23 +187,70 @@ window.resetAllFilters = function() {
     const search = document.getElementById('search-client');
     const sort = document.getElementById('sort-spinner');
     const agent = document.getElementById('agent-spinner');
+    const releveSelect = document.getElementById('releve-filter');
     if (search) search.value = '';
     if (sort) sort.value = 'recent';
     if (agent) agent.value = 'all';
+    if (releveSelect) releveSelect.value = 'all';
     window.clearZoneFilter();
     window.setQuickFilter('all');
 };
 
-// ✅ v5 : menu ⋮ (actions secondaires d'une carte) — un seul menu ouvert à la
-// fois, fermé au clic en dehors (voir l'écouteur global plus bas).
+// ✅ v6 : menu ⋮ ancré au bouton avec détection des bords du viewport —
+// s'ouvre vers le bas/la droite par défaut, bascule vers le haut et/ou la
+// gauche s'il n'y a pas la place, toujours entièrement dans l'écran. Un seul
+// menu ouvert à la fois (voir l'écouteur global plus bas pour la fermeture
+// au clic en dehors / au scroll).
 window.toggleCardMenu = function(event, menuId) {
     event.stopPropagation();
     const dropdown = document.getElementById(menuId);
     if (!dropdown) return;
     const wasOpen = dropdown.classList.contains('open');
     document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
-    if (!wasOpen) dropdown.classList.add('open');
+    if (wasOpen) return;
+
+    const btn = event.currentTarget;
+    const btnRect = btn.getBoundingClientRect();
+    const margin = 8;
+
+    // Mesure la taille réelle du menu (contenu variable : Modifier + Corriger
+    // + méta d'audit ou juste "Appeler...") avant de calculer sa position —
+    // masqué le temps de la mesure pour éviter tout flash au mauvais endroit.
+    dropdown.style.visibility = 'hidden';
+    dropdown.style.left = '0px';
+    dropdown.style.top = '0px';
+    dropdown.classList.add('open');
+    const menuW = dropdown.offsetWidth;
+    const menuH = dropdown.offsetHeight;
+
+    // Horizontal : aligné sur le bord droit du bouton par défaut ; bascule
+    // sur le bord gauche du bouton (s'ouvre "vers la droite" de l'écran) si
+    // ça déborderait à gauche ; toujours clampé pour ne jamais sortir à droite.
+    let left = btnRect.right - menuW;
+    if (left < margin) left = btnRect.left;
+    left = Math.min(left, window.innerWidth - menuW - margin);
+    left = Math.max(margin, left);
+
+    // Vertical : ouvre sous le bouton par défaut, bascule au-dessus s'il n'y
+    // a pas assez de place en bas du viewport.
+    let top = btnRect.bottom + 6;
+    if (top + menuH > window.innerHeight - margin) {
+        top = btnRect.top - menuH - 6;
+    }
+    top = Math.max(margin, top);
+
+    dropdown.style.left = Math.round(left) + 'px';
+    dropdown.style.top = Math.round(top) + 'px';
+    dropdown.style.visibility = 'visible';
 };
+
+// Ferme tout menu/popover flottant — appelé au scroll (position: fixed ne
+// suit pas le défilement d'un conteneur, mieux vaut fermer que désynchronisé).
+function closeAllFloatingMenus() {
+    document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
+    closeExportMenu();
+    closeFiltersPopover();
+}
 
 // ✅ v5 : un seul bouton "Exporter" ouvrant PDF / Excel / Imprimer, au lieu
 // de deux boutons fixes qui prenaient beaucoup de largeur sur mobile.
@@ -188,12 +274,13 @@ window.closeExportMenuAnd = function(fn) {
     if (typeof fn === 'function') fn();
 };
 
-// Ferme les menus ouverts (carte, export) au clic en dehors.
+// Ferme les menus ouverts (carte, export, filtres) au clic en dehors.
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.card-menu-wrap')) {
         document.querySelectorAll('.card-menu-dropdown.open').forEach(d => d.classList.remove('open'));
     }
     if (!e.target.closest('.export-wrap')) closeExportMenu();
+    if (!e.target.closest('.filter-row-compact') && !e.target.closest('.filters-popover')) closeFiltersPopover();
 });
 
 // --- ÉTAT DE SYNCHRONISATION (discret, uniquement pour NOS écritures) ---
@@ -950,7 +1037,7 @@ function renderList() {
     const esc = escHtml;
     const listDiv = document.getElementById('releves-list');
     listDiv.innerHTML = "";
-    document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s)`;
+    document.getElementById('item-count').innerText = `(${currentFilteredData.length})`;
     const dataToShow = currentFilteredData.slice(0, displayLimit);
 
     // ✅ v5 : état vide — évite un écran silencieux quand un filtre/recherche
@@ -1046,7 +1133,7 @@ function renderList() {
         if (isIndexError) {
             const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
             const fixOrLock = canFix
-                ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
+                ? `<button class="btn-paye" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
             div.className = 'item bg-anomalie';
             div.innerHTML = `
@@ -1130,7 +1217,7 @@ function renderList() {
             <div class="citem-sub">
                 <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
                 <span><i class="fa-solid fa-gauge"></i>N° ${esc(item.numero_compteur || 'N/A')}</span>
-                <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
+                <span><i class="fa-solid fa-droplet"></i>${realConso} m³</span>
             </div>
             <div class="citem-row2">
                 <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
@@ -1256,6 +1343,10 @@ if (editModal) {
 }
 
 function handleScroll() {
+    // ✅ v6 : les menus ⋮/export/filtres sont en position: fixed — ils ne
+    // suivent pas le défilement d'un conteneur, donc on les ferme plutôt que
+    // de les laisser se désynchroniser de leur bouton.
+    closeAllFloatingMenus();
     const listElement = document.getElementById('scrollable-list');
     const isBottomWindow = (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50;
     const isBottomDiv = listElement && (listElement.scrollTop + listElement.clientHeight) >= listElement.scrollHeight - 50;
