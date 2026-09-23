@@ -45,7 +45,7 @@
            rouge pour les impayés/alertes uniquement, ambre pour les
            avertissements (dépenses/motivations = argent qui sort). */
         :root {
-            --bg: #f8fafc; --primary: #0052fe; --card: #ffffff;
+            --bg: #f8fafc; --primary: #ea580c; --card: #ffffff;
             --text: #1e293b; --sub: #64748b; --success: #22c55e;
             --danger: #ef4444; --amber: #f59e0b; --border: rgba(0,0,0,0.06);
         }
@@ -198,7 +198,7 @@
         .seg { display: flex; gap: 8px; margin-bottom: 14px; }
         .seg label { flex: 1; text-align: center; padding: 10px; border-radius: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--bg); font-weight: 600; font-size: .88rem; }
         .seg input { display: none; }
-        .seg label:has(input:checked) { border-color: var(--primary); background: rgba(0,82,254,0.08); color: var(--primary); }
+        .seg label:has(input:checked) { border-color: var(--primary); background: rgba(234,88,12,0.10); color: var(--primary); }
         .field { margin-bottom: 14px; }
         .field > label { display: block; font-size: .72rem; font-weight: 700; color: var(--sub); margin-bottom: 6px; text-transform: uppercase; }
         select { width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: .9rem; outline: none; }
@@ -247,7 +247,9 @@
             <svg class="ic" style="margin:0;" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         </a>
         <h1>Rapports &amp; Bilan</h1>
-        <button class="icon-btn" onclick="toggleTheme()" title="Changer le thème">🌓</button>
+        <button class="icon-btn" onclick="toggleTheme()" title="Changer le thème" aria-label="Changer le thème">
+            <svg class="ic" style="margin:0" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
     </header>
 
     <div class="period-bar">
@@ -401,7 +403,7 @@
     <div class="modal-panel">
         <div class="modal-head">
             <h2><svg class="ic" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM8 9h8M8 13h5"/></svg>Dépenses — <span id="expense-period">…</span></h2>
-            <button class="modal-close" onclick="window.closeExpenseModal()">✕</button>
+            <button class="modal-close" onclick="window.closeExpenseModal()" aria-label="Fermer"><svg class="ic" style="margin:0" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="expense-add" id="expense-add">
             <input type="text" class="exp-inp lib" id="exp-new-lib" placeholder="Libellé (ex: carburant groupe)" maxlength="120">
@@ -418,7 +420,7 @@
     <div class="modal-panel">
         <div class="modal-head">
             <h2><svg class="ic" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>Primes &amp; rémunérations — <span id="motivation-period">…</span></h2>
-            <button class="modal-close" onclick="window.closeMotivationModal()">✕</button>
+            <button class="modal-close" onclick="window.closeMotivationModal()" aria-label="Fermer"><svg class="ic" style="margin:0" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <p class="hint">Somme totale perçue − liste des bénéficiaires qui reçoivent une prime ou une rémunération (président, trésorier, secrétaire, agents releveurs, programmeur, frais de développement…).</p>
         <div class="expense-add" id="motivation-add">

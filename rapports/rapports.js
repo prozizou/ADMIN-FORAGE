@@ -352,7 +352,7 @@ function renderFinanceChart() {
 
     // Met en évidence la période sélectionnée
     const selKey = cycleKey(selCycle);
-    const colorsEnc = cycles.map(c => c === selKey ? '#38bdf8' : '#0052fe');
+    const colorsEnc = cycles.map(c => c === selKey ? '#fb923c' : '#ea580c');
 
     const ctx = document.getElementById('chart-recettes');
     if (!ctx || typeof Chart === 'undefined') return;
@@ -400,7 +400,7 @@ function renderTopDebiteurs() {
 
     const box = document.getElementById('top-debiteurs');
     if (!debiteurs.length) {
-        box.innerHTML = '<p class="muted">Aucun débiteur — tout est réglé 🎉</p>';
+        box.innerHTML = '<p class="muted">Aucun débiteur — tout est réglé.</p>';
         return;
     }
 
@@ -493,7 +493,7 @@ function renderExpenses() {
                     <small>N° ${esc(expenseCode(ck, d.key))} · ${esc(d.date || '')}${d.created_by ? ' · ' + esc(d.created_by) : ''}</small>
                 </div>
                 <span class="row-amt" style="color:var(--amber)">${fMoney(d.montant)}</span>
-                ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteExpense('${ck}','${d.key}')">✕</button>` : ''}
+                ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteExpense('${ck}','${d.key}')"><svg class="ic" style="margin:0" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>` : ''}
             </div>`).join('');
     }
     setText('expense-total', fMoney(total));
@@ -555,7 +555,7 @@ function renderMotivations(curMetrics) {
                     <small>N° ${esc(motivationCode(ck, d.key))}${d.created_by ? ' · ' + esc(d.created_by) : ''}</small>
                 </div>
                 <span class="row-amt" style="color:var(--amber)">${fMoney(d.montant)}</span>
-                ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteMotivation('${ck}','${d.key}')">✕</button>` : ''}
+                ${canEditExpenses ? `<button class="exp-del" title="Supprimer" onclick="deleteMotivation('${ck}','${d.key}')"><svg class="ic" style="margin:0" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>` : ''}
             </div>`).join('');
     }
 
@@ -702,7 +702,7 @@ function pdfHeader(doc, titre, sousTitre) {
     if (logoDataUrl) {
         try { doc.addImage(logoDataUrl, 'PNG', 14, 8, 16, 16); x = 34; } catch (_) {}
     }
-    doc.setFontSize(16); doc.setTextColor(0, 82, 254);
+    doc.setFontSize(16); doc.setTextColor(234, 88, 12);
     doc.text(forageBranding, x, 16);
     doc.setFontSize(13); doc.setTextColor(30, 41, 59);
     doc.text(titre, x, 25);
@@ -792,7 +792,7 @@ function genererMensuel() {
             ['Taux de recouvrement', m.taux.toFixed(1) + ' %'],
             ['Anomalies signalées', String(m.anomalies)]
         ],
-        theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 10 }
+        theme: 'striped', headStyles: { fillColor: [234, 88, 12] }, styles: { fontSize: 10 }
     });
 
     const zoneRows = Object.entries(m.zones).map(([zone, z]) => {
@@ -854,7 +854,7 @@ function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses, mo
             ['Écart m³ (facturé − payé)', fNumber(tVolumeEcart) + ' m³'],
             ['Valeur de l\'écart m³', fMoney(tImpayes)]
         ],
-        theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 10 }
+        theme: 'striped', headStyles: { fillColor: [234, 88, 12] }, styles: { fontSize: 10 }
     });
 
     rows.push([
@@ -867,7 +867,7 @@ function genererPeriode({ cycles, year, titre, sousTitre, filename, expenses, mo
     doc.autoTable({
         startY: doc.lastAutoTable.finalY + 8,
         head: [['Mois', 'Cpt', 'Volume (m³)', 'Facturé', 'Encaissé', 'Taux']],
-        body: rows, theme: 'striped', headStyles: { fillColor: [0, 82, 254] }, styles: { fontSize: 9 }
+        body: rows, theme: 'striped', headStyles: { fillColor: [234, 88, 12] }, styles: { fontSize: 9 }
     });
 
     const expForPdf = expenses.map(e => ({ libelle: `${e.cycle} — ${e.libelle || 'Dépense'}`, montant: e.montant }));
