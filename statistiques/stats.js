@@ -66,16 +66,18 @@ async function loadForageBranding() {
 const escHtml = window.escHtml || (s => String(s == null ? '' : s)
     .replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c])));
 
+// ✅ Icône SVG inline (bibliothèque unique, voir assets/icons.js) — utilisée
+//   dans les templates ci-dessous à la place des <i class="fa-…"> et des emojis.
+const I = (name) => (window.AsuforIcons ? window.AsuforIcons.svg(name) : '');
+
 // ✅ CORRECTION : Restaurer le thème enregistré dès le chargement
 (function restoreTheme() {
     try {
         const saved = localStorage.getItem('asufor-theme') || 'dark';
         document.documentElement.setAttribute('data-theme', saved);
         const icon = document.getElementById('theme-icon');
-        if (icon) {
-            if (saved === 'light') {
-                icon.classList.replace('fa-moon', 'fa-sun');
-            }
+        if (icon && window.AsuforIcons) {
+            icon.innerHTML = window.AsuforIcons.svg(saved === 'light' ? 'sun' : 'theme');
         }
     } catch(_) {}
 })();
@@ -102,12 +104,8 @@ window.toggleTheme = function() {
     html.setAttribute('data-theme', next);
     try { localStorage.setItem('asufor-theme', next); } catch(_) {}
     const icon = document.getElementById('theme-icon');
-    if (icon) {
-        if (next === 'light') {
-            icon.classList.replace('fa-moon', 'fa-sun');
-        } else {
-            icon.classList.replace('fa-sun', 'fa-moon');
-        }
+    if (icon && window.AsuforIcons) {
+        icon.innerHTML = window.AsuforIcons.svg(next === 'light' ? 'sun' : 'theme');
     }
     // ✅ v4 : plus rien à recalculer ici — "Top 3 quartiers" et la carte
     // Bilan sont du HTML/CSS classique, réactifs au thème via les variables
@@ -154,7 +152,7 @@ window.scrollToTop = function() {
 // ✅ v4 : ton adouci ("Corriger" un paiement, pas une alerte "ATTENTION") —
 // cette action reste réversible, elle ne mérite pas un ton alarmant.
 window.confirmRevoke = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
+    if (isArchiveView) { showToast("Archive : lecture seule, modification impossible.", true); return; }
     if (confirm("Remettre cette facture en \"à encaisser\" ? Elle ne sera plus marquée comme payée.")) {
         window.updateStatus(key, 'impaye');
     }
@@ -163,7 +161,7 @@ window.confirmRevoke = function(key) {
 window.updateStatus = function(key, newStatus) {
     // ✅ v2 : verrou défensif — la carte ne propose déjà plus ce bouton sur une
     // archive, mais on bloque aussi l'appel direct (deuxième ligne de défense).
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
+    if (isArchiveView) { showToast("Archive : lecture seule, modification impossible.", true); return; }
     if (!currentActivePath) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
@@ -227,7 +225,7 @@ window.updateStatus = function(key, newStatus) {
     }
 
     update(ref(db), updates)
-        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "↩️ Paiement corrigé : facture remise à encaisser."))
+        .then(() => showToast(newStatus === 'paye' ? "Facture encaissée. Historique régularisé." : "Paiement corrigé : facture remise à encaisser."))
         .catch(err => {
             if (previousRecord) {
                 storeReleves[key] = previousRecord;
@@ -271,7 +269,7 @@ window.exportCSV = function() {
     link.href = URL.createObjectURL(blob);
     link.download = `ASUFOR_Export_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
-    showToast("✅ Fichier Excel téléchargé !");
+    showToast("Fichier Excel téléchargé.");
 };
 
 // ✅ v2 : libellé humain ("Août 2026 — Archive") au lieu du format technique
@@ -393,13 +391,13 @@ window.startSync = function() {
         storeAgents = snap.val() || {};
         const spinner = document.getElementById('agent-spinner');
         const active = spinner.value || "all";
-        let html = '<option value="all">🟢 Tous les agents (Global)</option>';
+        let html = '<option value="all">Tous les agents (Global)</option>';
         // ✅ FIX XSS : échapper nom/zone d'agent injectés dans les <option>
         const esc2 = escHtml;
         Object.entries(storeAgents).forEach(([key, a]) => {
             let name = (a.agent || "Inconnu").trim();
             let zone = a.zone ? ` [${esc2(a.zone)}]` : "";
-            html += `<option value="${esc2(key)}">👤 ${esc2(name.toUpperCase())}${zone}</option>`;
+            html += `<option value="${esc2(key)}">${esc2(name.toUpperCase())}${zone}</option>`;
         });
         spinner.innerHTML = html;
         spinner.value = active;
@@ -435,7 +433,7 @@ function isFuzzyMatch(query, target) {
 
 window.startVoiceSearch = function() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { showToast("⚠️ Non supporté.", true); return; }
+    if (!SpeechRecognition) { showToast("Recherche vocale non supportée sur cet appareil.", true); return; }
     const recognition = new SpeechRecognition();
     recognition.lang = 'fr-FR'; recognition.interimResults = false; recognition.maxAlternatives = 1;
     const micBtn = document.getElementById('btn-mic');
@@ -449,7 +447,7 @@ window.startVoiceSearch = function() {
         window.applyFilter();
     };
     recognition.onerror = function() { showToast("Erreur vocale", true); };
-    recognition.onend = function() { micBtn.classList.remove('mic-active'); searchInput.placeholder = "🔍 Rechercher..."; };
+    recognition.onend = function() { micBtn.classList.remove('mic-active'); searchInput.placeholder = "Rechercher client ou compteur..."; };
     recognition.start();
 };
 
@@ -593,7 +591,7 @@ window.applyFilter = function() {
     if (recapStoryEl) {
         recapStoryEl.textContent = tCFA_Impaye > 0
             ? `Il reste ${Math.round(tCFA_Impaye).toLocaleString()} F à encaisser ce mois-ci`
-            : '🎉 Tout est encaissé ce mois-ci !';
+            : 'Tout est encaissé ce mois-ci.';
     }
     const recapPctEl = document.getElementById('recap-pct');
     if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % encaissé';
@@ -655,7 +653,7 @@ function renderTopQuartiers() {
         <div class="quartier-row">
             <span class="quartier-rank">${i + 1}</span>
             <div class="quartier-info">
-                <div class="quartier-name"><i class="fa-solid fa-house"></i> ${escHtml(zone)}</div>
+                <div class="quartier-name">${I('house')} ${escHtml(zone)}</div>
                 <div class="quartier-bar-bg"><div class="quartier-bar-fill" style="width:${pct}%"></div></div>
             </div>
             <span class="quartier-val">${Math.round(val).toLocaleString()} m³</span>
@@ -713,7 +711,7 @@ function renderList() {
         if (isNotRead) {
             const arriere = item.arriere || 0;
             const arriereNote = arriere > 0
-                ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
+                ? `<div style="color:var(--asufor-action);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
                 : '';
             // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
             // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
@@ -721,8 +719,8 @@ function renderList() {
             // archive ; on ne retire pas cette possibilité, on la met juste
             // en avant plutôt que l'appel, qui n'est qu'un moyen d'y arriver.
             const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
-                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
-                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
+                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé">${I('edit')} Saisir le relevé</button>`
+                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule">${I('lock')}</span>` : '');
             // ✅ Appel de l'agent en charge, en action SECONDAIRE (contour,
             // pas un pavé plein) : numéro figé sur le relevé en priorité
             // (agent_tel, écrit à la création du compteur), sinon repli sur
@@ -737,21 +735,21 @@ function renderList() {
             const agentTel = agentTelRaw.replace(/[^0-9+]/g, '');
             const agentName = String(item.agent_name || agentInfo.agent || '').trim();
             const agentLine = agentName
-                ? `<div class="citem-agent"><i class="fa-solid fa-user"></i>Agent : ${esc(agentName)}</div>`
+                ? `<div class="citem-agent">${I('user')}Agent : ${esc(agentName)}</div>`
                 : '';
             const callBtn = agentTel
-                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler</a>`
+                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé">${I('phone')} Appeler</a>`
                 : '';
             div.className = 'item bg-non-releve';
             div.innerHTML = `
                 <div class="citem-main">
                     <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
-                    <span class="status-pill status-pill-warn">● À relever</span>
+                    <span class="status-pill status-pill-warn">${I('gauge')} À relever</span>
                 </div>
                 <div class="citem-sub">
-                    <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
-                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx} m³</span>
+                    <span>${I('location-dot')}${zoneName}</span>
+                    <span>${I('gauge')}Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                    <span>${I('droplet')}Dernier index : ${lIdx} m³</span>
                 </div>
                 ${arriereNote}
                 ${agentLine}
@@ -769,17 +767,17 @@ function renderList() {
         if (isIndexError) {
             const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
             const fixOrLock = canFix
-                ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
-                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
+                ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')">${I('edit')} Corriger le relevé</button>`
+                : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule">${I('lock')}</span>` : '');
             div.className = 'item bg-anomalie';
             div.innerHTML = `
                 <div class="citem-main">
                     <span class="citem-name">${esc(item.name || 'Inconnu')}</span>
-                    <span class="status-pill status-pill-anomaly">⚠ Compteur en erreur</span>
+                    <span class="status-pill status-pill-anomaly">${I('alert-triangle')} Compteur en erreur</span>
                 </div>
                 <div class="citem-sub">
-                    <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                    <span>${I('location-dot')}${zoneName}</span>
+                    <span>${I('gauge')}Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
                 </div>
                 <div style="font-size:0.85rem; color:var(--text-main);">Ancien index : <b>${lIdx} m³</b> → Nouvel index : <b>${nIdx} m³</b></div>
                 <div style="font-size:0.78rem; color:var(--text-sub);">Le nouvel index est inférieur à l'ancien : ce relevé doit être corrigé.</div>
@@ -795,14 +793,14 @@ function renderList() {
         const isPaid = item.status === 'paye';
         // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
         const arriereHtml = (!isPaid && arriere > 0)
-            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
+            ? `<div style="font-size:0.8rem;color:var(--asufor-action);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
             : '';
 
         // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
         // affichée normalement, avec une simple alerte en plus (contrairement
         // à l'erreur d'index, ce n'est pas une donnée aberrante).
         const anomalyHtml = (realConso > 100)
-            ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Consommation inhabituelle, à vérifier (&gt; 100 m³)</div>`
+            ? `<div class="leak-alert">${I('alert-triangle')} Consommation inhabituelle, à vérifier (&gt; 100 m³)</div>`
             : '';
 
         let auditHtml = item.last_modified_by
@@ -811,7 +809,7 @@ function renderList() {
 
         // Badge relevé affiché quand le filtre "Relevés uniquement" est actif
         const relevesBadge = (releveFilter === 'releves')
-            ? `<span class="badge-releve"><i class="fa-solid fa-gauge-high"></i> Relevé</span>`
+            ? `<span class="badge-releve">${I('check-circle')} Relevé</span>`
             : '';
 
         // ✅ v3 : icône + texte (« Modifier ») au lieu d'une icône seule — plus
@@ -819,7 +817,7 @@ function renderList() {
         // ✅ Action secondaire de la carte (voir statusBtn ci-dessous pour
         // l'action principale) — même hiérarchie que sur la carte "à relever".
         const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
-            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
+            ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données">${I('edit')} Modifier</button>`
             : '';
 
         // ✅ v4 : "Encaisser" est l'action principale de la page pour un
@@ -827,10 +825,10 @@ function renderList() {
         // "Annuler le paiement" → "Corriger" : une correction courante, pas
         // une suppression, n'a pas à être présentée en rouge vif.
         const statusBtn = isArchiveView
-            ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
+            ? `<span class="archive-lock" title="Archive : lecture seule">${I('lock')}</span>`
             : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
+                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')">${I('collect')} Encaisser</button>`
+                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')">${I('undo')} Corriger</button>`);
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
@@ -843,14 +841,14 @@ function renderList() {
         div.innerHTML = `
             <div class="citem-main">
                 <span class="citem-name">${esc(item.name || 'Inconnu')}${relevesBadge}</span>
-                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${totalDu.toLocaleString()} F</span>
+                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--text-main)'}">${totalDu.toLocaleString()} F</span>
             </div>
             <div class="citem-sub">
-                <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
-                <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
+                <span>${I('location-dot')}${zoneName}</span>
+                <span>${I('gauge')}Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
+                <span>${I('droplet')}${nIdx} m³ (préc. ${lIdx})</span>
             </div>
-            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
+            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? I('check-circle') + ' Payé' : I('alert-circle') + ' Impayé'}</span>
             ${arriereHtml}
             ${auditHtml}
             ${anomalyHtml}
@@ -865,14 +863,14 @@ function renderList() {
     const btnLoadMore = document.getElementById('btn-load-more');
     if (currentFilteredData.length > displayLimit) {
         btnLoadMore.style.display = "block";
-        btnLoadMore.innerText = `⬇️ Charger plus (${currentFilteredData.length - displayLimit} restants)`;
+        btnLoadMore.innerHTML = `${I('arrow-down')} Charger plus (${currentFilteredData.length - displayLimit} restants)`;
     } else {
         btnLoadMore.style.display = "none";
     }
 }
 
 window.openEditModal = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
+    if (isArchiveView) { showToast("Archive : lecture seule, modification impossible.", true); return; }
     const item = storeReleves[key];
     if (!item) {
         showToast("Relevé introuvable.", true);
@@ -894,12 +892,12 @@ window.closeEditModal = function() {
 // ✅ CORRECTION : submitEdit() exposé globalement (le form est maintenant un div dans le HTML)
 window.submitEdit = function() {
     if (isArchiveView) {
-        showToast("🔒 Archive : lecture seule, modification impossible.", true);
+        showToast("Archive : lecture seule, modification impossible.", true);
         closeEditModal();
         return;
     }
     if (currentUser.toLowerCase() !== 'président') {
-        showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
+        showToast("Accès refusé : seul le président peut modifier ces données.", true);
         closeEditModal();
         return;
     }
@@ -940,7 +938,7 @@ window.submitEdit = function() {
     const dbPath = `${currentActivePath}/${key}`;
     update(ref(db, dbPath), updatedData)
         .then(() => {
-            showToast("✅ Données du compteur mises à jour !");
+            showToast("Données du compteur mises à jour.");
             closeEditModal();
         })
         .catch(err => showToast("Erreur lors du mise à jour : " + err, true));
@@ -1084,6 +1082,6 @@ window.exportPDFImpayes = function() {
 
     const dateStr = new Date().toISOString().split('T')[0];
     doc.save(`ASUFOR_Impayes_${dateStr}.pdf`);
-    showToast("✅ Fichier PDF des impayés généré avec succès !");
+    showToast("Fichier PDF des impayés généré.");
 };
 

@@ -12,6 +12,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
 
     <link rel="manifest" href="../manifest.json">
+    <link rel="stylesheet" href="../assets/theme.css">
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -29,8 +30,8 @@
             --bg-color: #1a1e21;
             --text-main: #f1f5f9;
             --text-muted: rgba(241, 245, 249, 0.6);
-            --accent-blue: #38bdf8;
-            --accent-tint: rgba(56, 189, 248, 0.14);
+            --accent-blue: var(--asufor-action, #ea580c);
+            --accent-tint: var(--asufor-action-soft, rgba(249, 115, 22, 0.14));
             --danger: #f87171;
             --glass: rgba(255, 255, 255, 0.055);
             --glass-strong: rgba(255, 255, 255, 0.09);
@@ -223,7 +224,7 @@
             </div>
             <div class="topbar-actions">
                 <span class="role-chip" id="userRoleDisplay">…</span>
-                <button class="icon-btn" id="themeBtn" aria-label="Changer le thème" title="Mode clair / sombre">🌓</button>
+                <button class="icon-btn" id="themeBtn" aria-label="Changer le thème" title="Mode clair / sombre"><span class="ic" data-ic="theme"></span></button>
             </div>
         </header>
 
@@ -312,6 +313,8 @@
 
     <script src="../security.js"></script>
     <script src="../loader.js"></script>
+    <!-- ✅ Bibliothèque d'icônes SVG unique (remplace emojis + Font Awesome) -->
+    <script src="../assets/icons.js"></script>
     <script>
         // ✅ CORRECTION : checkAccess() avant tout
         const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);

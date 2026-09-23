@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v41';
+const CACHE_NAME = 'asufor-cache-v42';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -26,6 +26,8 @@ const APP_SHELL = [
     './firebase-config.js',
     './forage-context.js',
     './provisioning.js',
+    './assets/theme.css',
+    './assets/icons.js',
     './home/accueil.html',
     './counter/list.html',
     './statistiques/stats.html',
