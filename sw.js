@@ -1,4 +1,4 @@
-// sw.js — Service Worker ASUFOR v46 (professionnel)
+// sw.js — Service Worker Satigué Eau v47 (professionnel)
 //
 // Stratégie :
 //  • App shell (HTML/JS/CSS/icônes locaux) pré-cachés à l'installation.
@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v46';
+const CACHE_NAME = 'asufor-cache-v47';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -39,6 +39,7 @@ const APP_SHELL = [
     './equipe/equipe.html',
     './icons/icon-192.png',
     './icons/icon-512.png',
+    './icons/logo.png',
 ];
 
 // Domaines à ne JAMAIS mettre en cache localement
@@ -62,7 +63,7 @@ function shouldCache(url) {
 
 // ── INSTALL : pré-cache de l'app shell ──
 self.addEventListener('install', (e) => {
-    console.log('[SW] Installation v46');
+    console.log('[SW] Installation v47');
     e.waitUntil(
         caches.open(CACHE_NAME).then(cache =>
             // addAll échoue si un seul fichier manque → on tolère les absences
@@ -73,7 +74,7 @@ self.addEventListener('install', (e) => {
 
 // ── ACTIVATE : purge des anciens caches ──
 self.addEventListener('activate', (e) => {
-    console.log('[SW] Activation v46');
+    console.log('[SW] Activation v47');
     e.waitUntil(
         caches.keys().then(keys =>
             Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => {
@@ -116,7 +117,7 @@ self.addEventListener('fetch', (e) => {
                         off || new Response(
                             '<!doctype html><meta charset="utf-8"><title>Hors ligne</title>' +
                             '<body style="font-family:system-ui;text-align:center;padding:48px;background:#0f172a;color:#fff">' +
-                            '<h2>📡 Hors ligne</h2><p>Reconnectez-vous pour accéder à ASUFOR.</p></body>',
+                            '<h2>📡 Hors ligne</h2><p>Reconnectez-vous pour accéder à Satigué Eau.</p></body>',
                             { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
                         )
                     );

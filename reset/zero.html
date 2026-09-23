@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
@@ -15,7 +15,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Admin | Maintenance Master</title>
+    <title>Satigué Eau Admin | Maintenance Master</title>
 
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
@@ -70,18 +70,14 @@
         }
 
         .icon-db {
-            width: 60px; height: 60px;
-            background: rgba(59, 130, 246, 0.1);
-            border-radius: 20px;
-            display: inline-flex;
+            width: 64px; height: 64px;
+            display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 20px;
-            color: var(--primary);
-            margin-left: auto;
-            margin-right: auto;
+            margin: 0 auto 20px;
             flex-shrink: 0;
         }
+        .icon-db img { width: 100%; height: 100%; }
 
         h1 { margin: 0; font-size: 20px; font-weight: 800; }
 
@@ -281,11 +277,7 @@
 <body>
     <div class="card">
         <div class="icon-db">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-            </svg>
+            <img src="../icons/logo.png" alt="Satigué Eau">
         </div>
 
         <h1 id="page-h1">Maintenance</h1>
@@ -783,7 +775,7 @@
                 try {
                     const exportPayload = {
                         meta: {
-                            application:      'ASUFOR Admin',
+                            application:      'Satigué Eau Admin',
                             type_export:      'archive_cloture_cycle',
                             cycle:            cycleKey,
                             village:          villageName,
@@ -796,7 +788,7 @@
                     const url  = URL.createObjectURL(blob);
                     const a    = document.createElement('a');
                     a.href     = url;
-                    a.download = `asufor_archive_${villageName.replace(/\s+/g, '_')}_${cycleKey}.json`;
+                    a.download = `satigue_eau_archive_${villageName.replace(/\s+/g, '_')}_${cycleKey}.json`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);

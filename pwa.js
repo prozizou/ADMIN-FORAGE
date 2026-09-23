@@ -1,5 +1,5 @@
 /**
- * Gestionnaire PWA — ASUFOR Diandioly (v3, professionnel)
+ * Gestionnaire PWA — Satigué Eau (v3, professionnel)
  *
  * Fonctions :
  *  1. Enregistrement du Service Worker (chemin dérivé de CE script → marche à toute profondeur).
@@ -97,7 +97,7 @@
             var src = (PWA_SELF && PWA_SELF.src) ? PWA_SELF.src : '';
             if (src) base = src.replace(/pwa\.js(\?.*)?$/, '');
         } catch (_) {}
-        return '<div class="pwa-ic"><img src="' + base + 'icons/icon-192.png" alt="ASUFOR" onerror="this.parentNode.textContent=\'💧\'"></div>';
+        return '<div class="pwa-ic"><img src="' + base + 'icons/icon-192.png" alt="Satigué Eau" onerror="this.parentNode.textContent=\'💧\'"></div>';
     }
 
     function whenBody(fn) {
@@ -142,7 +142,7 @@
                     '<div class="pwa-row">' +
                         '<div class="pwa-left">' + iconMarkup() +
                             '<div class="pwa-txt">' +
-                                '<span class="pwa-title">Installer ASUFOR</span>' +
+                                '<span class="pwa-title">Installer Satigué Eau</span>' +
                                 '<span class="pwa-sub">Accès rapide depuis l\'écran d\'accueil</span>' +
                             '</div>' +
                         '</div>' +
@@ -179,7 +179,7 @@
                     '<div class="pwa-row">' +
                         '<div class="pwa-left">' + iconMarkup() +
                             '<div class="pwa-txt">' +
-                                '<span class="pwa-title">Installer ASUFOR</span>' +
+                                '<span class="pwa-title">Installer Satigué Eau</span>' +
                                 '<span class="pwa-sub">Ajoutez l\'app à votre écran d\'accueil</span>' +
                             '</div>' +
                         '</div>' +
@@ -234,7 +234,7 @@
                     '<div class="pwa-left">' + iconMarkup() +
                         '<div class="pwa-txt">' +
                             '<span class="pwa-title">Mise à jour disponible</span>' +
-                            '<span class="pwa-sub">Une nouvelle version d\'ASUFOR est prête</span>' +
+                            '<span class="pwa-sub">Une nouvelle version de Satigué Eau est prête</span>' +
                         '</div>' +
                     '</div>' +
                     '<div class="pwa-actions">' +

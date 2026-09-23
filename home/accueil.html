@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
@@ -15,7 +15,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR Admin – Accueil</title>
+    <title>Satigué Eau Admin – Accueil</title>
     <style>
         /* ── v2 : tableau de bord sobre "corporate" ──
            • En-tête compact (plus de titre géant chevauchant le bouton thème).
@@ -64,6 +64,8 @@
             padding: 6px 2px 26px;
         }
         .topbar-id { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .brand-row { display: flex; align-items: center; gap: 6px; }
+        .brand-logo-sm { width: 18px; height: 18px; flex: none; }
         .brand-label {
             font-size: 10px;
             font-weight: 700;
@@ -210,7 +212,10 @@
     <div class="page">
         <header class="topbar">
             <div class="topbar-id">
-                <span class="brand-label">ASUFOR Admin</span>
+                <span class="brand-row">
+                    <img class="brand-logo-sm" src="../icons/logo.png" alt="">
+                    <span class="brand-label">Satigué Eau Admin</span>
+                </span>
                 <h1 class="greeting" id="welcomeTitle">Bienvenue</h1>
             </div>
             <div class="topbar-actions">

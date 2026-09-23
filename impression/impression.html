@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="ASUFOR">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="../icons/favicon-16.png">
@@ -15,7 +15,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASUFOR - Impression v5</title>
+    <title>Satigué Eau - Impression v5</title>
     
     <!-- ✅ Sécurité centralisée -->
     <script src="../security.js"></script>
@@ -628,14 +628,14 @@
     // président, saisi obligatoirement à la création du forage) imprimés sur les
     // factures, résolus depuis Asufor/{forageKey}/config — jamais "DIANDIOLY" /
     // un numéro en dur, chaque village doit voir SES propres informations.
-    let forageVillage = 'ASUFOR';
+    let forageVillage = 'SATIGUE EAU';
     let forageTelephone = '';
     async function loadForageBranding() {
         try {
             const snap = await get(ref(db, P.config));
             const cfg = snap.exists() ? snap.val() : {};
-            forageVillage = (cfg.siege || cfg.nom || 'ASUFOR').toUpperCase();
-            document.title = 'ASUFOR ' + forageVillage + ' - Impression v5';
+            forageVillage = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
+            document.title = 'Satigué Eau ' + forageVillage + ' - Impression v5';
             // ⚠️ Repli historique : seul Diandioly (créé avant l'ajout de ce champ)
             // peut ne pas avoir de config.telephone — on garde alors son ancien
             // numéro en dur pour ne rien casser. Tout AUTRE forage sans numéro
