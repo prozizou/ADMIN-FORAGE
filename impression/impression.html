@@ -794,7 +794,7 @@
             const key = child.key;
 
             // Calcul complet via le moteur partagé
-            const stmt = window.Billing.computeStatement(d, indexedBackups, { beforeCycle });
+            const stmt = window.Billing.computeStatement(d, indexedBackups, { beforeCycle, fbKey: key });
             const montantMois = stmt.facture_courante;
             const arrieres    = stmt.arriere;
 

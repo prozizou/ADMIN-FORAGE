@@ -131,7 +131,14 @@
 
     /**
      * Transforme le noeud asufor_backup en index exploitable :
-     *   { cycle: "2026-06", records: { meterKey: record, ... } }, trié par cycle.
+     *   { cycle: "2026-06", records: { meterKey: record, ... },
+     *     byKey: { cléFirebase: record, ... } }, trié par cycle.
+     *
+     * `byKey` est l'identifiant fiable : la clôture copie la base active telle
+     * quelle dans l'archive, donc un client garde la MÊME clé Firebase d'un
+     * cycle à l'autre. `records` (numéro + zone) ne sert que de repli : deux
+     * clients sans numéro ou avec le même numéro dans une zone s'y écrasent,
+     * et un numéro/une zone corrigé(e) depuis ne s'y retrouve plus.
      *
      * @param {object} backupRoot - contenu de asufor_backup (Firebase).
      * @returns {Array<{cycle:string, records:object}>} cycles triés du + ancien au + récent.
@@ -145,16 +152,29 @@
             var donnees = node && node.donnees ? node.donnees : null;
             if (!donnees) return;
             var records = {};
+            var byKey = {};
             Object.keys(donnees).forEach(function (k) {
                 var rec = donnees[k];
                 if (rec && typeof rec === 'object') {
                     // On conserve la clé Firebase d'origine pour pouvoir écrire dessus plus tard
-                    records[meterKey(rec)] = Object.assign({ __fbkey: k, __cycle: cycle }, rec);
+                    var entry = Object.assign({ __fbkey: k, __cycle: cycle }, rec);
+                    records[meterKey(rec)] = entry;
+                    byKey[k] = entry;
                 }
             });
-            cycles.push({ cycle: cycle, records: records });
+            cycles.push({ cycle: cycle, records: records, byKey: byKey });
         });
         return cycles;
+    }
+
+    /**
+     * Relevé d'un compteur dans un cycle archivé : d'abord par clé Firebase
+     * (identité exacte du client), sinon par numéro + zone (données migrées
+     * ou compteur recréé sous une autre clé).
+     */
+    function findInCycle(entry, record, fbKey) {
+        if (fbKey && entry.byKey && entry.byKey[fbKey]) return entry.byKey[fbKey];
+        return entry.records[meterKey(record)] || null;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -171,6 +191,8 @@
      * @param {string} [opts.beforeCycle] - ne considérer que les cycles STRICTEMENT
      *                                       antérieurs à celui-ci (ex: "2026-07").
      *                                       Par défaut : tous les cycles du backup.
+     * @param {string} [opts.fbKey]       - clé Firebase du compteur (recherche exacte
+     *                                       dans chaque archive avant le repli numéro + zone).
      * @returns {{
      *   arriere: number,               // somme des impayés passés (>= 0)
      *   details: Array,                // [{cycle, montant, conso, anomalie, raison}]
@@ -179,7 +201,6 @@
      */
     function computeArrears(record, indexedBackups, opts) {
         opts = opts || {};
-        var mk = meterKey(record);
         var arriere = 0;
         var details = [];
         var anomalies = [];
@@ -188,7 +209,7 @@
             var entry = indexedBackups[i];
             if (opts.beforeCycle && !(entry.cycle < opts.beforeCycle)) continue;
 
-            var old = entry.records[mk];
+            var old = findInCycle(entry, record, opts.fbKey);
             if (!old) continue;                 // compteur absent de ce cycle
             if (isPaid(old)) continue;          // cycle réglé → pas d'arriéré
 
@@ -290,10 +311,10 @@
         updates[basePrefix + '/last_modified_at'] = ts;
 
         // b) Historique : chaque cycle impayé de CE compteur → paye + date_paiement
-        var mk = meterKey(record);
+        //    (même recherche que computeArrears : on solde exactement ce qui a été compté)
         for (var i = 0; i < indexedBackups.length; i++) {
             var entry = indexedBackups[i];
-            var old = entry.records[mk];
+            var old = findInCycle(entry, record, activeKey);
             if (!old) continue;
             if (isPaid(old)) continue;
 
