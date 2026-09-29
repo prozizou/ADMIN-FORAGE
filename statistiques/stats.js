@@ -35,6 +35,8 @@ let releveFilter = 'all';
 // ✅ v2 : vrai en consultant une période archivée — verrouille les actions
 // de modification (statut, édition) dans renderList() et les handlers.
 let isArchiveView = false;
+// Cycle ("YYYY-MM") de l'archive consultée, ou "actuel".
+let currentSelection = 'actuel';
 let displayLimit = 100;
 let currentFilteredData = [];
 let currentActivePath = "";
@@ -80,6 +82,10 @@ if (sessionRaw) {
 }
 
 // --- FONCTIONS UTILITAIRES ---
+function isPresident() {
+    return currentUser.toLowerCase() === 'président';
+}
+
 function showToast(msg, isError = false) {
     const toast = document.getElementById("toast");
     toast.innerText = msg;
@@ -318,8 +324,17 @@ async function loadDataForMonth(selection) {
     // actions de modification (statut, édition) et on l'indique clairement
     // (bandeau + libellé du bilan), au lieu d'un simple sélecteur technique.
     isArchiveView = (selection !== "actuel");
+    currentSelection = selection;
     const banner = document.getElementById('archive-banner');
     if (banner) banner.classList.toggle('visible', isArchiveView);
+    // ✅ Le président peut corriger les relevés (index, facteur…) d'une
+    // archive ; les statuts de paiement, eux, restent figés.
+    const bannerText = document.getElementById('archive-banner-text');
+    if (bannerText) {
+        bannerText.textContent = isPresident()
+            ? 'Archive — paiements figés. Vous pouvez corriger les relevés (index, facteur…).'
+            : 'Archive — données clôturées, lecture seule.';
+    }
     const recapTitle = document.getElementById('recap-title');
     if (recapTitle) recapTitle.textContent = isArchiveView ? `Bilan — ${monthLabelFR(selection)}` : 'Bilan du mois';
 
@@ -790,7 +805,7 @@ function renderList() {
             // l'objectif de la page. Elle reste réservée au président, hors
             // archive ; on ne retire pas cette possibilité, on la met juste
             // en avant plutôt que l'appel, qui n'est qu'un moyen d'y arriver.
-            const editOrLock = (!isArchiveView && currentUser.toLowerCase() === 'président')
+            const editOrLock = isPresident()
                 ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
             // ✅ Appel de l'agent en charge, en action SECONDAIRE (contour,
@@ -838,7 +853,7 @@ function renderList() {
         // du rouge "Impayé" pour ne pas confondre les deux situations.
         // ✅ v4 : "Compteur en erreur" — moins technique qu'"Anomalie de relevé".
         if (isIndexError) {
-            const canFix = !isArchiveView && currentUser.toLowerCase() === 'président';
+            const canFix = isPresident();
             const fixOrLock = canFix
                 ? `<button class="btn-edit btn-fix" onclick="openEditModal('${item.key}')"><i class="fa-solid fa-pen-to-square"></i> Corriger le relevé</button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
@@ -890,7 +905,8 @@ function renderList() {
         // explicite pour un utilisateur novice.
         // ✅ Action secondaire de la carte (voir statusBtn ci-dessous pour
         // l'action principale) — même hiérarchie que sur la carte "à relever".
-        const editBtn = (!isArchiveView && currentUser.toLowerCase() === 'président')
+        // ✅ Aussi disponible sur une archive : corriger un index d'un mois passé.
+        const editBtn = isPresident()
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
             : '';
 
@@ -945,7 +961,7 @@ function renderList() {
 }
 
 window.openEditModal = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
+    if (!isPresident()) { showToast("⛔ Seul le président peut modifier ces données.", true); return; }
     const item = storeReleves[key];
     if (!item) {
         showToast("Relevé introuvable.", true);
@@ -957,6 +973,14 @@ window.openEditModal = function(key) {
     document.getElementById('edit-last-index').value = item.last_index || '';
     document.getElementById('edit-new-index').value = item.new_index || '';
     document.getElementById('edit-facteur').value = item.facteur || '';
+    const titleEl = document.getElementById('edit-modal-title');
+    if (titleEl) {
+        titleEl.textContent = isArchiveView
+            ? `Modifier le relevé — ${monthLabelFR(currentSelection)}`
+            : 'Modifier le relevé';
+    }
+    const noteEl = document.getElementById('edit-archive-note');
+    if (noteEl) noteEl.style.display = isArchiveView ? 'block' : 'none';
     document.getElementById('edit-modal').style.display = 'flex';
 };
 
@@ -966,12 +990,7 @@ window.closeEditModal = function() {
 
 // ✅ CORRECTION : submitEdit() exposé globalement (le form est maintenant un div dans le HTML)
 window.submitEdit = function() {
-    if (isArchiveView) {
-        showToast("🔒 Archive : lecture seule, modification impossible.", true);
-        closeEditModal();
-        return;
-    }
-    if (currentUser.toLowerCase() !== 'président') {
+    if (!isPresident()) {
         showToast("⛔ Accès refusé : Seul le président peut modifier ces données.", true);
         closeEditModal();
         return;
@@ -1011,13 +1030,60 @@ window.submitEdit = function() {
     };
 
     const dbPath = `${currentActivePath}/${key}`;
-    update(ref(db, dbPath), updatedData)
+    const updates = {};
+    Object.entries(updatedData).forEach(([field, val]) => { updates[`${dbPath}/${field}`] = val; });
+
+    // ✅ Archive : si le nouvel index d'un mois passé change, l'ancien index du
+    // mois SUIVANT doit suivre (sinon la consommation du mois suivant est
+    // faussée). Le mois suivant est l'archive d'après, ou la base active si
+    // l'archive modifiée est la plus récente.
+    let propagatedTo = null;
+    const editedCycle = currentSelection;
+    const previousNewIdx = parseFloat((storeReleves[key] || {}).new_index);
+    if (isArchiveView && newIdx !== previousNewIdx) {
+        const next = nextCycleTarget(editedCycle, key);
+        if (next && confirm(`Reporter aussi ce nouvel index (${newIdx}) comme ancien index de ${next.label} ?`)) {
+            updates[`${next.path}/last_index`] = String(newIdx);
+            propagatedTo = next;
+        }
+    }
+
+    update(ref(db), updates)
         .then(() => {
-            showToast("✅ Données du compteur mises à jour !");
+            // Garder le cache des archives (arriérés billing.js) cohérent.
+            if (isArchiveView) patchBackupCache(editedCycle, key, updatedData);
+            if (propagatedTo && propagatedTo.cycle !== 'actuel') {
+                patchBackupCache(propagatedTo.cycle, key, { last_index: String(newIdx) });
+            }
+            showToast(propagatedTo
+                ? `✅ Relevé mis à jour (report sur ${propagatedTo.label}).`
+                : "✅ Données du compteur mises à jour !");
             closeEditModal();
         })
         .catch(err => showToast("Erreur lors du mise à jour : " + err, true));
 };
+
+// Cible du report d'index pour le mois qui suit `cycle` : archive suivante
+// (si le compteur y figure) ou, à défaut d'archive plus récente, base active.
+function nextCycleTarget(cycle, key) {
+    const later = Object.keys(allBackupsCache).filter(c => c > cycle).sort();
+    if (later.length) {
+        const nextCycle = later[0];
+        const donnees = (allBackupsCache[nextCycle] || {}).donnees || {};
+        if (!donnees[key]) return null;
+        return {
+            cycle: nextCycle,
+            label: monthLabelFR(nextCycle) + ' (archive)',
+            path: `${P.backup}/${nextCycle}/donnees/${key}`
+        };
+    }
+    return { cycle: 'actuel', label: 'la période actuelle', path: `${P.compteurs}/${key}` };
+}
+
+function patchBackupCache(cycle, key, fields) {
+    const donnees = allBackupsCache[cycle] && allBackupsCache[cycle].donnees;
+    if (donnees && donnees[key]) donnees[key] = { ...donnees[key], ...fields };
+}
 
 // Fermer le modal en cliquant sur l'overlay
 const editModal = document.getElementById('edit-modal');
