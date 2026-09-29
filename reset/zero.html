@@ -358,11 +358,7 @@
         // Renvoie l'index réel à conserver : le nouveau relevé s'il est valide et >= ancien,
         // sinon (non relevé, 0, ou aberrant) on CONSERVE l'ancien index. Jamais de retour à 0.
         function indexConserve(val) {
-            const lRaw = parseFloat(val.last_index);
-            const lIdx = Number.isFinite(lRaw) ? lRaw : 0;
-            const nRaw = parseFloat(val.new_index);
-            const nIdx = (Number.isFinite(nRaw) && nRaw >= lIdx) ? nRaw : lIdx;
-            return { lIdx, nIdx };
+            return window.Billing.indexConserve(val);   // logique centralisée (billing.js)
         }
 
         // ✅ CORRECTION v4 : Passcode de maintenance sécurisé.
@@ -607,19 +603,18 @@
                 // Marquer « payé » règle aussi les mois antérieurs encore impayés de ce
                 // client (comme le bouton Encaisser de Statistiques) — sinon leurs arriérés
                 // disparaîtraient du calcul sans avoir été payés.
-                if (newStat === 'paye' && window.Billing) {
+                let anomaliesIgnorees = 0;
+                if (newStat === 'paye') {
                     const bsnap = await get(ref(db, P.backup));
-                    const idx = window.Billing.indexBackups(bsnap.exists() ? bsnap.val() : {});
-                    const now = new Date().toISOString();
-                    idx.forEach(entry => {
-                        if (!(entry.cycle < prevCycleKey)) return;
-                        const old = entry.byKey[key];          // même clé Firebase d'un cycle à l'autre
-                        if (!old || window.Billing.isPaid(old)) return;
-                        const pfx = `${P.backup}/${entry.cycle}/donnees/${key}`;
-                        updates[`${pfx}/status`] = 'paye';
-                        updates[`${pfx}/statut`] = true;
-                        updates[`${pfx}/date_paiement`] = now;
+                    const settle = window.Billing.buildArchiveSettleUpdates({
+                        backupPath: P.backup,
+                        key: key,
+                        uptoCycle: prevCycleKey,
+                        indexedBackups: window.Billing.indexBackups(bsnap.exists() ? bsnap.val() : {}),
+                        by: (JSON.parse(localStorage.getItem('asufor_session') || '{}').role) || 'président'
                     });
+                    Object.assign(updates, settle.updates);
+                    anomaliesIgnorees = settle.cyclesIgnores.length;   // jamais réglés automatiquement
                 }
 
                 // 2. Synchronisation: On met à jour le last_index de la base active pour éviter un saut d'index ce mois-ci
@@ -627,6 +622,9 @@
 
                 await update(ref(db), updates);
                 
+                if (anomaliesIgnorees > 0) {
+                    alert(`${anomaliesIgnorees} mois plus ancien(s) en anomalie d'index n'ont pas été réglés automatiquement : corrigez-les d'abord.`);
+                }
                 if(newStat === 'paye') {
                     document.getElementById(`item_${key}`).remove();
                 } else {
@@ -731,61 +729,37 @@
                     throw new Error("La base de données est vide. Rien à archiver.");
                 }
 
-                const data    = sourceSnap.val();
-                const keys    = Object.keys(data);
-                const updates = {};
+                const data = sourceSnap.val();
 
-                updates[`${P.backup}/${cycleKey}`] = {
-                    info: {
-                        date_sauvegarde: now.toLocaleString('fr-FR'),
-                        total_entrees:   keys.length,
-                        cycle:           cycleKey
-                    },
-                    donnees: data
-                };
-
-                keys.forEach(key => {
-                    const val = data[key];
-
-                    // ✅ FIX : index conservé (jamais de régression à 0 si non relevé)
-                    const { lIdx, nIdx } = indexConserve(val);
-
-                    // ✅ FIX : ne pas écraser un facteur légitime à 0 via ||
-                    const fRaw    = parseFloat(val.facteur);
-                    const facteur = Number.isFinite(fRaw) ? fRaw : 250;
-
-                    const conso       = Math.max(0, nIdx - lIdx);
-                    const montantMois = conso * facteur;
-
-                    const estPaye = String(val.status || "").trim().toLowerCase() === "paye"
-                                 || val.statut === true 
-                                 || String(val.statut || "").trim().toLowerCase() === "true";
-
-                    // ✅ FIX : arriérés à 0 légitimes préservés (?? au lieu de ||)
-                    const aRaw = parseFloat(val.arrieres ?? val._impaye_anterieur);
-                    const arrieresCourants = Number.isFinite(aRaw) ? aRaw : 0;
-                    const nouvelApaid = estPaye ? 0 : (montantMois + arrieresCourants);
-
-                    // ✅ FIX : le NOUVEL index DEVIENT l'ANCIEN index (déplacement, pas duplication).
-                    // last_index = relevé final conservé ; new_index est REMIS À 0 (le nombre)
-                    // pour accueillir la relève du mois prochain.
-                    //  • Conforme aux règles Firebase : new_index doit être un nombre >= 0.
-                    //  • stats.js considère "non relevé" tant que new_index <= 0 → correct.
-                    //  • indexConserve() : 0 < last_index ⇒ retombe sur last_index, aucune régression.
-                    updates[`${P.compteurs}/${key}/last_index`]       = String(nIdx);
-                    updates[`${P.compteurs}/${key}/new_index`]        = 0;
-                    updates[`${P.compteurs}/${key}/status`]           = "impaye";
-                    updates[`${P.compteurs}/${key}/statut`]           = false; // Booléen corrigé
-                    updates[`${P.compteurs}/${key}/apaid`]            = nouvelApaid;
-                    updates[`${P.compteurs}/${key}/arrieres`]         = 0;
-                    updates[`${P.compteurs}/${key}/facture`]          = "false";
-                    updates[`${P.compteurs}/${key}/print`]            = "false";
-                    updates[`${P.compteurs}/${key}/last_modified_by`] = null;
-                    updates[`${P.compteurs}/${key}/last_modified_at`] = null;
-                    updates[`${P.compteurs}/${key}/date_paiement`]    = null;
+                // ✅ CLÔTURE ATOMIQUE : archive + remise à zéro des compteurs dans UN SEUL update
+                //    multi-chemins, construit par billing.js (logique centralisée et testée).
+                //    Firebase l'applique en tout ou rien, et les règles n'autorisent la CRÉATION
+                //    d'une archive de cycle qu'une seule fois : si un autre président a clôturé
+                //    le même cycle entre-temps, TOUT est refusé — l'archive n'est jamais écrasée
+                //    par des compteurs déjà remis à zéro, et rien n'est réinitialisé deux fois.
+                const { updates, keys } = window.Billing.buildClosureUpdates({
+                    compteursPath: P.compteurs,
+                    backupPath:    P.backup,
+                    cycleKey:      cycleKey,
+                    data:          data,
+                    dateLabel:     now.toLocaleString('fr-FR')
                 });
 
-                await update(ref(db), updates);
+                // Anti-concurrence : si un paiement / un relevé a modifié les compteurs pendant la
+                // préparation, l'archive préparée serait périmée → on s'arrête sans rien écrire.
+                const recheck = await get(ref(db, P.compteurs));
+                if (JSON.stringify(recheck.val()) !== JSON.stringify(data)) {
+                    throw new Error("Les compteurs ont été modifiés pendant la préparation de la clôture (paiement, relevé…). Rien n'a été écrit : relancez la clôture.");
+                }
+
+                try {
+                    await update(ref(db), updates);
+                } catch (writeErr) {
+                    if (writeErr && (writeErr.code === 'PERMISSION_DENIED' || /permission/i.test(String(writeErr.message || writeErr)))) {
+                        throw new Error(`Clôture refusée : le cycle ${cycleKey} vient probablement d'être clôturé par un autre utilisateur (ou droits insuffisants). Rien n'a été modifié — rechargez la page pour vérifier l'état.`);
+                    }
+                    throw writeErr;
+                }
 
                 // ✅ CORRECTION v5 : EXPORT AUTOMATIQUE de l'archive en local (JSON).
                 //    Firebase n'est plus le seul dépositaire de l'historique : en cas

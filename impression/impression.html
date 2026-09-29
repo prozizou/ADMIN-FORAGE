@@ -493,7 +493,7 @@
 <div id="banner-modifs">
     <i class="fas fa-exclamation-triangle"></i>
     <span>
-        <strong id="banner-count">0</strong> arriérés modifiés manuellement — ces valeurs ne seront pas sauvegardées dans Firebase, elles s'appliquent uniquement à cette impression.
+        <strong id="banner-count">0</strong> arriérés corrigés manuellement — ces corrections sont enregistrées : elles restent après rechargement et valent aussi dans Statistiques.
     </span>
     <button id="btn-reset-all" onclick="window.resetAllOverrides()">
         <i class="fas fa-undo"></i> Tout réinitialiser
@@ -650,7 +650,8 @@
     // ── Variables globales ──
     let dataCache           = {};   // données Firebase brutes + calculées
     let allBackups          = {};   // archives mensuelles
-    let manualOverrides     = {};   // { [key]: { arrieres: number, original: number } }
+    let manualOverrides     = {};   // { [key]: { arrieres, original } } — reconstruit à chaque rendu depuis arrieres_ajustement (Firebase)
+    let lastCalc            = { indexedBackups: [], currentKeys: {}, beforeCycle: '9999-99' };   // contexte du dernier rendu (corrections d'arriérés)
     let editCurrentKey      = null; // clé en cours d'édition dans le modal
     let unsubCurrentMonth   = null;
     let currentSelectedMonth = "actuel";
@@ -755,7 +756,6 @@
     // ── Changement de mois ──
     window.changeMonth = function() {
         currentSelectedMonth = document.getElementById('monthFilter').value;
-        // Réinitialise les overrides manuels lors d'un changement de mois
         manualOverrides = {};
         updateBanner();
         document.getElementById('list-container').innerHTML = SKELETON_HTML;
@@ -787,13 +787,15 @@
         // divergences de logique entre impression et statistiques.
         const indexedBackups = window.Billing.indexBackups(allBackups);
 
-        // ── Arriérés : même calcul que Statistiques (billing.js) ──
-        // Pour chaque compteur : ce qu'il restait à payer dans l'archive la plus
-        // récente qui le précède (mois précédent en règle générale) ; 0 si ce
-        // mois-là est payé. "actuel" → selectedMonthStr vaut "9999-99".
+        // ── Arriérés : CUMUL INTÉGRAL, même calcul que Statistiques (billing.js) ──
+        // Somme des factures de TOUS les mois archivés antérieurs où le compteur est
+        // impayé (payés et anomalies exclus) + la correction manuelle enregistrée sur
+        // le relevé. "actuel" → selectedMonthStr vaut "9999-99" : toutes les archives.
         const currentKeys = {};
         snap.forEach(child => { currentKeys[child.key] = true; });
-        const claimed = {};   // lignes d'archive reprises par un compteur actuel
+        const claimed = {};   // lignes d'archive reprises par un compteur affiché
+        manualOverrides = {};
+        lastCalc = { indexedBackups, currentKeys, beforeCycle: selectedMonthStr };
 
         snap.forEach(child => {
             const d   = child.val();
@@ -804,14 +806,15 @@
             const montantMois = stmt.facture_courante;
             const arrieres    = stmt.arriere;
             (stmt.arrearsDetails || []).forEach(x => { claimed[x.cycle + '|' + x.fbkey] = true; });
+            // Correction manuelle persistée (arrieres_ajustement) : elle est déjà comprise dans `arrieres`.
+            if (stmt.ajustement !== 0) manualOverrides[key] = { arrieres: arrieres, original: stmt.arriere_calcule };
 
             d.vol        = stmt.conso;
             d.montantMois = montantMois;
             d.anomalie   = stmt.anomalie;         // mois courant en anomalie ?
             d.anomalieRaison = stmt.raison || null;
-            // Applique l'override manuel s'il existe, sinon valeur calculée
-            d.arrieres   = manualOverrides[key] !== undefined ? manualOverrides[key].arrieres : arrieres;
-            d.arrieresFB = arrieres;   // valeur calculée d'origine (pour reset)
+            d.arrieres   = arrieres;
+            d.arrieresFB = stmt.arriere_calcule;   // cumul calculé sans correction (pour « réinitialiser »)
             d.total      = montantMois + d.arrieres;
             dataCache[key] = d;
 
@@ -886,45 +889,26 @@
 
         window.filterList();
         updateBanner();
-        renderPrevArrearsInfo(buildPrevMonthArrears(indexedBackups, selectedMonthStr, claimed));
+        renderArrearsInfo(indexedBackups, selectedMonthStr, claimed);
     }
 
-    // Contrôle : compteurs IMPAYÉS de l'archive qui précède `selectedMonthStr`
-    // ("9999-99" = mois actuel), avec le montant restant à réclamer (même calcul
-    // que la liste de l'archive dans Statistiques) et ceux non repris par un
-    // compteur actuel : { cycle, total, count, rows, absents }.
-    function buildPrevMonthArrears(indexedBackups, selectedMonthStr, claimed) {
-        const res = { cycle: null, total: 0, count: 0, rows: [], absents: [] };
-        const before = indexedBackups.filter(e => e.cycle < selectedMonthStr);
-        if (!before.length) return res;
-        const entry = before[before.length - 1];
-        res.cycle = entry.cycle;
-        Object.keys(entry.byKey).forEach(fbKey => {
-            const rec = entry.byKey[fbKey];
-            if (window.Billing.isPaid(rec)) return;
-            const st = window.Billing.computeStatement(rec, indexedBackups, { beforeCycle: entry.cycle, fbKey });
-            const montant = st.total;
-            if (!(montant > 0)) return;
-            const row = { fbKey, montant, nom: rec.name || fbKey };
-            res.rows.push(row);
-            res.total += montant;
-            res.count++;
-            if (!claimed[entry.cycle + '|' + fbKey]) res.absents.push(row);
-        });
-        return res;
-    }
-
-    function renderPrevArrearsInfo(prev) {
+    // Contrôle sous le total : cumul des arriérés affichés + dettes d'archive qu'aucun
+    // compteur actuel ne reprend (elles n'apparaissent alors sur aucune facture).
+    function renderArrearsInfo(indexedBackups, selectedMonthStr, claimed) {
         const el = document.getElementById('prevArrearsInfo');
         if (!el) return;
-        if (!prev.cycle) { el.textContent = "Aucune archive précédente : pas d'arriérés."; return; }
-        const [y, m] = prev.cycle.split('-');
-        const lbl = new Date(+y, +m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-        let txt = `Archive ${lbl} : ${fPrice(prev.total)} restaient à réclamer sur ${prev.count} compteur(s) impayé(s).`;
-        if (prev.absents.length) {
-            const sumAbs = prev.absents.reduce((a, r) => a + r.montant, 0);
-            const noms = prev.absents.slice(0, 5).map(r => r.nom).join(', ') + (prev.absents.length > 5 ? '…' : '');
-            txt += ` ⚠️ ${prev.absents.length} compteur(s) (${fPrice(sumAbs)}) ne figurent plus dans la liste actuelle : ${noms}.`;
+        if (!indexedBackups.some(e => e.cycle < selectedMonthStr)) {
+            el.textContent = "Aucune archive précédente : pas d'arriérés.";
+            return;
+        }
+        const list = Object.values(dataCache);
+        const total = list.reduce((a, d) => a + (d.arrieres || 0), 0);
+        const n = list.filter(d => d.arrieres > 0).length;
+        let txt = `Arriérés cumulés (tous les mois impayés des archives) : ${fPrice(total)} sur ${n} compteur(s).`;
+        const orph = window.Billing.findOrphanArrears(indexedBackups, { beforeCycle: selectedMonthStr, claimed });
+        if (orph.rows.length) {
+            const noms = orph.rows.slice(0, 5).map(r => r.nom).join(', ') + (orph.rows.length > 5 ? '…' : '');
+            txt += ` ⚠️ ${orph.rows.length} ligne(s) d'archive impayée(s) (${fPrice(orph.total)}) ne correspondent à aucun compteur actuel : ${noms}.`;
         }
         el.textContent = txt;
     }
@@ -967,93 +951,128 @@
         if (e.key === 'Escape') window.closeEditModal();
     };
 
-    // ✅ CORRECTION v4 : Persistance des modifications d'arriérés dans Firebase.
-    //    Les arriérés modifiés manuellement sont désormais sauvegardés dans la base de données
-    //    et historisés dans un journal d'audit.
+    // ✅ Corrections d'arriérés PERSISTANTES et COHÉRENTES : on enregistre un AJUSTEMENT
+    //    (arrieres_ajustement = souhaité − cumul calculé) sur le relevé, via billing.js. Il
+    //    est relu par tous les écrans (impression, Statistiques, CSV/PDF), survit à la clôture
+    //    (l'archive le conserve) et disparaît quand le client règle. Le journal d'audit est
+    //    écrit dans la MÊME écriture atomique : pas de correction sans trace, ni l'inverse.
+
+    function recordPathFor(key) {
+        const isArchive = currentSelectedMonth && currentSelectedMonth !== "actuel";
+        return isArchive
+            ? `${P.backup}/${currentSelectedMonth}/donnees/${key}`
+            : `${P.compteurs}/${key}`;
+    }
+
+    function saveErrorMessage(err) {
+        const denied = err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(String(err.message || err)));
+        if (denied && currentSelectedMonth && currentSelectedMonth !== "actuel") {
+            return "⛔ Seul le président peut corriger les arriérés d'un mois archivé.";
+        }
+        return denied ? "⛔ Droits insuffisants pour enregistrer cette correction." : "Erreur d'enregistrement : " + (err.message || err);
+    }
+
+    // Écrit (en une seule écriture atomique) les corrections demandées {key: arriérés voulus | null}.
+    async function persistArrearsCorrections(wanted) {
+        const now = new Date().toISOString();
+        const updates = {};
+        const results = {};
+        Object.keys(wanted).forEach(key => {
+            const d = dataCache[key];
+            const built = window.Billing.buildArrearsAdjustmentUpdates({
+                recordPath: recordPathFor(key),
+                record: d,
+                desiredArrears: wanted[key],
+                indexedBackups: lastCalc.indexedBackups,
+                beforeCycle: lastCalc.beforeCycle,
+                fbKey: key,
+                currentKeys: lastCalc.currentKeys,
+                by: session.email || session.role || 'inconnu',
+                timestamp: now
+            });
+            Object.assign(updates, built.updates);
+            results[key] = built;
+            const auditId = push(ref(db, 'Asufor/' + P.forageKey + '/audit_arrieres')).key;
+            updates['Asufor/' + P.forageKey + '/audit_arrieres/' + auditId] = {
+                compteurKey: key,
+                compteur: String(d.numero_compteur || 'N/A'),
+                proprietaire: d.name || 'N/A',
+                zone: d.zone || 'N/A',
+                ancienArrieres: Math.max(0, d.arrieres || 0),
+                nouveauArrieres: built.arriereFinal,
+                modifiePar: session.email || 'inconnu',
+                modifieRole: session.role || 'inconnu',
+                modifieLe: now,
+                sessionForage: P.forageKey
+            };
+        });
+        await update(ref(db), updates);
+        return results;
+    }
+
+    function applyCorrectionLocally(key, built) {
+        const d = dataCache[key];
+        d.arrieres_ajustement = built.ajustement === 0 ? undefined : built.ajustement;
+        d.arrieres   = built.arriereFinal;
+        d.arrieresFB = built.arriereCalcule;
+        d.total      = d.montantMois + d.arrieres;
+        if (built.ajustement !== 0) manualOverrides[key] = { arrieres: d.arrieres, original: built.arriereCalcule };
+        else delete manualOverrides[key];
+        refreshCard(key);
+    }
 
     window.confirmEdit = async function() {
         const key = editCurrentKey;
-        if (!key) return;
-        const newArrieres = Math.max(0, parseFloat(document.getElementById('edit-input-arrieres').value) || 0);
-        manualOverrides[key] = { arrieres: newArrieres, original: dataCache[key].arrieresFB };
-
-        // Met à jour dataCache
-        dataCache[key].arrieres = newArrieres;
-        dataCache[key].total    = dataCache[key].montantMois + newArrieres;
-
-        // ✅ CORRECTION v4 : Persister l'arriéré dans Firebase
-        // Le chemin cible dépend du mois sélectionné (actuel ou archive)
-        const isArchive = currentSelectedMonth && currentSelectedMonth !== "actuel";
-        let targetPath;
-        if (isArchive) {
-            targetPath = `${P.backup}/${currentSelectedMonth}/donnees/${key}/arrieres`;
-        } else {
-            targetPath = `${P.compteurs}/${key}/arrieres`;
-        }
-
-        // Historiser la modification dans le journal d'audit
-        const auditEntry = {
-            compteurKey: key,
-            compteur: dataCache[key].numero_compteur || 'N/A',
-            proprietaire: dataCache[key].name || 'N/A',
-            zone: dataCache[key].zone || 'N/A',
-            ancienArrieres: dataCache[key].arrieresFB || 0,
-            nouveauArrieres: newArrieres,
-            modifiePar: session.email || 'inconnu',
-            modifieRole: session.role || 'inconnu',
-            modifieLe: new Date().toISOString(),
-            sessionForage: P.forageKey
-        };
-
+        if (!key || !dataCache[key]) return;
+        const wanted = Math.max(0, parseFloat(document.getElementById('edit-input-arrieres').value) || 0);
         try {
-            // Écrire la valeur dans la base de données
-            await update(ref(db), {
-                [targetPath]: newArrieres
-            });
-
-            // Historiser dans le journal d'audit (multi-forage)
-            const auditRef = push(ref(db, 'Asufor/' + P.forageKey + '/audit_arrieres'));
-            await set(auditRef, auditEntry);
-
-            console.log('[ASUFOR] Arriérés sauvegardés pour', key, ':', newArrieres);
+            const res = await persistArrearsCorrections({ [key]: wanted });
+            applyCorrectionLocally(key, res[key]);
+            showToast('✅ Correction enregistrée');
         } catch (err) {
             console.error('[ASUFOR] Erreur sauvegarde arriérés :', err);
+            showToast(saveErrorMessage(err), true);
+            return;   // rien n'a été modifié : le modal reste ouvert pour réessayer
         }
-
-        // Met à jour la carte dans le DOM sans recharger toute la liste
-        refreshCard(key);
         updateBanner();
         window.filterList();
         window.closeEditModal();
     };
 
-    window.resetOneOverride = function() {
+    window.resetOneOverride = async function() {
         const key = editCurrentKey;
-        if (!key) return;
-        delete manualOverrides[key];
-        dataCache[key].arrieres = dataCache[key].arrieresFB;
-        dataCache[key].total    = dataCache[key].montantMois + dataCache[key].arrieresFB;
-
+        if (!key || !dataCache[key]) return;
+        try {
+            const res = await persistArrearsCorrections({ [key]: null });
+            applyCorrectionLocally(key, res[key]);
+            showToast('↩️ Correction annulée');
+        } catch (err) {
+            console.error('[ASUFOR] Erreur annulation correction :', err);
+            showToast(saveErrorMessage(err), true);
+            return;
+        }
         document.getElementById('edit-input-arrieres').value = Math.round(dataCache[key].arrieres);
         window.updateEditPreview();
         document.getElementById('btn-reset-one').style.display = 'none';
-
-        refreshCard(key);
         updateBanner();
         window.filterList();
         window.closeEditModal();
     };
 
-    window.resetAllOverrides = function() {
-        if (!confirm('Réinitialiser tous les arriérés modifiés manuellement ?')) return;
-        Object.keys(manualOverrides).forEach(key => {
-            if (dataCache[key]) {
-                dataCache[key].arrieres = dataCache[key].arrieresFB;
-                dataCache[key].total    = dataCache[key].montantMois + dataCache[key].arrieresFB;
-                refreshCard(key);
-            }
-        });
-        manualOverrides = {};
+    window.resetAllOverrides = async function() {
+        if (!confirm('Annuler toutes les corrections manuelles d\'arriérés de cette liste ?')) return;
+        const wanted = {};
+        Object.keys(manualOverrides).forEach(k => { if (dataCache[k]) wanted[k] = null; });
+        if (!Object.keys(wanted).length) return;
+        try {
+            const res = await persistArrearsCorrections(wanted);
+            Object.keys(res).forEach(k => applyCorrectionLocally(k, res[k]));
+            showToast('↩️ Corrections annulées');
+        } catch (err) {
+            console.error('[ASUFOR] Erreur annulation des corrections :', err);
+            showToast(saveErrorMessage(err), true);
+            return;
+        }
         updateBanner();
         window.filterList();
     };
@@ -1107,7 +1126,10 @@
         // Checkbox si total est passé à 0 (rare)
         const right   = div.querySelector('.item-right');
         const actions = div.querySelector('.item-actions');
-        let cb = right.querySelector('.bill-cb, span');
+        // ✅ Recherche limitée à la zone d'actions : dans .item-right, le premier <span> est celui
+        //    du montant des arriérés (#arr-…) — le retirer faisait disparaître le montant de la
+        //    carte après chaque correction et ajoutait une case à cocher en double.
+        let cb = (actions || right).querySelector('.bill-cb, span');
         if (d.total > 0 && (!cb || cb.tagName === 'SPAN')) {
             if (cb) cb.remove();
             const newCb = document.createElement('input');

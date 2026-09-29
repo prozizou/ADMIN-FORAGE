@@ -11,12 +11,19 @@
  *   2. Anomalie si new_index < last_index (ou indices invalides/manquants) :
  *      → la facture n'est PAS calculée, montant = 0, drapeau `anomalie` levé.
  *      → un tel mois est EXCLU du cumul des arriérés.
- *   3. Arriérés = ce qu'il restait à payer dans l'archive la plus récente qui
- *      contient le compteur (facture recalculée + arriérés de ce cycle, en
- *      remontant tant que le mois est impayé) ; 0 si ce mois est payé.
- *      Compteur identifié par sa clé Firebase, à défaut par numéro + zone
- *      (seulement si le numéro est renseigné et non ambigu).
+ *   3. Arriérés = CUMUL INTÉGRAL : somme des factures recalculées de TOUS les
+ *      cycles archivés antérieurs où le compteur est impayé (les mois payés et
+ *      les mois en anomalie sont exclus). Compteur identifié par sa clé
+ *      Firebase, à défaut par numéro + zone (seulement si le numéro est
+ *      renseigné, unique dans le cycle et non pris par un autre client actuel).
+ *      Une correction manuelle est enregistrée sous forme d'AJUSTEMENT
+ *      (arrieres_ajustement, en FCFA, signé) ajouté au cumul : elle survit au
+ *      rechargement, à la clôture (l'archive la conserve) et sert à tous les écrans.
  *   4. Total dû à l'instant T = facture_courante + arriere.
+ *   5. Régulariser un paiement solde le mois courant ET tous les cycles impayés
+ *      (hors anomalies), et mémorise ce qui a été réglé (arrieres_regles,
+ *      cycles_regles) : le total « encaissé » compte donc les arriérés réglés,
+ *      et corriger le paiement remet exactement ces cycles à impayé.
  *
  * Double usage :
  *   • Navigateur : <script src="../billing.js"></script> → window.Billing
@@ -191,17 +198,30 @@
     }
 
     // ─────────────────────────────────────────────────────────────
+    // AJUSTEMENT MANUEL DES ARRIÉRÉS (correction persistante)
+    // ─────────────────────────────────────────────────────────────
+
+    /** Nombre fini (décimal, signé) ou 0. */
+    function toNum(value) {
+        if (value === null || value === undefined || value === '') return 0;
+        var n = Number(value);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    /** Ajustement manuel d'arriérés enregistré sur un relevé (FCFA, signé, 0 si absent). */
+    function adjustmentOf(record) {
+        return toNum(record && record.arrieres_ajustement);
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // 2. CUMUL DES ARRIÉRÉS
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * Arriéré d'un compteur = ce qu'il restait à payer dans l'ARCHIVE LA PLUS
-     * RÉCENTE (antérieure à opts.beforeCycle) qui contient ce compteur :
-     *   • si ce cycle est payé → 0 ;
-     *   • sinon → facture recalculée de ce cycle + l'arriéré de ce cycle
-     *     (même règle, appliquée récursivement aux cycles encore avant).
-     * Un mois en anomalie ne compte pas dans le montant (mais la chaîne continue).
-     * Un seul et même calcul sert à l'impression et à Statistiques.
+     * Arriéré cumulé d'un compteur (avant ajustement propre du relevé) : somme,
+     * pour chaque cycle archivé antérieur, de la facture RECALCULÉE (jamais un
+     * montant stocké) des cycles impayés, + l'éventuel ajustement enregistré
+     * sur ces cycles. Payés et anomalies sont exclus.
      *
      * @param {object} record          - noeud usager courant.
      * @param {Array}  indexedBackups  - sortie de indexBackups().
@@ -212,49 +232,45 @@
      * @param {object} [opts.currentKeys] - { clé: true } des clients du mois affiché
      *                                       (évite le repli numéro+zone sur le relevé d'un autre).
      * @returns {{
-     *   arriere: number,                // arriéré (>= 0)
-     *   sourceCycle: string|null,       // archive d'où il provient
-     *   details: Array,                 // chaîne [{cycle, montant, conso, anomalie, raison, fbkey}]
-     *   anomalies: Array                // cycles de la chaîne exclus pour anomalie
+     *   arriere: number,                // cumul (>= 0)
+     *   details: Array,                 // [{cycle, montant, facture, ajustement, conso, anomalie, raison, fbkey}]
+     *   anomalies: Array                // cycles exclus pour anomalie
      * }}
      */
     function computeArrears(record, indexedBackups, opts) {
         opts = opts || {};
         var details = [];
         var anomalies = [];
-        var sourceCycle = null;
-        var arriere = 0;
-        var fbKey = opts.fbKey;
-        var before = opts.beforeCycle;
+        var total = 0;
 
-        // Chaîne : on remonte cycle par cycle tant que le mois trouvé est impayé.
-        var limit = before;
-        for (var guard = 0; guard < 1000; guard++) {
-            var entry = null, old = null;
-            for (var i = indexedBackups.length - 1; i >= 0; i--) {
-                var e = indexedBackups[i];
-                if (limit && !(e.cycle < limit)) continue;
-                var f = findInCycle(e, record, fbKey, opts.currentKeys);
-                if (f) { entry = e; old = f; break; }
-            }
-            if (!entry) break;                       // plus d'archive contenant ce compteur
-            if (sourceCycle === null) sourceCycle = entry.cycle;
-            if (isPaid(old)) break;                  // cycle réglé → la chaîne s'arrête
+        for (var i = 0; i < indexedBackups.length; i++) {
+            var entry = indexedBackups[i];
+            if (opts.beforeCycle && !(entry.cycle < opts.beforeCycle)) continue;
+
+            var old = findInCycle(entry, record, opts.fbKey, opts.currentKeys);
+            if (!old) continue;                 // compteur absent de ce cycle
+            if (isPaid(old)) continue;          // cycle réglé → pas d'arriéré
 
             var calc = computeCurrent(old);
             if (calc.anomalie) {
+                // Anomalie → exclu du cumul (et des règlements automatiques), mais signalé
                 anomalies.push({ cycle: entry.cycle, raison: calc.raison, fbkey: old.__fbkey });
-                details.push({ cycle: entry.cycle, montant: 0, conso: 0, anomalie: true, raison: calc.raison, fbkey: old.__fbkey });
-            } else {
-                arriere += calc.montant;
-                details.push({ cycle: entry.cycle, montant: calc.montant, conso: calc.conso, anomalie: false, raison: null, fbkey: old.__fbkey });
+                details.push({
+                    cycle: entry.cycle, montant: 0, facture: 0, ajustement: 0, conso: 0,
+                    anomalie: true, raison: calc.raison, fbkey: old.__fbkey
+                });
+                continue;
             }
-            // Cycle suivant de la chaîne : le client est désormais suivi par sa clé archivée.
-            fbKey = old.__fbkey;
-            limit = entry.cycle;
+
+            var adj = adjustmentOf(old);
+            total += calc.montant + adj;
+            details.push({
+                cycle: entry.cycle, montant: calc.montant + adj, facture: calc.montant, ajustement: adj,
+                conso: calc.conso, anomalie: false, raison: null, fbkey: old.__fbkey
+            });
         }
 
-        return { arriere: arriere, sourceCycle: sourceCycle, details: details, anomalies: anomalies };
+        return { arriere: Math.max(0, total), details: details, anomalies: anomalies };
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -266,50 +282,99 @@
      *
      * @returns {{
      *   facture_courante:number, arriere:number, total:number,
+     *   arriere_calcule:number,  // cumul des archives, sans l'ajustement du relevé
+     *   ajustement:number,       // ajustement manuel enregistré sur CE relevé
      *   conso:number, facteur:number,
      *   anomalie:boolean, raison:string|null,   // anomalie du mois COURANT
-     *   arrearsDetails:Array, arrearsAnomalies:Array, arrearsSourceCycle:string|null
+     *   arrearsDetails:Array, arrearsAnomalies:Array
      * }}
      */
     function computeStatement(record, indexedBackups, opts) {
         var cur = computeCurrent(record);
         var arr = computeArrears(record, indexedBackups || [], opts);
+        var adj = adjustmentOf(record);
+        var arriere = Math.max(0, arr.arriere + adj);
         return {
             facture_courante: cur.montant,
-            arriere: arr.arriere,
-            total: cur.montant + arr.arriere,
+            arriere: arriere,
+            arriere_calcule: arr.arriere,
+            ajustement: adj,
+            total: cur.montant + arriere,
             conso: cur.conso,
             facteur: cur.facteur,
             anomalie: cur.anomalie,
             raison: cur.raison,
             arrearsDetails: arr.details,
-            arrearsAnomalies: arr.anomalies,
-            arrearsSourceCycle: arr.sourceCycle
+            arrearsAnomalies: arr.anomalies
         };
+    }
+
+    /**
+     * Correction manuelle d'un arriéré → updates à écrire sur le relevé
+     * (recordPath = base active OU archive). On enregistre l'AJUSTEMENT
+     * (souhaité − cumul calculé), pas un montant figé : si le cumul change
+     * ensuite (paiement d'un ancien mois…), la correction reste cohérente.
+     *
+     * @param {object} params
+     * @param {string} params.recordPath  - ex "Asufor/k/compteurs/ID" ou ".../backup/2026-08/donnees/ID".
+     * @param {object} params.record      - relevé (avec son éventuel ajustement actuel).
+     * @param {number|null} params.desiredArrears - arriéré voulu ; null = annuler la correction.
+     * @param {Array}  params.indexedBackups
+     * @param {string} [params.beforeCycle] - cycle du relevé ("9999-99" ou absent = base active).
+     * @param {string} [params.fbKey]
+     * @param {object} [params.currentKeys]
+     * @param {string} [params.by] @param {string} [params.timestamp]
+     * @returns {{updates:object, ajustement:number, arriereCalcule:number, arriereFinal:number}}
+     */
+    function buildArrearsAdjustmentUpdates(params) {
+        var base = computeArrears(params.record, params.indexedBackups || [], {
+            beforeCycle: params.beforeCycle, fbKey: params.fbKey, currentKeys: params.currentKeys
+        }).arriere;
+        var ts = params.timestamp || new Date().toISOString();
+        var adj = 0;
+        if (params.desiredArrears !== null && params.desiredArrears !== undefined) {
+            adj = Math.round(Math.max(0, toNum(params.desiredArrears)) - base);
+        }
+        var p = params.recordPath;
+        var updates = {};
+        updates[p + '/arrieres_ajustement'] = adj === 0 ? null : adj;
+        updates[p + '/arrieres_ajuste_par'] = adj === 0 ? null : (params.by || 'système');
+        updates[p + '/arrieres_ajuste_le'] = adj === 0 ? null : ts;
+        return { updates: updates, ajustement: adj, arriereCalcule: base, arriereFinal: Math.max(0, base + adj) };
     }
 
     // ─────────────────────────────────────────────────────────────
     // 3. RÉGULARISATION (PAIEMENT) — génération des updates Firebase
     // ─────────────────────────────────────────────────────────────
 
+    function stampFields(prefix, updates, status, ts, by) {
+        var paid = status === 'paye';
+        updates[prefix + '/status'] = status;
+        updates[prefix + '/statut'] = paid;
+        updates[prefix + '/date_paiement'] = paid ? ts : null;
+        updates[prefix + '/last_modified_by'] = by;
+        updates[prefix + '/last_modified_at'] = ts;
+    }
+
     /**
      * Prépare (sans écrire) l'objet d'updates multi-chemins pour régulariser
-     * un paiement : nettoyage de la base active + de tous les cycles impayés
-     * de l'historique.
+     * un paiement : mois courant + TOUS les cycles archivés impayés du client
+     * (les cycles en ANOMALIE sont exclus : ils n'ont pas été comptés, on ne
+     * les déclare pas payés). Mémorise ce qui a été réglé (arrieres_regles,
+     * cycles_regles) pour le bilan « encaissé » et pour une éventuelle correction.
      *
      * L'appelant applique ensuite : update(ref(db), updates).
      *
      * @param {object} params
-     * @param {string} params.activePath   - ex: "asufor_db_diandioly".
+     * @param {string} params.activePath   - ex: "Asufor/k/compteurs".
      * @param {string} params.activeKey    - clé Firebase du noeud dans la base active.
      * @param {object} params.record       - noeud usager courant.
-     * @param {Array}  params.indexedBackups - sortie de indexBackups().
+     * @param {Array}  params.indexedBackups - sortie de indexBackups() (COMPLÈTE).
+     * @param {object} [params.currentKeys] - { clé: true } des clients actuels (voir computeArrears).
      * @param {string} [params.paidBy]     - auteur (audit).
      * @param {string} [params.timestamp]  - ISO ; défaut : maintenant.
-     * @param {object} [params.currentKeys] - { clé: true } des clients actuels (voir computeArrears).
      * @param {string} [params.backupPath] - chemin du noeud d'archives (défaut: 'asufor_backup').
-     *                                        Multi-forage : passer forages/{key}/backup.
-     * @returns {{updates:object, cyclesRegularises:Array}}
+     * @returns {{updates:object, cyclesRegularises:Array, cyclesIgnores:Array, arrieresRegles:number}}
      */
     function buildPaymentUpdates(params) {
         var activePath = params.activePath;
@@ -318,21 +383,12 @@
         var indexedBackups = params.indexedBackups || [];
         var paidBy = params.paidBy || 'système';
         var ts = params.timestamp || new Date().toISOString();
-        // ✅ Multi-forage : chemin du noeud d'archives paramétrable (défaut = chemin
-        //    historique mono-forage, donc 100 % rétro-compatible).
         var backupPath = params.backupPath || 'asufor_backup';
 
         var updates = {};
         var cyclesRegularises = [];
-
-        // a) Base active : status → paye, arriere → 0, traçabilité
-        var basePrefix = activePath + '/' + activeKey;
-        updates[basePrefix + '/status'] = 'paye';
-        updates[basePrefix + '/statut'] = true;
-        updates[basePrefix + '/arriere'] = 0;
-        updates[basePrefix + '/date_paiement'] = ts;
-        updates[basePrefix + '/last_modified_by'] = paidBy;
-        updates[basePrefix + '/last_modified_at'] = ts;
+        var cyclesIgnores = [];
+        var regles = [];
 
         // b) Historique : chaque cycle impayé de CE compteur → paye + date_paiement
         //    (même recherche que computeArrears : on solde exactement ce qui a été compté)
@@ -342,33 +398,251 @@
             if (!old) continue;
             if (isPaid(old)) continue;
 
-            var oldPrefix = backupPath + '/' + entry.cycle + '/donnees/' + old.__fbkey;
-            updates[oldPrefix + '/status'] = 'paye';
-            updates[oldPrefix + '/statut'] = true;
-            updates[oldPrefix + '/date_paiement'] = ts;
-            updates[oldPrefix + '/last_modified_by'] = paidBy;
-            updates[oldPrefix + '/last_modified_at'] = ts;
+            var calc = computeCurrent(old);
+            if (calc.anomalie) {
+                cyclesIgnores.push({ cycle: entry.cycle, raison: calc.raison, fbkey: old.__fbkey });
+                continue;
+            }
+            stampFields(backupPath + '/' + entry.cycle + '/donnees/' + old.__fbkey, updates, 'paye', ts, paidBy);
             cyclesRegularises.push(entry.cycle);
+            regles.push(entry.cycle + '|' + old.__fbkey);
         }
 
-        return { updates: updates, cyclesRegularises: cyclesRegularises };
+        // Ce qui est réglé = arriérés affichés (cumul + ajustement du relevé).
+        var arrieresRegles = computeStatement(record, indexedBackups, {
+            fbKey: activeKey, currentKeys: params.currentKeys
+        }).arriere;
+
+        // a) Base active : status → paye, arriere → 0, traçabilité + mémoire du réglé
+        var basePrefix = activePath + '/' + activeKey;
+        stampFields(basePrefix, updates, 'paye', ts, paidBy);
+        updates[basePrefix + '/arriere'] = 0;
+        updates[basePrefix + '/arrieres_regles'] = arrieresRegles;
+        updates[basePrefix + '/cycles_regles'] = regles.length ? regles : null;
+        var adj = adjustmentOf(record);
+        updates[basePrefix + '/arrieres_ajustement_regle'] = adj === 0 ? null : adj;
+        updates[basePrefix + '/arrieres_ajustement'] = null;
+        updates[basePrefix + '/arrieres_ajuste_par'] = null;
+        updates[basePrefix + '/arrieres_ajuste_le'] = null;
+
+        return {
+            updates: updates,
+            cyclesRegularises: cyclesRegularises,
+            cyclesIgnores: cyclesIgnores,
+            arrieresRegles: arrieresRegles
+        };
     }
 
     /**
-     * Prépare les updates pour RÉVOQUER un paiement (repasser en impayé).
-     * Ne touche QUE la base active (l'historique reste tel quel, la révocation
-     * est une correction de saisie du mois courant).
+     * Cycles réglés mémorisés sur un relevé : ["2026-06|clé", …] (tableau ou objet Firebase).
+     */
+    function settledCyclesOf(record) {
+        var raw = record && record.cycles_regles;
+        if (!raw) return [];
+        var list = Array.isArray(raw) ? raw : Object.keys(raw).map(function (k) { return raw[k]; });
+        return list.filter(function (x) { return typeof x === 'string' && x.indexOf('|') > 0; })
+            .map(function (x) { var j = x.indexOf('|'); return { cycle: x.slice(0, j), key: x.slice(j + 1) }; });
+    }
+
+    /**
+     * Prépare les updates pour RÉVOQUER un paiement (repasser en impayé) :
+     * base active + remise à impayé des cycles archivés que CE paiement avait
+     * réglés (cycles_regles) et retour de l'ajustement d'arriérés d'origine.
+     *
+     * @param {object} params - activePath, activeKey, record, indexedBackups,
+     *                          backupPath, paidBy, timestamp
+     * @returns {{updates:object, cyclesRestaures:Array}}
      */
     function buildRevokeUpdates(params) {
         var basePrefix = params.activePath + '/' + params.activeKey;
         var ts = params.timestamp || new Date().toISOString();
+        var by = params.paidBy || 'système';
+        var backupPath = params.backupPath || 'asufor_backup';
+        var record = params.record || {};
         var updates = {};
-        updates[basePrefix + '/status'] = 'impaye';
-        updates[basePrefix + '/statut'] = false;
-        updates[basePrefix + '/date_paiement'] = null;
-        updates[basePrefix + '/last_modified_by'] = params.paidBy || 'système';
-        updates[basePrefix + '/last_modified_at'] = ts;
-        return { updates: updates };
+        var restaures = [];
+
+        stampFields(basePrefix, updates, 'impaye', ts, by);
+        updates[basePrefix + '/arrieres_regles'] = null;
+        updates[basePrefix + '/cycles_regles'] = null;
+        updates[basePrefix + '/arrieres_ajustement_regle'] = null;
+        var adjAvant = toNum(record.arrieres_ajustement_regle);
+        if (adjAvant !== 0) updates[basePrefix + '/arrieres_ajustement'] = adjAvant;
+
+        var idx = params.indexedBackups || [];
+        settledCyclesOf(record).forEach(function (c) {
+            var entry = null;
+            for (var i = 0; i < idx.length; i++) if (idx[i].cycle === c.cycle) { entry = idx[i]; break; }
+            var row = entry && entry.byKey[c.key];
+            if (!row || !isPaid(row)) return;   // absent ou déjà remis à impayé : rien à restaurer
+            stampFields(backupPath + '/' + c.cycle + '/donnees/' + c.key, updates, 'impaye', ts, by);
+            restaures.push(c.cycle);
+        });
+
+        return { updates: updates, cyclesRestaures: restaures };
+    }
+
+    /**
+     * Marquer « payé » le mois ARCHIVÉ d'un client (correction depuis la
+     * maintenance) règle aussi ses mois archivés plus anciens encore impayés
+     * (hors anomalies) — comme le bouton Encaisser — pour que ses arriérés ne
+     * disparaissent pas sans avoir été payés.
+     *
+     * @param {object} params - backupPath, key, uptoCycle (exclu), indexedBackups, by, timestamp
+     * @returns {{updates:object, cyclesRegularises:Array, cyclesIgnores:Array}}
+     */
+    function buildArchiveSettleUpdates(params) {
+        var ts = params.timestamp || new Date().toISOString();
+        var by = params.by || 'système';
+        var backupPath = params.backupPath || 'asufor_backup';
+        var updates = {};
+        var ok = [];
+        var ignores = [];
+        (params.indexedBackups || []).forEach(function (entry) {
+            if (!(entry.cycle < params.uptoCycle)) return;
+            var old = entry.byKey[params.key];      // même clé Firebase d'un cycle à l'autre
+            if (!old || isPaid(old)) return;
+            var calc = computeCurrent(old);
+            if (calc.anomalie) { ignores.push({ cycle: entry.cycle, raison: calc.raison }); return; }
+            stampFields(backupPath + '/' + entry.cycle + '/donnees/' + params.key, updates, 'paye', ts, by);
+            ok.push(entry.cycle);
+        });
+        return { updates: updates, cyclesRegularises: ok, cyclesIgnores: ignores };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // BILAN (encaissé / à réclamer) — source unique pour Statistiques
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * @param {Array<{record:object, statement:object}>} items - relevés et leur computeStatement().
+     * @returns {{paye:number, impaye:number, arrieresRegles:number, nbPaye:number, nbImpaye:number}}
+     *   paye   = factures du mois payées + arriérés réglés avec elles (arrieres_regles)
+     *   impaye = totaux dus (mois + arriérés) des relevés non payés
+     */
+    function summarizeRecap(items) {
+        var r = { paye: 0, impaye: 0, arrieresRegles: 0, nbPaye: 0, nbImpaye: 0 };
+        (items || []).forEach(function (it) {
+            var st = it.statement;
+            if (!st || isNaN(st.total)) return;
+            if (isPaid(it.record)) {
+                var reg = Math.max(0, toNum(it.record && it.record.arrieres_regles));
+                r.paye += st.facture_courante + reg;
+                r.arrieresRegles += reg;
+                r.nbPaye++;
+            } else {
+                r.impaye += st.total;
+                r.nbImpaye++;
+            }
+        });
+        return r;
+    }
+
+    /**
+     * Lignes d'archive impayées (cycles antérieurs à beforeCycle) qu'AUCUN
+     * relevé actuel ne reprend : dette qui n'apparaît sur aucune facture.
+     *
+     * @param {Array} indexedBackups
+     * @param {object} opts - { beforeCycle, claimed } ; claimed = { "cycle|clé": true }
+     *        (lignes reprises par un compteur actuel, via computeArrears().details).
+     * @returns {{rows:Array<{cycle,fbKey,nom,montant}>, total:number}}
+     */
+    function findOrphanArrears(indexedBackups, opts) {
+        opts = opts || {};
+        var claimed = opts.claimed || {};
+        var rows = [];
+        var total = 0;
+        (indexedBackups || []).forEach(function (entry) {
+            if (opts.beforeCycle && !(entry.cycle < opts.beforeCycle)) return;
+            Object.keys(entry.byKey).forEach(function (k) {
+                var rec = entry.byKey[k];
+                if (isPaid(rec) || claimed[entry.cycle + '|' + k]) return;
+                var calc = computeCurrent(rec);
+                if (calc.anomalie) return;
+                var montant = calc.montant + adjustmentOf(rec);
+                if (!(montant > 0)) return;
+                rows.push({ cycle: entry.cycle, fbKey: k, nom: rec.name || k, montant: montant });
+                total += montant;
+            });
+        });
+        return { rows: rows, total: total };
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. CLÔTURE DE CYCLE — updates atomiques (archive + remise à zéro)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Index à conserver : le nouveau relevé s'il est valide et >= ancien, sinon
+     * l'ancien index (un compteur d'eau ne régresse jamais, jamais de retour à 0).
+     */
+    function indexConserve(val) {
+        var lRaw = parseFloat(val && val.last_index);
+        var lIdx = Number.isFinite(lRaw) ? lRaw : 0;
+        var nRaw = parseFloat(val && val.new_index);
+        var nIdx = (Number.isFinite(nRaw) && nRaw >= lIdx) ? nRaw : lIdx;
+        return { lIdx: lIdx, nIdx: nIdx };
+    }
+
+    /**
+     * Toutes les écritures de la clôture d'un cycle dans UN SEUL objet
+     * multi-chemins (à appliquer par update(ref(db), updates)) : création de
+     * l'archive + remise à zéro de chaque compteur. Firebase applique tout ou
+     * rien ; les règles n'autorisent la création d'une archive de cycle qu'une
+     * seule fois (create-only) : une seconde clôture concurrente est refusée
+     * EN ENTIER, sans écraser l'archive ni réinitialiser deux fois les compteurs.
+     *
+     * @param {object} params
+     * @param {string} params.compteursPath, params.backupPath, params.cycleKey
+     * @param {object} params.data      - contenu lu de la base active (snapshot).
+     * @param {string} params.dateLabel - date lisible de sauvegarde.
+     * @returns {{updates:object, keys:Array}}
+     */
+    function buildClosureUpdates(params) {
+        var data = params.data || {};
+        var keys = Object.keys(data);
+        var updates = {};
+
+        updates[params.backupPath + '/' + params.cycleKey] = {
+            info: { date_sauvegarde: params.dateLabel, total_entrees: keys.length, cycle: params.cycleKey },
+            donnees: data
+        };
+
+        keys.forEach(function (key) {
+            var val = data[key];
+            if (!val || typeof val !== 'object') return;
+            var idx = indexConserve(val);
+            var fRaw = parseFloat(val.facteur);
+            var facteur = Number.isFinite(fRaw) ? fRaw : 250;
+            var montantMois = Math.max(0, idx.nIdx - idx.lIdx) * facteur;
+            var estPaye = isPaid(val);
+            var aRaw = parseFloat(val.arrieres !== undefined && val.arrieres !== null ? val.arrieres : val._impaye_anterieur);
+            var arrieresCourants = Number.isFinite(aRaw) ? aRaw : 0;
+            var p = params.compteursPath + '/' + key;
+
+            // le NOUVEL index devient l'ANCIEN ; new_index repart à 0 (nombre, règle Firebase >= 0)
+            updates[p + '/last_index'] = String(idx.nIdx);
+            updates[p + '/new_index'] = 0;
+            updates[p + '/status'] = 'impaye';
+            updates[p + '/statut'] = false;
+            updates[p + '/apaid'] = estPaye ? 0 : (montantMois + arrieresCourants);
+            updates[p + '/arrieres'] = 0;
+            updates[p + '/facture'] = 'false';
+            updates[p + '/print'] = 'false';
+            updates[p + '/last_modified_by'] = null;
+            updates[p + '/last_modified_at'] = null;
+            updates[p + '/date_paiement'] = null;
+            // Les mémoires de règlement / d'ajustement appartiennent au cycle qui
+            // se ferme (déjà copiées dans l'archive) : le nouveau cycle repart propre.
+            updates[p + '/arrieres_regles'] = null;
+            updates[p + '/cycles_regles'] = null;
+            updates[p + '/arrieres_ajustement'] = null;
+            updates[p + '/arrieres_ajustement_regle'] = null;
+            updates[p + '/arrieres_ajuste_par'] = null;
+            updates[p + '/arrieres_ajuste_le'] = null;
+        });
+
+        return { updates: updates, keys: keys };
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -378,6 +652,7 @@
         FACTEUR_DEFAUT: FACTEUR_DEFAUT,
         // conversions
         toInt: toInt,
+        toNum: toNum,
         norm: norm,
         meterKey: meterKey,
         isPaid: isPaid,
@@ -387,8 +662,16 @@
         findInCycle: findInCycle,
         computeArrears: computeArrears,
         computeStatement: computeStatement,
-        // paiement
+        adjustmentOf: adjustmentOf,
+        summarizeRecap: summarizeRecap,
+        findOrphanArrears: findOrphanArrears,
+        settledCyclesOf: settledCyclesOf,
+        // écritures
+        buildArrearsAdjustmentUpdates: buildArrearsAdjustmentUpdates,
         buildPaymentUpdates: buildPaymentUpdates,
-        buildRevokeUpdates: buildRevokeUpdates
+        buildRevokeUpdates: buildRevokeUpdates,
+        buildArchiveSettleUpdates: buildArchiveSettleUpdates,
+        buildClosureUpdates: buildClosureUpdates,
+        indexConserve: indexConserve
     };
 });

@@ -670,6 +670,14 @@
             .then((snap) => {
                 if (snap.exists()) {
                     const u = snap.val() || {};
+                    // ✅ ISOLATION : un compte (hors super-admin) DOIT porter sa forageKey. Sans elle,
+                    // les pages retomberaient sur le forage par défaut (Diandioly) : on refuse la
+                    // connexion plutôt que de rattacher silencieusement le compte à un autre forage.
+                    if (!isSuper && !(typeof u.forageKey === 'string' && u.forageKey)) {
+                        auth.signOut().catch(() => {});
+                        triggerError("Compte sans forage. Contactez l'administrateur.");
+                        return null;
+                    }
                     return {
                         role: u.role,
                         time: Date.now(),

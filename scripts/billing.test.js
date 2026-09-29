@@ -171,23 +171,26 @@ test('buildPaymentUpdates : solde le cycle retrouvé par clé Firebase', () => {
 // ── Arriérés : règle « archive la plus récente contenant le compteur » ──
 const R = (n, l, f, st) => ({ numero_compteur: n, zone: 'N', last_index: l, new_index: f, facteur: 250, status: st });
 
-test('arriérés : mois précédent payé → 0, même si un mois plus ancien était impayé', () => {
+test('arriérés : CUMUL INTÉGRAL — un mois ancien impayé reste dû même si le mois suivant est marqué payé', () => {
     const idx = Billing.indexBackups({
-        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },     // 5000 dus
         '2026-07': { donnees: { a: R('1', 20, 30, 'paye') } }
     });
-    assert.strictEqual(Billing.computeArrears(R('1', 30, 0, 'impaye'), idx, { fbKey: 'a' }).arriere, 0);
+    assert.strictEqual(Billing.computeArrears(R('1', 30, 0, 'impaye'), idx, { fbKey: 'a' }).arriere, 5000);
 });
 
-test('arriérés : chaîne — mois précédent impayé = sa facture + ses propres arriérés', () => {
+test('arriérés : cumul intégral de tous les mois impayés, payés exclus', () => {
     const idx = Billing.indexBackups({
-        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },     // 5000
-        '2026-07': { donnees: { a: R('1', 20, 30, 'impaye') } }     // 2500 + 5000
+        '2026-05': { donnees: { a: R('1', 0, 4, 'impaye') } },      // 1000
+        '2026-06': { donnees: { a: R('1', 4, 24, 'impaye') } },     // 5000
+        '2026-07': { donnees: { a: R('1', 24, 34, 'paye') } },      // exclu
+        '2026-08': { donnees: { a: R('1', 34, 36, 'impaye') } }     // 500
     });
-    const r = Billing.computeArrears(R('1', 30, 0, 'impaye'), idx, { fbKey: 'a' });
-    assert.strictEqual(r.arriere, 7500);
-    assert.strictEqual(r.sourceCycle, '2026-07');
-    assert.strictEqual(r.details.length, 2);
+    const r = Billing.computeArrears(R('1', 36, 40, 'impaye'), idx, { fbKey: 'a' });
+    assert.strictEqual(r.arriere, 6500);
+    assert.strictEqual(r.details.length, 3);
+    // beforeCycle : vue d'une archive = uniquement les cycles qui la précèdent
+    assert.strictEqual(Billing.computeArrears(R('1', 0, 0, 'x'), idx, { fbKey: 'a', beforeCycle: '2026-07' }).arriere, 6000);
 });
 
 test('arriérés : client absent du mois précédent → repris dans la dernière archive qui le contient', () => {
@@ -322,6 +325,164 @@ test('ForageContext : détection du super-admin', () => {
     assert.strictEqual(ForageContext.isSuperadmin('  Prozizou298@Gmail.com '), true);
     assert.strictEqual(ForageContext.isSuperadmin('president@diandioly.com'), false);
     assert.strictEqual(ForageContext.isSuperadmin(null), false);
+});
+
+// ── Régression v6 : ajustements, règlement, révocation, bilan, clôture ──
+const ANOM = (n, st) => R(n, 500, 50, st);   // index décroissant → anomalie
+
+test('ajustement manuel : persistant, signé, ajouté au cumul (base active)', () => {
+    const idx = Billing.indexBackups({ '2026-07': { donnees: { a: R('1', 0, 20, 'impaye') } } });   // cumul 5000
+    const rec = R('1', 20, 30, 'impaye');
+    const { updates, ajustement, arriereFinal } = Billing.buildArrearsAdjustmentUpdates({
+        recordPath: 'A/c/a', record: rec, desiredArrears: 3000, indexedBackups: idx, fbKey: 'a', by: 'président'
+    });
+    assert.strictEqual(ajustement, -2000);
+    assert.strictEqual(arriereFinal, 3000);
+    assert.strictEqual(updates['A/c/a/arrieres_ajustement'], -2000);
+    // relu depuis Firebase : le relevé porte l'ajustement → même résultat partout
+    const relu = Object.assign({}, rec, { arrieres_ajustement: -2000 });
+    const st = Billing.computeStatement(relu, idx, { fbKey: 'a' });
+    assert.strictEqual(st.arriere, 3000);
+    assert.strictEqual(st.arriere_calcule, 5000);
+    assert.strictEqual(st.total, st.facture_courante + 3000);
+});
+
+test('ajustement manuel : annuler (null) ou retomber sur le calculé supprime la correction', () => {
+    const idx = Billing.indexBackups({ '2026-07': { donnees: { a: R('1', 0, 20, 'impaye') } } });
+    const rec = Object.assign(R('1', 20, 30, 'impaye'), { arrieres_ajustement: -2000 });
+    const reset = Billing.buildArrearsAdjustmentUpdates({ recordPath: 'P', record: rec, desiredArrears: null, indexedBackups: idx, fbKey: 'a' });
+    assert.strictEqual(reset.updates['P/arrieres_ajustement'], null);
+    // la base de recalcul ne compte pas l'ajustement existant du relevé lui-même
+    const same = Billing.buildArrearsAdjustmentUpdates({ recordPath: 'P', record: rec, desiredArrears: 5000, indexedBackups: idx, fbKey: 'a' });
+    assert.strictEqual(same.ajustement, 0);
+    assert.strictEqual(same.updates['P/arrieres_ajustement'], null);
+});
+
+test('ajustement manuel : plancher à 0 et ajustement d\'un ancien cycle conservé dans le cumul', () => {
+    const idx = Billing.indexBackups({ '2026-07': { donnees: { a: Object.assign(R('1', 0, 20, 'impaye'), { arrieres_ajustement: 1500 }) } } });
+    assert.strictEqual(Billing.computeArrears(R('1', 20, 0, 'x'), idx, { fbKey: 'a' }).arriere, 6500);
+    assert.strictEqual(Billing.computeStatement(Object.assign(R('1', 20, 0, 'x'), { arrieres_ajustement: -99999 }), idx, { fbKey: 'a' }).arriere, 0);
+});
+
+test('paiement : mémorise arrieres_regles + cycles_regles et efface l\'ajustement', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },     // 5000
+        '2026-07': { donnees: { a: R('1', 20, 24, 'impaye') } }     // 1000
+    });
+    const rec = Object.assign(R('1', 24, 30, 'impaye'), { arrieres_ajustement: 500 });
+    const r = Billing.buildPaymentUpdates({ activePath: 'A/c', activeKey: 'a', record: rec, indexedBackups: idx, backupPath: 'A/b', timestamp: 'T' });
+    assert.strictEqual(r.arrieresRegles, 6500);
+    assert.strictEqual(r.updates['A/c/a/arrieres_regles'], 6500);
+    assert.deepStrictEqual(r.updates['A/c/a/cycles_regles'], ['2026-06|a', '2026-07|a']);
+    assert.strictEqual(r.updates['A/c/a/arrieres_ajustement'], null);
+    assert.strictEqual(r.updates['A/c/a/arrieres_ajustement_regle'], 500);
+    assert.strictEqual(r.updates['A/b/2026-06/donnees/a/status'], 'paye');
+});
+
+test('paiement : les cycles en ANOMALIE ne sont jamais réglés automatiquement', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: ANOM('1', 'impaye') } },         // anomalie
+        '2026-07': { donnees: { a: R('1', 20, 24, 'impaye') } }     // 1000
+    });
+    const r = Billing.buildPaymentUpdates({ activePath: 'A/c', activeKey: 'a', record: R('1', 24, 30, 'impaye'), indexedBackups: idx, backupPath: 'A/b' });
+    assert.deepStrictEqual(r.cyclesRegularises, ['2026-07']);
+    assert.strictEqual(r.cyclesIgnores.length, 1);
+    assert.strictEqual(r.cyclesIgnores[0].cycle, '2026-06');
+    assert.strictEqual(r.updates['A/b/2026-06/donnees/a/status'], undefined);
+    assert.strictEqual(r.arrieresRegles, 1000);
+});
+
+test('règlement de maintenance (archive marquée payée) : solde les mois antérieurs, hors anomalies', () => {
+    const idx = Billing.indexBackups({
+        '2026-05': { donnees: { a: ANOM('1', 'impaye') } },
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },
+        '2026-07': { donnees: { a: R('1', 20, 30, 'impaye') } }
+    });
+    const r = Billing.buildArchiveSettleUpdates({ backupPath: 'B', key: 'a', uptoCycle: '2026-07', indexedBackups: idx, timestamp: 'T' });
+    assert.deepStrictEqual(r.cyclesRegularises, ['2026-06']);
+    assert.strictEqual(r.cyclesIgnores.length, 1);
+    assert.strictEqual(r.updates['B/2026-06/donnees/a/status'], 'paye');
+    assert.strictEqual(r.updates['B/2026-07/donnees/a/status'], undefined);
+});
+
+test('révocation : remet à impayé exactement les cycles réglés par le paiement et restaure l\'ajustement', () => {
+    const root = {
+        '2026-06': { donnees: { a: Object.assign(R('1', 0, 20, 'paye'), { date_paiement: 'T' }) } },
+        '2026-07': { donnees: { a: R('1', 20, 24, 'paye') } }
+    };
+    const idx = Billing.indexBackups(root);
+    const rec = Object.assign(R('1', 24, 30, 'paye'), { arrieres_regles: 5000, cycles_regles: ['2026-06|a'], arrieres_ajustement_regle: 500 });
+    const r = Billing.buildRevokeUpdates({ activePath: 'A/c', activeKey: 'a', record: rec, indexedBackups: idx, backupPath: 'A/b', timestamp: 'T2' });
+    assert.deepStrictEqual(r.cyclesRestaures, ['2026-06']);
+    assert.strictEqual(r.updates['A/b/2026-06/donnees/a/status'], 'impaye');
+    assert.strictEqual(r.updates['A/b/2026-07/donnees/a/status'], undefined);   // non réglé par ce paiement
+    assert.strictEqual(r.updates['A/c/a/arrieres_regles'], null);
+    assert.strictEqual(r.updates['A/c/a/cycles_regles'], null);
+    assert.strictEqual(r.updates['A/c/a/arrieres_ajustement'], 500);
+    assert.strictEqual(r.updates['A/c/a/status'], 'impaye');
+});
+
+test('révocation : ancien paiement sans mémoire → seule la base active est touchée (rétro-compat)', () => {
+    const r = Billing.buildRevokeUpdates({ activePath: 'A/c', activeKey: 'a', record: R('1', 0, 10, 'paye') });
+    assert.deepStrictEqual(Object.keys(r.updates).filter(k => k.startsWith('asufor_backup')), []);
+    assert.strictEqual(r.updates['A/c/a/statut'], false);
+});
+
+test('bilan : « encaissé » inclut les arriérés réglés, « à réclamer » inclut les arriérés dus', () => {
+    const idx = Billing.indexBackups({ '2026-06': { donnees: { u: R('2', 0, 8, 'impaye') } } });   // 2000 dus par u
+    const paid = Object.assign(R('1', 20, 30, 'paye'), { arrieres_regles: 5000 });   // facture 2500 + 5000 réglés
+    const unpaid = R('2', 8, 10, 'impaye');                                            // facture 500 + 2000
+    const rec = Billing.summarizeRecap([
+        { record: paid,   statement: Billing.computeStatement(paid, idx, { fbKey: 'p' }) },
+        { record: unpaid, statement: Billing.computeStatement(unpaid, idx, { fbKey: 'u' }) }
+    ]);
+    assert.strictEqual(rec.paye, 7500);
+    assert.strictEqual(rec.arrieresRegles, 5000);
+    assert.strictEqual(rec.impaye, 2500);
+    assert.strictEqual(rec.nbPaye, 1);
+    assert.strictEqual(rec.nbImpaye, 1);
+});
+
+test('orphelins : dettes d\'archive qu\'aucun compteur actuel ne reprend', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 4, 'impaye'), gone: Object.assign(R('9', 0, 8, 'impaye'), { name: 'Parti' }) } }
+    });
+    const st = Billing.computeStatement(R('1', 4, 6, 'impaye'), idx, { fbKey: 'a' });
+    const claimed = {};
+    st.arrearsDetails.forEach(d => { claimed[d.cycle + '|' + d.fbkey] = true; });
+    const o = Billing.findOrphanArrears(idx, { beforeCycle: '9999-99', claimed });
+    assert.strictEqual(o.rows.length, 1);
+    assert.strictEqual(o.rows[0].nom, 'Parti');
+    assert.strictEqual(o.total, 2000);
+});
+
+test('clôture : un seul objet multi-chemins (archive créée + remise à zéro), mémoires du cycle effacées', () => {
+    const data = {
+        a: Object.assign(R('1', 10, 20, 'paye'), { arrieres_regles: 300, cycles_regles: ['2026-06|a'], arrieres_ajustement: -5 }),
+        b: R('2', 5, 0, 'impaye')      // non relevé (new_index 0) → index conservé
+    };
+    const { updates, keys } = Billing.buildClosureUpdates({ compteursPath: 'A/c', backupPath: 'A/b', cycleKey: '2026-09', data, dateLabel: 'D' });
+    assert.deepStrictEqual(keys, ['a', 'b']);
+    assert.strictEqual(updates['A/b/2026-09'].info.total_entrees, 2);
+    assert.strictEqual(updates['A/b/2026-09'].donnees.a.arrieres_regles, 300);   // archive intacte
+    assert.strictEqual(updates['A/c/a/last_index'], '20');
+    assert.strictEqual(updates['A/c/a/new_index'], 0);
+    assert.strictEqual(updates['A/c/b/last_index'], '5');                         // jamais de régression
+    assert.strictEqual(updates['A/c/a/status'], 'impaye');
+    assert.strictEqual(updates['A/c/a/arrieres_regles'], null);
+    assert.strictEqual(updates['A/c/a/cycles_regles'], null);
+    assert.strictEqual(updates['A/c/a/arrieres_ajustement'], null);
+    // aucune écriture hors des deux nœuds : rien d'autre ne peut être perdu
+    Object.keys(updates).forEach(k => assert.ok(k.startsWith('A/b/2026-09') || k.startsWith('A/c/'), k));
+});
+
+test('clôture : rétro-compat des champs historiques (apaid, arrieres remis à 0)', () => {
+    const { updates } = Billing.buildClosureUpdates({
+        compteursPath: 'C', backupPath: 'B', cycleKey: '2026-09', dateLabel: 'D',
+        data: { a: Object.assign(R('1', 0, 10, 'impaye'), { arrieres: 700 }) }
+    });
+    assert.strictEqual(updates['C/a/apaid'], 2500 + 700);
+    assert.strictEqual(updates['C/a/arrieres'], 0);
 });
 
 // ── Bilan ────────────────────────────────────────────────────
