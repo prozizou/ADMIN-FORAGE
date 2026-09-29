@@ -94,7 +94,7 @@ function computeAll(activeRoot, backupRoot, currentCycle) {
     Object.keys(activeRoot).forEach((key) => {
         const rec = activeRoot[key];
         if (!rec || typeof rec !== 'object') return;
-        const st = Billing.computeStatement(rec, idx, opts);
+        const st = Billing.computeStatement(rec, idx, Object.assign({ fbKey: key }, opts));
         results.push({
             key,
             name: rec.name || '',

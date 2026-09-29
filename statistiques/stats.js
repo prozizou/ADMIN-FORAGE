@@ -283,6 +283,8 @@ window.initMonthFilter = function() {
         const activeValue = monthSelect.value;
         monthSelect.innerHTML = optionsHtml;
         monthSelect.value = activeValue;
+        // Les arriérés dépendent des archives : recalcul maintenant qu'elles sont là.
+        window.applyFilter();
     }).catch((error) => {
         console.error("Erreur lors du chargement des périodes:", error);
     });
@@ -588,7 +590,7 @@ window.applyFilter = function() {
     currentFilteredData = filteredBase.filter(item => {
         let calculatedAmount, arriere = 0, totalDu;
         if (useBilling) {
-            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle });
+            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key });
             calculatedAmount = stmt.facture_courante; // facture du mois courant
             arriere = stmt.arriere;                   // arriérés cumulés
             totalDu = stmt.total;                     // facture + arriérés

@@ -134,6 +134,40 @@ test('computeStatement : total = facture courante + arriérés', () => {
     assert.strictEqual(st.total, 5000);
 });
 
+test('computeArrears : clé Firebase prioritaire (numéro/zone modifiés depuis la clôture)', () => {
+    const root = { '2026-08': { donnees: {
+        c1: { numero_compteur: '12', zone: 'Nord', last_index: 0, new_index: 10, facteur: 250, status: 'impaye' }
+    }}};
+    const idx = Billing.indexBackups(root);
+    // Zone corrigée dans la base active : le repli numéro + zone ne trouve plus rien…
+    const rec = { numero_compteur: '12', zone: 'Sud' };
+    assert.strictEqual(Billing.computeArrears(rec, idx).arriere, 0);
+    // …mais la clé Firebase, identique d'un cycle à l'autre, retrouve la dette.
+    assert.strictEqual(Billing.computeArrears(rec, idx, { fbKey: 'c1' }).arriere, 2500);
+});
+
+test('computeArrears : clients sans numéro dans une même zone ne s\'écrasent plus', () => {
+    const root = { '2026-08': { donnees: {
+        a: { numero_compteur: '', zone: 'Nord', last_index: 0, new_index: 10, facteur: 250, status: 'impaye' },
+        b: { numero_compteur: '', zone: 'Nord', last_index: 0, new_index: 20, facteur: 250, status: 'impaye' }
+    }}};
+    const idx = Billing.indexBackups(root);
+    const rec = { numero_compteur: '', zone: 'Nord' };
+    assert.strictEqual(Billing.computeArrears(rec, idx, { fbKey: 'a' }).arriere, 2500);
+    assert.strictEqual(Billing.computeArrears(rec, idx, { fbKey: 'b' }).arriere, 5000);
+});
+
+test('buildPaymentUpdates : solde le cycle retrouvé par clé Firebase', () => {
+    const root = { '2026-08': { donnees: {
+        c1: { numero_compteur: '12', zone: 'Nord', last_index: 0, new_index: 10, facteur: 250, status: 'impaye' }
+    }}};
+    const { updates } = Billing.buildPaymentUpdates({
+        activePath: 'A/compteurs', activeKey: 'c1', record: { numero_compteur: '12', zone: 'Sud' },
+        indexedBackups: Billing.indexBackups(root), backupPath: 'A/backup'
+    });
+    assert.strictEqual(updates['A/backup/2026-08/donnees/c1/status'], 'paye');
+});
+
 // ── Paiement / révocation ────────────────────────────────────
 test('buildPaymentUpdates : régularise base active + cycles impayés', () => {
     const idx = Billing.indexBackups(backupRoot);
