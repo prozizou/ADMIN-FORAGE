@@ -11,9 +11,11 @@
  *   2. Anomalie si new_index < last_index (ou indices invalides/manquants) :
  *      → la facture n'est PAS calculée, montant = 0, drapeau `anomalie` levé.
  *      → un tel mois est EXCLU du cumul des arriérés.
- *   3. Arriérés = somme des factures courantes RECALCULÉES pour chaque cycle
- *      passé (asufor_backup) où status === "impaye", pour un même compteur
- *      identifié par (numero_compteur + zone).
+ *   3. Arriérés = ce qu'il restait à payer dans l'archive la plus récente qui
+ *      contient le compteur (facture recalculée + arriérés de ce cycle, en
+ *      remontant tant que le mois est impayé) ; 0 si ce mois est payé.
+ *      Compteur identifié par sa clé Firebase, à défaut par numéro + zone
+ *      (seulement si le numéro est renseigné et non ambigu).
  *   4. Total dû à l'instant T = facture_courante + arriere.
  *
  * Double usage :
@@ -153,28 +155,39 @@
             if (!donnees) return;
             var records = {};
             var byKey = {};
+            var dups = {};   // meterKey présents plusieurs fois dans ce cycle (ambigus)
             Object.keys(donnees).forEach(function (k) {
                 var rec = donnees[k];
                 if (rec && typeof rec === 'object') {
                     // On conserve la clé Firebase d'origine pour pouvoir écrire dessus plus tard
                     var entry = Object.assign({ __fbkey: k, __cycle: cycle }, rec);
-                    records[meterKey(rec)] = entry;
+                    var mk = meterKey(rec);
+                    if (records[mk]) dups[mk] = true;
+                    records[mk] = entry;
                     byKey[k] = entry;
                 }
             });
-            cycles.push({ cycle: cycle, records: records, byKey: byKey });
+            cycles.push({ cycle: cycle, records: records, byKey: byKey, dups: dups });
         });
         return cycles;
     }
 
     /**
-     * Relevé d'un compteur dans un cycle archivé : d'abord par clé Firebase
-     * (identité exacte du client), sinon par numéro + zone (données migrées
-     * ou compteur recréé sous une autre clé).
+     * Relevé d'un compteur dans un cycle archivé.
+     *   1. par clé Firebase (identité exacte : la clôture copie la base active
+     *      telle quelle, la clé d'un client est stable d'un cycle à l'autre) ;
+     *   2. à défaut, par numéro + zone, MAIS seulement si le numéro est renseigné,
+     *      unique dans ce cycle, et n'est pas la clé d'un autre client actuel
+     *      (opts.currentKeys) — sinon on risque de donner la dette d'un client à un autre.
      */
-    function findInCycle(entry, record, fbKey) {
+    function findInCycle(entry, record, fbKey, currentKeys) {
         if (fbKey && entry.byKey && entry.byKey[fbKey]) return entry.byKey[fbKey];
-        return entry.records[meterKey(record)] || null;
+        if (!String((record && record.numero_compteur) == null ? '' : record.numero_compteur).trim()) return null;
+        var mk = meterKey(record);
+        if (entry.dups && entry.dups[mk]) return null;
+        var found = entry.records[mk] || null;
+        if (found && currentKeys && Object.prototype.hasOwnProperty.call(currentKeys, found.__fbkey)) return null;
+        return found;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -182,57 +195,66 @@
     // ─────────────────────────────────────────────────────────────
 
     /**
-     * Calcule l'arriéré cumulé d'un compteur en RECALCULANT la facture de chaque
-     * cycle passé impayé (option validée : on ne fait jamais confiance à un montant stocké).
+     * Arriéré d'un compteur = ce qu'il restait à payer dans l'ARCHIVE LA PLUS
+     * RÉCENTE (antérieure à opts.beforeCycle) qui contient ce compteur :
+     *   • si ce cycle est payé → 0 ;
+     *   • sinon → facture recalculée de ce cycle + l'arriéré de ce cycle
+     *     (même règle, appliquée récursivement aux cycles encore avant).
+     * Un mois en anomalie ne compte pas dans le montant (mais la chaîne continue).
+     * Un seul et même calcul sert à l'impression et à Statistiques.
      *
-     * @param {object} record          - noeud usager courant (base active).
+     * @param {object} record          - noeud usager courant.
      * @param {Array}  indexedBackups  - sortie de indexBackups().
      * @param {object} [opts]
-     * @param {string} [opts.beforeCycle] - ne considérer que les cycles STRICTEMENT
-     *                                       antérieurs à celui-ci (ex: "2026-07").
-     *                                       Par défaut : tous les cycles du backup.
-     * @param {string} [opts.fbKey]       - clé Firebase du compteur (recherche exacte
-     *                                       dans chaque archive avant le repli numéro + zone).
+     * @param {string} [opts.beforeCycle] - cycles STRICTEMENT antérieurs à celui-ci
+     *                                       (défaut : tous les cycles archivés).
+     * @param {string} [opts.fbKey]       - clé Firebase du compteur (recherche exacte).
+     * @param {object} [opts.currentKeys] - { clé: true } des clients du mois affiché
+     *                                       (évite le repli numéro+zone sur le relevé d'un autre).
      * @returns {{
-     *   arriere: number,               // somme des impayés passés (>= 0)
-     *   details: Array,                // [{cycle, montant, conso, anomalie, raison}]
-     *   anomalies: Array               // cycles exclus pour anomalie
+     *   arriere: number,                // arriéré (>= 0)
+     *   sourceCycle: string|null,       // archive d'où il provient
+     *   details: Array,                 // chaîne [{cycle, montant, conso, anomalie, raison, fbkey}]
+     *   anomalies: Array                // cycles de la chaîne exclus pour anomalie
      * }}
      */
     function computeArrears(record, indexedBackups, opts) {
         opts = opts || {};
-        var arriere = 0;
         var details = [];
         var anomalies = [];
+        var sourceCycle = null;
+        var arriere = 0;
+        var fbKey = opts.fbKey;
+        var before = opts.beforeCycle;
 
-        for (var i = 0; i < indexedBackups.length; i++) {
-            var entry = indexedBackups[i];
-            if (opts.beforeCycle && !(entry.cycle < opts.beforeCycle)) continue;
+        // Chaîne : on remonte cycle par cycle tant que le mois trouvé est impayé.
+        var limit = before;
+        for (var guard = 0; guard < 1000; guard++) {
+            var entry = null, old = null;
+            for (var i = indexedBackups.length - 1; i >= 0; i--) {
+                var e = indexedBackups[i];
+                if (limit && !(e.cycle < limit)) continue;
+                var f = findInCycle(e, record, fbKey, opts.currentKeys);
+                if (f) { entry = e; old = f; break; }
+            }
+            if (!entry) break;                       // plus d'archive contenant ce compteur
+            if (sourceCycle === null) sourceCycle = entry.cycle;
+            if (isPaid(old)) break;                  // cycle réglé → la chaîne s'arrête
 
-            var old = findInCycle(entry, record, opts.fbKey);
-            if (!old) continue;                 // compteur absent de ce cycle
-            if (isPaid(old)) continue;          // cycle réglé → pas d'arriéré
-
-            // Impayé : on RECALCULE la facture de ce cycle
             var calc = computeCurrent(old);
             if (calc.anomalie) {
-                // Anomalie → exclu du cumul, mais signalé
                 anomalies.push({ cycle: entry.cycle, raison: calc.raison, fbkey: old.__fbkey });
-                details.push({
-                    cycle: entry.cycle, montant: 0, conso: 0,
-                    anomalie: true, raison: calc.raison, fbkey: old.__fbkey
-                });
-                continue;
+                details.push({ cycle: entry.cycle, montant: 0, conso: 0, anomalie: true, raison: calc.raison, fbkey: old.__fbkey });
+            } else {
+                arriere += calc.montant;
+                details.push({ cycle: entry.cycle, montant: calc.montant, conso: calc.conso, anomalie: false, raison: null, fbkey: old.__fbkey });
             }
-
-            arriere += calc.montant;
-            details.push({
-                cycle: entry.cycle, montant: calc.montant, conso: calc.conso,
-                anomalie: false, raison: null, fbkey: old.__fbkey
-            });
+            // Cycle suivant de la chaîne : le client est désormais suivi par sa clé archivée.
+            fbKey = old.__fbkey;
+            limit = entry.cycle;
         }
 
-        return { arriere: arriere, details: details, anomalies: anomalies };
+        return { arriere: arriere, sourceCycle: sourceCycle, details: details, anomalies: anomalies };
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -246,7 +268,7 @@
      *   facture_courante:number, arriere:number, total:number,
      *   conso:number, facteur:number,
      *   anomalie:boolean, raison:string|null,   // anomalie du mois COURANT
-     *   arrearsDetails:Array, arrearsAnomalies:Array
+     *   arrearsDetails:Array, arrearsAnomalies:Array, arrearsSourceCycle:string|null
      * }}
      */
     function computeStatement(record, indexedBackups, opts) {
@@ -261,7 +283,8 @@
             anomalie: cur.anomalie,
             raison: cur.raison,
             arrearsDetails: arr.details,
-            arrearsAnomalies: arr.anomalies
+            arrearsAnomalies: arr.anomalies,
+            arrearsSourceCycle: arr.sourceCycle
         };
     }
 
@@ -283,6 +306,7 @@
      * @param {Array}  params.indexedBackups - sortie de indexBackups().
      * @param {string} [params.paidBy]     - auteur (audit).
      * @param {string} [params.timestamp]  - ISO ; défaut : maintenant.
+     * @param {object} [params.currentKeys] - { clé: true } des clients actuels (voir computeArrears).
      * @param {string} [params.backupPath] - chemin du noeud d'archives (défaut: 'asufor_backup').
      *                                        Multi-forage : passer forages/{key}/backup.
      * @returns {{updates:object, cyclesRegularises:Array}}
@@ -314,7 +338,7 @@
         //    (même recherche que computeArrears : on solde exactement ce qui a été compté)
         for (var i = 0; i < indexedBackups.length; i++) {
             var entry = indexedBackups[i];
-            var old = findInCycle(entry, record, activeKey);
+            var old = findInCycle(entry, record, activeKey, params.currentKeys);
             if (!old) continue;
             if (isPaid(old)) continue;
 
@@ -360,6 +384,7 @@
         // calculs
         computeCurrent: computeCurrent,
         indexBackups: indexBackups,
+        findInCycle: findInCycle,
         computeArrears: computeArrears,
         computeStatement: computeStatement,
         // paiement

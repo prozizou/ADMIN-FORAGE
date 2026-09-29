@@ -158,6 +158,7 @@ window.updateStatus = function(key, newStatus) {
                 activeKey: key,
                 record,
                 indexedBackups,
+                currentKeys: Object.fromEntries(Object.keys(storeReleves).map(k => [k, true])),
                 backupPath: P.backup,
                 paidBy: currentUser,
                 timestamp: now
@@ -586,11 +587,14 @@ window.applyFilter = function() {
     const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
     const useBilling = !!(window.Billing && window.Billing.computeStatement);
     const indexedBackups = useBilling ? window.Billing.indexBackups(allBackupsCache) : [];
+    // Clients du mois affiché : leur ligne d'archive ne peut pas être reprise par un autre.
+    const currentKeys = {};
+    Object.keys(storeReleves).forEach(k => { currentKeys[k] = true; });
 
     currentFilteredData = filteredBase.filter(item => {
         let calculatedAmount, arriere = 0, totalDu;
         if (useBilling) {
-            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key });
+            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key, currentKeys });
             calculatedAmount = stmt.facture_courante; // facture du mois courant
             arriere = stmt.arriere;                   // arriérés cumulés
             totalDu = stmt.total;                     // facture + arriérés

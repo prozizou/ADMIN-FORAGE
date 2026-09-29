@@ -27,6 +27,7 @@
     <script src="../forage-context.js"></script>
     <!-- ✅ Sécurité : hachage SHA-256 des passcodes maintenance -->
     <script src="../crypto.js"></script>
+    <script src="../billing.js"></script>
 
     <style>
         :root {
@@ -602,6 +603,24 @@
                 updates[`${P.backup}/${prevCycleKey}/donnees/${key}/new_index`] = Number(newIdx);
                 updates[`${P.backup}/${prevCycleKey}/donnees/${key}/status`] = newStat;
                 updates[`${P.backup}/${prevCycleKey}/donnees/${key}/statut`] = newStat === 'paye' ? true : false; // Booléen corrigé
+
+                // Marquer « payé » règle aussi les mois antérieurs encore impayés de ce
+                // client (comme le bouton Encaisser de Statistiques) — sinon leurs arriérés
+                // disparaîtraient du calcul sans avoir été payés.
+                if (newStat === 'paye' && window.Billing) {
+                    const bsnap = await get(ref(db, P.backup));
+                    const idx = window.Billing.indexBackups(bsnap.exists() ? bsnap.val() : {});
+                    const now = new Date().toISOString();
+                    idx.forEach(entry => {
+                        if (!(entry.cycle < prevCycleKey)) return;
+                        const old = entry.byKey[key];          // même clé Firebase d'un cycle à l'autre
+                        if (!old || window.Billing.isPaid(old)) return;
+                        const pfx = `${P.backup}/${entry.cycle}/donnees/${key}`;
+                        updates[`${pfx}/status`] = 'paye';
+                        updates[`${pfx}/statut`] = true;
+                        updates[`${pfx}/date_paiement`] = now;
+                    });
+                }
 
                 // 2. Synchronisation: On met à jour le last_index de la base active pour éviter un saut d'index ce mois-ci
                 updates[`${P.compteurs}/${key}/last_index`] = String(newIdx);

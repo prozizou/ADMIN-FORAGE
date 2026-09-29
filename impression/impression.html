@@ -787,24 +787,23 @@
         // divergences de logique entre impression et statistiques.
         const indexedBackups = window.Billing.indexBackups(allBackups);
 
-        // ── Arriérés = impayés de l'archive du MOIS PRÉCÉDENT ──
-        // On part du mois affiché, on prend l'archive qui le précède, on y
-        // recense chaque compteur impayé avec le montant qu'il restait à
-        // réclamer (facture de ce mois + ses propres arriérés, comme dans
-        // Statistiques). C'est ce montant qui devient l'arriéré du mois affiché.
-        // "actuel" → selectedMonthStr vaut "9999-99" : archive la plus récente.
-        const prev = buildPrevMonthArrears(indexedBackups, selectedMonthStr);
+        // ── Arriérés : même calcul que Statistiques (billing.js) ──
+        // Pour chaque compteur : ce qu'il restait à payer dans l'archive la plus
+        // récente qui le précède (mois précédent en règle générale) ; 0 si ce
+        // mois-là est payé. "actuel" → selectedMonthStr vaut "9999-99".
+        const currentKeys = {};
+        snap.forEach(child => { currentKeys[child.key] = true; });
+        const claimed = {};   // lignes d'archive reprises par un compteur actuel
 
         snap.forEach(child => {
             const d   = child.val();
             const key = child.key;
 
-            // Facture du mois via le moteur partagé ; arriéré via l'archive précédente
-            const stmt = window.Billing.computeStatement(d, [], {});
+            const stmt = window.Billing.computeStatement(d, indexedBackups,
+                { beforeCycle: selectedMonthStr, fbKey: key, currentKeys });
             const montantMois = stmt.facture_courante;
-            const prevRow     = prev.byKey[key] || prev.byMeter[window.Billing.meterKey(d)] || null;
-            const arrieres    = prevRow ? prevRow.montant : 0;
-            if (prevRow) prevRow.retrouve = true;
+            const arrieres    = stmt.arriere;
+            (stmt.arrearsDetails || []).forEach(x => { claimed[x.cycle + '|' + x.fbkey] = true; });
 
             d.vol        = stmt.conso;
             d.montantMois = montantMois;
@@ -887,31 +886,30 @@
 
         window.filterList();
         updateBanner();
-        renderPrevArrearsInfo(prev);
+        renderPrevArrearsInfo(buildPrevMonthArrears(indexedBackups, selectedMonthStr, claimed));
     }
 
-    // Recense les compteurs IMPAYÉS de l'archive qui précède `selectedMonthStr`
-    // ("9999-99" pour le mois actuel) : { cycle, byKey, byMeter, total, count }.
-    function buildPrevMonthArrears(indexedBackups, selectedMonthStr) {
-        const res = { cycle: null, byKey: {}, byMeter: {}, total: 0, count: 0, rows: [] };
+    // Contrôle : compteurs IMPAYÉS de l'archive qui précède `selectedMonthStr`
+    // ("9999-99" = mois actuel), avec le montant restant à réclamer (même calcul
+    // que la liste de l'archive dans Statistiques) et ceux non repris par un
+    // compteur actuel : { cycle, total, count, rows, absents }.
+    function buildPrevMonthArrears(indexedBackups, selectedMonthStr, claimed) {
+        const res = { cycle: null, total: 0, count: 0, rows: [], absents: [] };
         const before = indexedBackups.filter(e => e.cycle < selectedMonthStr);
         if (!before.length) return res;
-        const entry = before[before.length - 1];   // archive du mois précédent
+        const entry = before[before.length - 1];
         res.cycle = entry.cycle;
         Object.keys(entry.byKey).forEach(fbKey => {
             const rec = entry.byKey[fbKey];
             if (window.Billing.isPaid(rec)) return;
-            // Même calcul que la liste de l'archive dans Statistiques :
-            // facture de ce mois + arriérés antérieurs à ce mois.
             const st = window.Billing.computeStatement(rec, indexedBackups, { beforeCycle: entry.cycle, fbKey });
-            if (!(st.total > 0)) return;
-            const row = { fbKey, montant: st.total, retrouve: false };
+            const montant = st.total;
+            if (!(montant > 0)) return;
+            const row = { fbKey, montant, nom: rec.name || fbKey };
             res.rows.push(row);
-            res.byKey[fbKey] = row;
-            // Repli numéro + zone seulement si le numéro existe (sinon collisions)
-            if (String(rec.numero_compteur || '').trim()) res.byMeter[window.Billing.meterKey(rec)] = row;
-            res.total += st.total;
+            res.total += montant;
             res.count++;
+            if (!claimed[entry.cycle + '|' + fbKey]) res.absents.push(row);
         });
         return res;
     }
@@ -922,11 +920,11 @@
         if (!prev.cycle) { el.textContent = "Aucune archive précédente : pas d'arriérés."; return; }
         const [y, m] = prev.cycle.split('-');
         const lbl = new Date(+y, +m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-        const absents = prev.rows.filter(r => !r.retrouve);
-        let txt = `Arriérés repris de l'archive ${lbl} : ${fPrice(prev.total)} sur ${prev.count} compteur(s) impayé(s).`;
-        if (absents.length) {
-            const sumAbs = absents.reduce((a, r) => a + r.montant, 0);
-            txt += ` ⚠️ ${absents.length} compteur(s) (${fPrice(sumAbs)}) absent(s) de la liste actuelle.`;
+        let txt = `Archive ${lbl} : ${fPrice(prev.total)} restaient à réclamer sur ${prev.count} compteur(s) impayé(s).`;
+        if (prev.absents.length) {
+            const sumAbs = prev.absents.reduce((a, r) => a + r.montant, 0);
+            const noms = prev.absents.slice(0, 5).map(r => r.nom).join(', ') + (prev.absents.length > 5 ? '…' : '');
+            txt += ` ⚠️ ${prev.absents.length} compteur(s) (${fPrice(sumAbs)}) ne figurent plus dans la liste actuelle : ${noms}.`;
         }
         el.textContent = txt;
     }

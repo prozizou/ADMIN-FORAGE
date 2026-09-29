@@ -168,6 +168,70 @@ test('buildPaymentUpdates : solde le cycle retrouvé par clé Firebase', () => {
     assert.strictEqual(updates['A/backup/2026-08/donnees/c1/status'], 'paye');
 });
 
+// ── Arriérés : règle « archive la plus récente contenant le compteur » ──
+const R = (n, l, f, st) => ({ numero_compteur: n, zone: 'N', last_index: l, new_index: f, facteur: 250, status: st });
+
+test('arriérés : mois précédent payé → 0, même si un mois plus ancien était impayé', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },
+        '2026-07': { donnees: { a: R('1', 20, 30, 'paye') } }
+    });
+    assert.strictEqual(Billing.computeArrears(R('1', 30, 0, 'impaye'), idx, { fbKey: 'a' }).arriere, 0);
+});
+
+test('arriérés : chaîne — mois précédent impayé = sa facture + ses propres arriérés', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },     // 5000
+        '2026-07': { donnees: { a: R('1', 20, 30, 'impaye') } }     // 2500 + 5000
+    });
+    const r = Billing.computeArrears(R('1', 30, 0, 'impaye'), idx, { fbKey: 'a' });
+    assert.strictEqual(r.arriere, 7500);
+    assert.strictEqual(r.sourceCycle, '2026-07');
+    assert.strictEqual(r.details.length, 2);
+});
+
+test('arriérés : client absent du mois précédent → repris dans la dernière archive qui le contient', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 32, 'impaye') } },     // 8000
+        '2026-07': { donnees: { z: R('9', 0, 1, 'paye') } }
+    });
+    assert.strictEqual(Billing.computeArrears(R('1', 32, 0, 'impaye'), idx, { fbKey: 'a' }).arriere, 8000);
+});
+
+test('arriérés : numéro partagé → pas de repli ambigu, le client payé ne reçoit pas la dette de l\'autre', () => {
+    const idx = Billing.indexBackups({
+        '2026-07': { donnees: { p: R('5', 0, 10, 'paye'), q: R('5', 0, 40, 'impaye') } }
+    });
+    assert.strictEqual(Billing.computeArrears(R('5', 10, 0, 'impaye'), idx, { fbKey: 'p' }).arriere, 0);
+    assert.strictEqual(Billing.computeArrears(R('5', 40, 0, 'impaye'), idx, { fbKey: 'q' }).arriere, 10000);
+    // sans clé (donnée migrée) : numéro ambigu → aucune correspondance plutôt qu'une mauvaise
+    assert.strictEqual(Billing.computeArrears(R('5', 10, 0, 'impaye'), idx, {}).arriere, 0);
+});
+
+test('arriérés : repli numéro+zone refusé si la ligne est la clé d\'un autre client actuel', () => {
+    const idx = Billing.indexBackups({ '2026-07': { donnees: { a: R('7', 0, 10, 'impaye') } } });
+    const autre = R('7', 10, 0, 'impaye');   // même numéro/zone, clé différente
+    assert.strictEqual(Billing.computeArrears(autre, idx, { fbKey: 'b', currentKeys: { a: true, b: true } }).arriere, 0);
+    assert.strictEqual(Billing.computeArrears(autre, idx, { fbKey: 'b' }).arriere, 2500);   // client vraiment recréé
+});
+
+test('arriérés : numéro vide → jamais de repli (clients sans numéro)', () => {
+    const idx = Billing.indexBackups({ '2026-07': { donnees: { a: R('', 0, 10, 'impaye') } } });
+    assert.strictEqual(Billing.computeArrears(R('', 10, 0, 'impaye'), idx, { fbKey: 'x' }).arriere, 0);
+});
+
+test('paiement en cascade : solde toute la chaîne retrouvée par clé', () => {
+    const idx = Billing.indexBackups({
+        '2026-06': { donnees: { a: R('1', 0, 20, 'impaye') } },
+        '2026-07': { donnees: { a: R('1', 20, 30, 'impaye') } }
+    });
+    const { updates, cyclesRegularises } = Billing.buildPaymentUpdates({
+        activePath: 'A/c', activeKey: 'a', record: R('1', 30, 40, 'impaye'), indexedBackups: idx, backupPath: 'A/b'
+    });
+    assert.deepStrictEqual(cyclesRegularises.sort(), ['2026-06', '2026-07']);
+    assert.strictEqual(updates['A/b/2026-06/donnees/a/status'], 'paye');
+});
+
 // ── Paiement / révocation ────────────────────────────────────
 test('buildPaymentUpdates : régularise base active + cycles impayés', () => {
     const idx = Billing.indexBackups(backupRoot);
