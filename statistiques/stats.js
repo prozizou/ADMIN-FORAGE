@@ -43,6 +43,11 @@ let currentActivePath = "";
 
 // Cache de l'arbre complet asufor_backup (pour billing.js : arriérés + cascade paiement)
 let allBackupsCache = {};
+// ✅ Vrai UNIQUEMENT quand les archives ont été lues EN ENTIER. Tant que ce n'est pas
+// le cas, l'encaissement est bloqué : régulariser un paiement sans connaître les cycles
+// impayés laisserait des arriérés ouverts sans que personne ne le voie.
+let backupsLoaded = false;
+let prevMonthCycle = null;
 
 let currentUser = 'Trésorier/Admin';
 
@@ -132,7 +137,36 @@ window.confirmRevoke = function(key) {
     }
 };
 
-window.updateStatus = function(key, newStatus) {
+// Applique dans le cache local des archives les écritures qui viennent de réussir
+// (chemins « {P.backup}/{cycle}/donnees/{clé}/{champ} »), pour que les arriérés
+// recalculés reflètent tout de suite le règlement / la correction.
+function patchBackupCacheFromUpdates(updates) {
+    const prefix = P.backup + '/';
+    Object.entries(updates).forEach(([path, value]) => {
+        if (!path.startsWith(prefix)) return;
+        const [cycle, sect, key, field] = path.slice(prefix.length).split('/');
+        if (sect !== 'donnees' || !key || !field) return;
+        const donnees = allBackupsCache[cycle] && allBackupsCache[cycle].donnees;
+        if (!donnees || !donnees[key]) return;
+        if (value === null) delete donnees[key][field]; else donnees[key][field] = value;
+    });
+}
+
+// Relit, pour CE client, sa ligne dans chaque archive : le cache est chargé une seule fois à
+// l'ouverture de la page, un autre appareil a pu régler ou corriger un mois depuis.
+async function refreshClientArchiveRows(key) {
+    const cycles = Object.keys(allBackupsCache);
+    await Promise.all(cycles.map(async (cycle) => {
+        const snap = await get(ref(db, `${P.backup}/${cycle}/donnees/${key}`));
+        const node = allBackupsCache[cycle];
+        if (!node || !node.donnees) return;
+        if (snap.exists()) node.donnees[key] = snap.val(); else delete node.donnees[key];
+    }));
+}
+
+const paymentsInFlight = new Set();
+
+window.updateStatus = async function(key, newStatus) {
     // ✅ v2 : verrou défensif — la carte ne propose déjà plus ce bouton sur une
     // archive, mais on bloque aussi l'appel direct (deuxième ligne de défense).
     if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
@@ -140,20 +174,49 @@ window.updateStatus = function(key, newStatus) {
         showToast("Erreur : Chemin de base de données inconnu.", true);
         return;
     }
+    if (!window.Billing) {
+        showToast("Erreur : moteur de facturation non chargé. Rechargez la page.", true);
+        return;
+    }
+    // ✅ Encaissement bloqué tant que les archives ne sont pas chargées en entier.
+    if (!backupsLoaded) {
+        showToast("⏳ Archives en cours de chargement : patientez un instant avant d'encaisser.", true);
+        return;
+    }
+    if (paymentsInFlight.has(key)) return;      // double clic
+    paymentsInFlight.add(key);
 
-    const now = new Date().toISOString();
-    const record = storeReleves[key] || {};
+    try {
+        // Données fraîches de CE client dans toutes les archives (voir refreshClientArchiveRows).
+        try {
+            await refreshClientArchiveRows(key);
+        } catch (err) {
+            showToast("Impossible de vérifier les archives (" + (err.code || err.message) + ") : opération annulée.", true);
+            return;
+        }
+        if (isArchiveView || currentActivePath !== P.compteurs) return;   // l'utilisateur a changé de mois entre-temps
 
-    // La cascade complète (nettoyage base active + historique backup) n'a de sens
-    // que sur la base ACTIVE. Sur une archive on se contente d'un simple flip.
-    const onActiveBase = (currentActivePath === P.compteurs);
-
-    let updates;
-    if (window.Billing && onActiveBase) {
+        const now = new Date().toISOString();
+        const record = storeReleves[key] || {};
         const indexedBackups = window.Billing.indexBackups(allBackupsCache);
+
+        let built;
         if (newStatus === 'paye') {
-            // §3 Régularisation : status→paye, arriere→0, + tous les cycles impayés de l'historique
-            updates = window.Billing.buildPaymentUpdates({
+            // Régularisation : mois courant + TOUS les cycles impayés (hors anomalies), et
+            // mémoire de ce qui est réglé (arrieres_regles) pour le total « encaissé ».
+            built = window.Billing.buildPaymentUpdates({
+                activePath: currentActivePath,
+                activeKey: key,
+                record,
+                indexedBackups,
+                currentKeys: Object.fromEntries(Object.keys(storeReleves).map(k => [k, true])),
+                backupPath: P.backup,
+                paidBy: currentUser,
+                timestamp: now
+            });
+        } else {
+            // Correction : remet à impayé le mois courant ET les cycles que CE paiement avait réglés.
+            built = window.Billing.buildRevokeUpdates({
                 activePath: currentActivePath,
                 activeKey: key,
                 record,
@@ -161,52 +224,58 @@ window.updateStatus = function(key, newStatus) {
                 backupPath: P.backup,
                 paidBy: currentUser,
                 timestamp: now
-            }).updates;
-        } else {
-            // Révocation : repasse la base active en impayé (l'historique reste inchangé)
-            updates = window.Billing.buildRevokeUpdates({
-                activePath: currentActivePath,
-                activeKey: key,
-                paidBy: currentUser,
-                timestamp: now
-            }).updates;
+            });
         }
-    } else {
-        // Repli : archive consultée, ou billing.js indisponible → flip minimal
-        const p = `${currentActivePath}/${key}`;
-        updates = {
-            [`${p}/status`]: newStatus,
-            [`${p}/statut`]: newStatus === 'paye',
-            [`${p}/last_modified_by`]: currentUser,
-            [`${p}/last_modified_at`]: now
-        };
-        if (newStatus === 'paye') updates[`${p}/date_paiement`] = now;
-    }
+        const updates = built.updates;
 
-    // ✅ CORRECTION : mise à jour optimiste — reflète le changement dans la liste
-    //   immédiatement, sans attendre l'aller-retour réseau vers Firebase. Le
-    //   listener onValue (loadDataForMonth) confirmera/réconciliera silencieusement
-    //   une fois l'écriture propagée ; en cas d'échec, on annule localement.
-    const previousRecord = storeReleves[key] ? { ...storeReleves[key] } : null;
-    if (storeReleves[key]) {
-        storeReleves[key] = {
-            ...storeReleves[key],
-            status: newStatus,
-            statut: newStatus === 'paye',
-            arriere: newStatus === 'paye' ? 0 : storeReleves[key].arriere
-        };
-        window.applyFilter();
-    }
+        // ✅ Mise à jour optimiste — reflète le changement dans la liste immédiatement ;
+        //   en cas d'échec, on annule localement (le listener réconcilie sinon).
+        const previousRecord = storeReleves[key] ? { ...storeReleves[key] } : null;
+        if (storeReleves[key]) {
+            const base = `${currentActivePath}/${key}/`;
+            const next = { ...storeReleves[key] };
+            Object.entries(updates).forEach(([path, value]) => {
+                if (!path.startsWith(base)) return;
+                const field = path.slice(base.length);
+                if (value === null) delete next[field]; else next[field] = value;
+            });
+            storeReleves[key] = next;
+            window.applyFilter();
+        }
 
-    update(ref(db), updates)
-        .then(() => showToast(newStatus === 'paye' ? "✅ Facture encaissée ! Historique régularisé." : "↩️ Paiement corrigé : facture remise à encaisser."))
-        .catch(err => {
+        try {
+            await update(ref(db), updates);
+        } catch (err) {
             if (previousRecord) {
                 storeReleves[key] = previousRecord;
                 window.applyFilter();
             }
-            showToast("Erreur réseau : " + err, true);
-        });
+            const denied = err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(String(err.message || err)));
+            showToast(denied
+                ? "⛔ Droits insuffisants : régulariser des arriérés d'archives est réservé au président et au trésorier."
+                : "Erreur réseau : " + err, true);
+            return;
+        }
+
+        patchBackupCacheFromUpdates(updates);
+        window.applyFilter();
+
+        if (newStatus === 'paye') {
+            const nb = built.cyclesRegularises.length;
+            let msg = nb > 0
+                ? `✅ Facture encaissée ! ${nb} mois d'arriérés réglé(s) (${Math.round(built.arrieresRegles).toLocaleString()} F).`
+                : "✅ Facture encaissée !";
+            if (built.cyclesIgnores.length) msg += ` ⚠️ ${built.cyclesIgnores.length} mois en anomalie non réglé(s) automatiquement.`;
+            showToast(msg);
+        } else {
+            const nb = built.cyclesRestaures.length;
+            showToast(nb > 0
+                ? `↩️ Paiement corrigé : facture et ${nb} mois d'arriérés remis à encaisser.`
+                : "↩️ Paiement corrigé : facture remise à encaisser.");
+        }
+    } finally {
+        paymentsInFlight.delete(key);
+    }
 };
 
 // --- EXPORT CSV ---
@@ -228,7 +297,7 @@ window.exportCSV = function() {
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
 
-        const isPaid = item.status === 'paye' ? 'Paye' : 'Impaye';
+        const isPaid = window.Billing.isPaid(item) ? 'Paye' : 'Impaye';
         const zoneName = zoneOf(item);
         const clientName = (item.name || "Client Inconnu").replace(/;/g, ' ');
         const numCompteur = (item.numero_compteur || "").replace(/;/g, ' ');
@@ -267,26 +336,32 @@ window.initMonthFilter = function() {
     // ci-dessous — les deux se font en parallèle plutôt qu'en série.
     loadDataForMonth("actuel");
 
+    loadBackups(monthSelect, 0);
+}
+
+// Charge TOUTES les archives (liste des périodes + cache des arriérés). backupsLoaded ne
+// passe à vrai qu'en cas de lecture complète ; sinon nouvel essai automatique.
+function loadBackups(monthSelect, attempt) {
     get(ref(db, P.backup)).then((snapshot) => {
         let optionsHtml = '<option value="actuel">Données actuelles</option>';
 
-        if (snapshot.exists()) {
-            const backups = snapshot.val();
-            allBackupsCache = backups; // conservé pour billing.js (arriérés + cascade paiement)
-            const sortedMonths = Object.keys(backups).sort().reverse();
-
-            sortedMonths.forEach(month => {
-                optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
-            });
-        }
+        allBackupsCache = snapshot.exists() ? snapshot.val() : {};   // conservé pour billing.js (arriérés + cascade paiement)
+        Object.keys(allBackupsCache).sort().reverse().forEach(month => {
+            optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
+        });
 
         const activeValue = monthSelect.value;
         monthSelect.innerHTML = optionsHtml;
         monthSelect.value = activeValue;
-        // Les arriérés dépendent des archives : recalcul maintenant qu'elles sont là.
+        backupsLoaded = true;
+        // Les arriérés dépendent des archives : recalcul maintenant qu'elles sont là
+        // (et déblocage des boutons d'encaissement).
         window.applyFilter();
     }).catch((error) => {
         console.error("Erreur lors du chargement des périodes:", error);
+        backupsLoaded = false;
+        if (attempt === 0) showToast("⚠️ Archives indisponibles : l'encaissement reste bloqué tant qu'elles ne sont pas chargées.", true);
+        if (attempt < 6) setTimeout(() => loadBackups(monthSelect, attempt + 1), 8000);
     });
 }
 
@@ -418,9 +493,11 @@ function fetchPreviousMonthStats(baseMonthStr) {
     
     get(ref(db, `${P.backup}/${prevMonthStr}/donnees`)).then((snap) => {
         prevMonthData = snap.val() || {};
+        prevMonthCycle = prevMonthStr;
         window.applyFilter();
     }).catch(() => {
         prevMonthData = {};
+        prevMonthCycle = null;
         window.applyFilter();
     });
 }
@@ -551,21 +628,26 @@ window.applyFilter = function() {
     
     let entries = Object.entries(storeReleves).map(([key, item]) => ({ key, ...item })).reverse();
     
-    let tCFA_Paye = 0; let tCFA_Impaye = 0;
-    let tCFA_Paye_Prev = 0; let tCFA_Impaye_Prev = 0;
+    const monthSel = (document.getElementById('month-filter') || {}).value || 'actuel';
+    const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
+    // ✅ Tous les calculs viennent de billing.js (source unique de vérité).
+    const indexedBackups = window.Billing.indexBackups(allBackupsCache);
+    // Clients du mois affiché : leur ligne d'archive ne peut pas être reprise par un autre.
+    const currentKeys = {};
+    Object.keys(storeReleves).forEach(k => { currentKeys[k] = true; });
 
-    Object.values(prevMonthData).forEach(item => {
-        const nIdx = parseFloat(item.new_index || 0);
-        const lIdx = parseFloat(item.last_index || 0);
-        const conso = Math.max(0, nIdx - lIdx); 
-        const facteur = parseFloat(item.facteur || 0);
-        const calculatedAmount = conso * facteur;
-
-        if (!isNaN(calculatedAmount)) {
-            const isPaid = item.status === 'paye';
-            if (isPaid) tCFA_Paye_Prev += calculatedAmount; else tCFA_Impaye_Prev += calculatedAmount;
-        }
-    });
+    // Mois précédent, mesuré comme le mois affiché (encaissé = factures + arriérés réglés,
+    // à réclamer = mois + arriérés) — sinon la tendance compare deux définitions différentes.
+    const prevItems = Object.entries(prevMonthData)
+        .filter(([, rec]) => rec && typeof rec === 'object' && (selectedId === "all" || rec.agent_id === selectedId))
+        .map(([k, rec]) => ({
+            record: rec,
+            statement: window.Billing.computeStatement(rec, indexedBackups, { beforeCycle: prevMonthCycle || undefined, fbKey: k })
+        }));
+    const prevRecap = window.Billing.summarizeRecap(prevItems);
+    const tCFA_Paye_Prev = prevRecap.paye;
+    const tCFA_Impaye_Prev = prevRecap.impaye;
+    const recapItems = [];
 
     let filteredBase = entries.filter(item => {
         if (selectedId !== "all" && item.agent_id !== selectedId) return false;
@@ -578,31 +660,12 @@ window.applyFilter = function() {
         return isNameMatch || isCompteurMatch;
     });
 
-    // ✅ FIX : brancher les totaux sur billing.js (source unique de vérité) afin
-    //   d'inclure les ARRIÉRÉS, exactement comme le fait déjà l'impression.
-    //   Avant, le total « impayés » ne comptait que la facture du mois courant,
-    //   d'où une divergence avec les factures imprimées.
-    const monthSel = (document.getElementById('month-filter') || {}).value || 'actuel';
-    const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
-    const useBilling = !!(window.Billing && window.Billing.computeStatement);
-    const indexedBackups = useBilling ? window.Billing.indexBackups(allBackupsCache) : [];
-
     currentFilteredData = filteredBase.filter(item => {
-        let calculatedAmount, arriere = 0, totalDu;
-        if (useBilling) {
-            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key });
-            calculatedAmount = stmt.facture_courante; // facture du mois courant
-            arriere = stmt.arriere;                   // arriérés cumulés
-            totalDu = stmt.total;                     // facture + arriérés
-            item.conso = stmt.conso;                  // ✅ 0 si consommation invraisemblable (anomalie)
-        } else {
-            const nIdx = parseFloat(item.new_index || 0);
-            const lIdx = parseFloat(item.last_index || 0);
-            const facteur = parseFloat(item.facteur || 0);
-            calculatedAmount = Math.max(0, nIdx - lIdx) * facteur;
-            totalDu = calculatedAmount;
-            item.conso = Math.max(0, nIdx - lIdx);
-        }
+        const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key, currentKeys });
+        const calculatedAmount = stmt.facture_courante; // facture du mois courant
+        const arriere = stmt.arriere;                   // arriérés cumulés (+ correction manuelle enregistrée)
+        const totalDu = stmt.total;                     // facture + arriérés
+        item.conso = stmt.conso;                        // ✅ 0 si consommation invraisemblable (anomalie)
 
         item.calculatedAmount = calculatedAmount;
         item.arriere = arriere;
@@ -610,13 +673,8 @@ window.applyFilter = function() {
 
         if (isNaN(totalDu)) return false;
 
-        const isPaid = item.status === 'paye';
-
-        if (isPaid) {
-            tCFA_Paye += calculatedAmount;
-        } else {
-            tCFA_Impaye += totalDu; // ✅ inclut désormais les arriérés
-        }
+        const isPaid = window.Billing.isPaid(item);
+        recapItems.push({ record: item, statement: stmt });
 
         if (currentTab === 'paye' && !isPaid) return false;
         if (currentTab === 'impaye' && isPaid) return false;
@@ -654,6 +712,10 @@ window.applyFilter = function() {
         return na.localeCompare(nb);
     });
 
+    // ✅ Encaissé = factures du mois payées + arriérés réglés avec elles ; à réclamer = mois + arriérés.
+    const recap = window.Billing.summarizeRecap(recapItems);
+    const tCFA_Paye = recap.paye;
+    const tCFA_Impaye = recap.impaye;
     document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
     document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
 
@@ -881,7 +943,7 @@ function renderList() {
         const calculatedAmount = item.calculatedAmount || 0;
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
-        const isPaid = item.status === 'paye';
+        const isPaid = window.Billing.isPaid(item);
         // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
         const arriereHtml = (!isPaid && arriere > 0)
             ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
@@ -916,11 +978,13 @@ function renderList() {
         // compteur impayé — gros bouton bleu, bien visible sur la carte.
         // "Annuler le paiement" → "Corriger" : une correction courante, pas
         // une suppression, n'a pas à être présentée en rouge vif.
+        // ✅ Bloqué (grisé) tant que les archives ne sont pas chargées en entier.
+        const archivesLockAttr = backupsLoaded ? '' : 'disabled title="Chargement des archives en cours…" style="opacity:.55;cursor:wait"';
         const statusBtn = isArchiveView
             ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
             : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')"><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
+                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')" ${archivesLockAttr}><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
+                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')" ${archivesLockAttr}><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un

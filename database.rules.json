@@ -18,13 +18,24 @@
     ".read": false,
     ".write": false,
 
+    // ══════════════════════════════════════════════════════════════
+    //  NŒUDS LEGACY (mono-forage Diandioly, avant migration multi-forage)
+    //  db_agents, asufor_db_diandioly, asufor_backup, asufor_depenses,
+    //  asufor_motivations : l'application n'y accède plus (ForageContext.LEGACY
+    //  = false, données migrées sous Asufor/Asufor_diandioly/…). Ils restent en
+    //  base jusqu'au retrait mais ne sont plus ouverts à « tout utilisateur
+    //  authentifié » (un compte d'un AUTRE forage y lisait les données de
+    //  Diandioly) : lecture = super-admin ou membre du forage Asufor_diandioly ;
+    //  écriture = les e-mails historiques, ET membre du forage Asufor_diandioly.
+    // ══════════════════════════════════════════════════════════════
+
     // ============ AGENTS (relevés terrain) ============
     "db_agents": {
-      // Lecture : tout admin authentifié (le formulaire compteur liste les agents).
-      ".read": "auth != null",
+      // Lecture : super-admin ou membre du forage Asufor_diandioly.
+      ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' )",
 
       // Écriture : création/gestion réservée au président et au secrétaire.
-      ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')",
 
       // Index requis par la vérification de doublon (orderByChild('agent_tel')).
       ".indexOn": ["agent_tel"],
@@ -58,13 +69,13 @@
 
     // ============ COMPTEURS / RELEVÉS (cycle courant) ============
     "asufor_db_diandioly": {
-      // Lecture : tous les rôles authentifiés (stats, impression, anomalies).
-      ".read": "auth != null",
+      // Lecture : super-admin ou membre du forage Asufor_diandioly (legacy, voir plus haut).
+      ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' )",
 
       "$recordId": {
         // Création : président ou secrétaire uniquement.
         // Mise à jour (paiement, anomalie, archivage) : les trois rôles connus.
-        ".write": "auth != null && ( (!data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')) || (data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')) )",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' && ( (!data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com')) || (data.exists() && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'secretaire@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')) )",
 
         // Validation des champs critiques. Les autres champs applicatifs
         // (statut/status/facture/print/apaid/arrieres/anomaly_*/last_modified*…)
@@ -85,10 +96,10 @@
 
     // ============ ARCHIVES DE CYCLE (reset/clôture) ============
     "asufor_backup": {
-      // Lecture : tous les rôles authentifiés (consultation des cycles passés).
-      ".read": "auth != null",
+      // Lecture : super-admin ou membre du forage Asufor_diandioly (legacy, voir plus haut).
+      ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' )",
       // Écriture : président uniquement (opération irréversible de clôture).
-      ".write": "auth != null && auth.token.email == 'president@diandioly.com'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' && auth.token.email == 'president@diandioly.com'",
       "$cycle": {
         ".validate": "newData.hasChildren(['donnees'])"
       }
@@ -96,11 +107,11 @@
 
     // ============ DÉPENSES / CAISSE (par cycle "YYYY-MM") ============
     "asufor_depenses": {
-      // Lecture : tous les rôles authentifiés (le bilan/caisse est consultable).
-      ".read": "auth != null",
+      // Lecture : super-admin ou membre du forage Asufor_diandioly (legacy, voir plus haut).
+      ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' )",
       "$cycle": {
         // Écriture (ajout/suppression) : président et trésorier uniquement (finance).
-        ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
         "$depId": {
           ".validate": "newData.hasChildren(['libelle', 'montant'])",
           "libelle":    { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
@@ -120,11 +131,11 @@
     // (président, trésorier, secrétaire, agents releveurs, programmeur, frais de
     // développement…) — le rapport affiche Encaissé − Σ(motivations) = Net.
     "asufor_motivations": {
-      // Lecture : tous les rôles authentifiés (le bilan est consultable).
-      ".read": "auth != null",
+      // Lecture : super-admin ou membre du forage Asufor_diandioly (legacy, voir plus haut).
+      ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' )",
       "$cycle": {
         // Écriture (ajout/suppression) : président et trésorier uniquement (finance).
-        ".write": "auth != null && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
+        ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == 'Asufor_diandioly' && (auth.token.email == 'president@diandioly.com' || auth.token.email == 'tresorier@diandioly.com')",
         "$motId": {
           ".validate": "newData.hasChildren(['beneficiaire', 'montant'])",
           "beneficiaire": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 120" },
@@ -162,8 +173,11 @@
         ".read": "auth != null && ( auth.uid == $uid || auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('role').val() == 'président' && root.child('users').child(auth.uid).child('forageKey').val() == data.child('forageKey').val()) )",
 
         // Écriture : super-admin (tout) ; ou président qui crée/gère un membre de SON forage
-        // (jamais un super-admin, jamais un autre président).
-        ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('role').val() == 'président' && newData.child('forageKey').val() == root.child('users').child(auth.uid).child('forageKey').val() && newData.child('role').val() != 'superadmin' && newData.child('role').val() != 'président' ) )",
+        // (jamais un super-admin, jamais un président). ✅ ISOLATION : un compte EXISTANT ne
+        // peut être modifié que s'il appartient DÉJÀ au forage du président — sinon un président
+        // pouvait réécrire la fiche d'un utilisateur d'un autre forage (y compris son président)
+        // en y posant sa propre forageKey pour le rattacher à son forage.
+        ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('role').val() == 'président' && newData.child('forageKey').val() == root.child('users').child(auth.uid).child('forageKey').val() && newData.child('role').val() != 'superadmin' && newData.child('role').val() != 'président' && ( !data.exists() || ( data.child('forageKey').val() == root.child('users').child(auth.uid).child('forageKey').val() && data.child('role').val() != 'président' ) ) ) )",
 
         ".validate": "newData.hasChildren(['role', 'forageKey'])",
         "role":       { ".validate": "newData.isString() && (newData.val() == 'président' || newData.val() == 'secrétaire' || newData.val() == 'trésorier' || newData.val() == 'agent')" },
@@ -191,7 +205,11 @@
           ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )",
           // ✅ CORRECTION v4 : next_counter_number — compteur atomique pour la numérotation des compteurs.
           //    Type number, >= 1, modifiable par président du forage ou super-admin.
+          //    ✅ Le secrétaire (qui crée les compteurs, cf. counter/list.html) peut
+          //    INCRÉMENTER ce compteur — jamais le faire reculer (doublons de numéros) ni
+          //    écrire un autre champ de config (réservé au président).
           "next_counter_number": {
+            ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'secrétaire' && newData.isNumber() && ( !data.exists() || newData.val() >= data.val() )",
             ".validate": "newData.isNumber() && newData.val() >= 1"
           },
           // ✅ CORRECTION v4 : maintenance_passcode_hash — hash SHA-256 du passcode de maintenance.
@@ -251,11 +269,33 @@
           }
         },
 
-        // ── Archives de cycle (clôture / reset) : président du forage ou super-admin ──
+        // ── Archives de cycle (clôture / reset) ──
+        //  • Le nœud entier n'est écrivable que par le super-admin.
+        //  • ✅ CLÔTURE ATOMIQUE / ANTI-CONCURRENCE : le président ne peut CRÉER une archive de
+        //    cycle qu'une seule fois (!data.exists()). La clôture écrit archive + remise à zéro
+        //    des compteurs dans un seul update multi-chemins : si une autre clôture du même
+        //    cycle est passée entre-temps, Firebase refuse TOUT (l'archive n'est jamais
+        //    écrasée par des données déjà remises à zéro, les compteurs ne sont pas
+        //    réinitialisés deux fois).
+        //  • Corrections d'un relevé archivé (index, statut…) : président, ligne par ligne,
+        //    sans pouvoir supprimer la ligne.
+        //  • ✅ RÉGULARISATION : le trésorier peut modifier UNIQUEMENT les champs de paiement
+        //    d'une ligne existante (statut, date, auteur) — jamais les index ni la structure.
         "backup": {
-          ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président') )",
+          ".write": "auth != null && auth.token.email == 'prozizou298@gmail.com'",
           "$cycle": {
-            ".validate": "newData.hasChildren(['donnees'])"
+            ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président' && !data.exists()",
+            ".validate": "newData.hasChildren(['donnees'])",
+            "donnees": {
+              "$recordId": {
+                ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && root.child('users').child(auth.uid).child('role').val() == 'président' && newData.exists()",
+              "status": { ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier') && data.parent().exists() && (newData.val() == 'paye' || newData.val() == 'impaye')" },
+              "statut": { ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier') && data.parent().exists() && newData.isBoolean()" },
+              "date_paiement": { ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier') && data.parent().exists() && (!newData.exists() || newData.isString())" },
+              "last_modified_by": { ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier') && data.parent().exists() && newData.isString()" },
+              "last_modified_at": { ".write": "auth != null && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'trésorier') && data.parent().exists() && newData.isString()" }
+              }
+            }
           }
         },
 
@@ -306,7 +346,8 @@
         //    Écriture par tout membre authentifié du forage (pour tracer qui a modifié quoi).
         //    Lecture uniquement par président et super-admin.
         "audit_arrieres": {
-          ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || root.child('users').child(auth.uid).child('role').val() == 'président' )",
+          // ✅ ISOLATION : le président ne lit que le journal de SON forage (avant : n'importe quel forage).
+          ".read": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('role').val() == 'président' && root.child('users').child(auth.uid).child('forageKey').val() == $forageKey ) )",
           "$entryId": {
             ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || (root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && (root.child('users').child(auth.uid).child('role').val() == 'président' || root.child('users').child(auth.uid).child('role').val() == 'secrétaire' || root.child('users').child(auth.uid).child('role').val() == 'trésorier')) )",
             ".validate": "newData.hasChildren(['compteurKey', 'compteur', 'proprietaire', 'zone', 'ancienArrieres', 'nouveauArrieres', 'modifiePar', 'modifieRole', 'modifieLe', 'sessionForage'])",
