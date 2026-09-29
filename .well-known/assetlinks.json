@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "sn.satigueeau.app",
+      "sha256_cert_fingerprints": [
+        "AC:AB:C6:D4:71:D5:8D:67:D1:98:8B:50:62:6F:15:59:49:1B:A4:1E:83:6E:04:F1:79:12:23:2C:B2:3D:5B:4E"
+      ]
+    }
+  }
+]
