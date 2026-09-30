@@ -314,10 +314,39 @@ async function main() {
         await check('chronologie : 2 factures + 1 paiement (affectations), soldes cohérents', async () => {
             const t = await page.textContent('#timeline');
             assert.match(t, /Facture Juin 2026/); assert.match(t, /Facture Juillet 2026/);
-            assert.match(t, /Paiement — reçu n°/);
+            assert.match(t, /Paiement · reçu n°/);
             assert.strictEqual(num(await page.textContent('#t-avance')), 1000);
             assert.strictEqual(num(await page.textContent('#t-arrieres')), 0);
         });
+        for (const width of [320, 360, 390]) {
+            await check(`relevé mobile ${width}px : dark, KPI, actions sur une ligne (≥ 44 px), menu ⋮, timeline, aucun débordement`, async () => {
+                await page.setViewportSize({ width, height: 780 });
+                const r = await page.evaluate(() => {
+                    const vis = (e) => e.getBoundingClientRect().width > 0;
+                    const row = [...document.querySelectorAll('.card > .actions > .btn')].filter(vis);
+                    const tops = new Set(row.map(b => Math.round(b.getBoundingClientRect().top)));
+                    const kpi = [...document.querySelectorAll('.kpi')].map(k => k.getBoundingClientRect());
+                    return {
+                        over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                        bg: getComputedStyle(document.body).backgroundColor,
+                        oneLine: tops.size === 1, minH: Math.min(...row.map(b => b.getBoundingClientRect().height)),
+                        outside: row.filter(b => b.getBoundingClientRect().right > window.innerWidth).length + kpi.filter(k => k.right > window.innerWidth).length,
+                        main: [...document.querySelectorAll('.kpis:not(.second) .l')].map(e => e.textContent), second: [...document.querySelectorAll('.kpis.second .l')].map(e => e.textContent),
+                        dots: document.querySelectorAll('#timeline .ev .dot').length, meta: document.getElementById('meta').textContent
+                    };
+                });
+                assert.ok(r.over <= 0, 'scroll horizontal ' + r.over);
+                assert.strictEqual(r.bg, 'rgb(10, 15, 28)');
+                assert.ok(r.oneLine, 'actions sur plusieurs lignes'); assert.ok(r.minH >= 44, 'bouton trop bas : ' + r.minH); assert.strictEqual(r.outside, 0);
+                assert.deepStrictEqual(r.main, ['Facturé', 'Payé', 'Solde à payer']); assert.deepStrictEqual(r.second, ['Arriérés', 'Avance', 'Ajustements']);
+                assert.ok(r.dots >= 3); assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
+                await page.click('#btn-more');
+                assert.ok(await page.isVisible('#menu'));
+                await page.keyboard.press('Escape');
+                assert.ok(!(await page.isVisible('#menu')));
+            });
+        }
+        if (true) { await page.setViewportSize({ width: 360, height: 780 }); await page.screenshot({ path: (process.env.SHOT_DIR || '/tmp') + '/releve-360.png' }); }
         await check('reçu imprimable : n°, montant, factures réglées, avance', async () => {
             const r = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
             await r.page.goto(base + '/compte/recu.html?p=' + encodeURIComponent(paiementId));

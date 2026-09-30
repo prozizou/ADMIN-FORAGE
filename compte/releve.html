@@ -27,65 +27,129 @@
         if (typeof window.checkAccess === 'function') window.checkAccess(['président', 'secrétaire', 'trésorier']);
     </script>
     <style>
-        :root { --bg:#f1f5f9; --surface:#fff; --text-main:#0f172a; --text-sub:#64748b; --border:#e2e8f0; --primary:#0439a0; --success:#15803d; --danger:#b91c1c; --warn:#b45309; }
-        @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --surface:#131c2e; --text-main:#e2e8f0; --text-sub:#94a3b8; --border:#243049; --primary:#3b82f6; --success:#22c55e; --danger:#f87171; --warn:#fbbf24; } }
+        /* Dark premium : palette sombre par défaut (l'impression repasse en clair). Les variables --surface / --text-main /
+           --border sont aussi utilisées par les fenêtres de compta-ui.js. */
+        :root { color-scheme: dark; --bg:#0a0f1c; --surface:#121a2b; --surface-2:#182238; --text-main:#e8edf6; --text-sub:#8fa0ba; --border:#24314b;
+                --primary:#3b82f6; --primary-strong:#2563eb; --success:#34d399; --danger:#f87171; --warn:#fbbf24; --shadow:0 2px 10px rgba(0,0,0,.35); }
         * { box-sizing: border-box; }
-        body { margin:0; background:var(--bg); color:var(--text-main); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-        .wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 60px; }
-        a.back { color: var(--text-sub); text-decoration:none; font-size:.9rem; display:inline-flex; gap:6px; align-items:center; margin-bottom:10px; }
-        .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:14px; }
-        h1 { font-size:1.2rem; margin:0; }
-        .sub { color:var(--text-sub); font-size:.85rem; margin-top:4px; }
-        .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; }
-        .tile .l { font-size:.68rem; font-weight:700; text-transform:uppercase; color:var(--text-sub); letter-spacing:.02em; }
-        .tile .v { font-size:1.05rem; font-weight:800; margin-top:2px; }
+        html, body { overflow-x: hidden; }
+        body { margin:0; background:var(--bg); color:var(--text-main); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 12px 12px 48px; }
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); min-width:0; }
+
+        /* En-tête client */
+        .top { display:flex; align-items:center; gap:10px; }
+        a.back { flex:none; width:40px; height:40px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border); color:var(--text-sub); text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+        .who { min-width:0; flex:1; }
+        h1 { font-size:1.15rem; line-height:1.2; margin:0; font-weight:800; overflow-wrap:anywhere; }
+        .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
+        .chip { display:inline-flex; align-items:center; gap:5px; font-size:.74rem; font-weight:600; color:var(--text-sub); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:3px 9px; max-width:100%; }
+        .chip i { font-size:.68rem; opacity:.85; }
+        .sub { color:var(--text-sub); font-size:.8rem; line-height:1.35; }
+
+        /* KPI : 3 principaux, 3 secondaires */
+        .kpis { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px; }
+        .kpi { background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:10px 10px 9px; min-width:0; }
+        .kpi .l { font-size:.64rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--text-sub); }
+        .kpi .v { font-weight:800; margin-top:3px; overflow-wrap:anywhere; line-height:1.15; }
+        .kpi.main .v { font-size:1.02rem; }
+        .kpi.solde { background:linear-gradient(160deg, rgba(59,130,246,.18), rgba(59,130,246,.05)); border-color:rgba(59,130,246,.4); }
+        .kpis.second .kpi { background:transparent; padding:7px 10px; }
+        .kpis.second .kpi .v { font-size:.86rem; }
+        .kpis.second { margin-top:8px; }
         .good { color:var(--success); } .bad { color:var(--danger); } .warn { color:var(--warn); }
-        .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-        .btn { border:0; border-radius:10px; padding:10px 14px; font-weight:600; font-size:.9rem; cursor:pointer; background:var(--bg); color:var(--text-main); display:inline-flex; align-items:center; gap:6px; }
-        .btn.primary { background:var(--primary); color:#fff; }
-        .btn.danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
-        .btn.small { padding:6px 10px; font-size:.8rem; }
+
+        /* Actions : une ligne, boutons 44–48 px */
+        .actions { display:flex; align-items:stretch; gap:8px; margin-top:12px; position:relative; }
+        .btn { min-height:44px; border:1px solid var(--border); border-radius:14px; padding:0 12px; font-weight:700; font-size:.85rem; cursor:pointer; background:var(--surface-2); color:var(--text-main); display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap; min-width:0; }
+        .btn:active { transform:scale(.98); }
+        .btn.primary { background:var(--primary-strong); border-color:var(--primary-strong); color:#fff; box-shadow:0 3px 10px rgba(37,99,235,.35); }
+        .btn.danger { background:transparent; color:var(--danger); border-color:rgba(248,113,113,.5); }
         .btn:disabled { opacity:.5; cursor:not-allowed; }
-        .ev { border-left:4px solid var(--border); padding:10px 12px; margin:10px 0; background:var(--surface); border-radius:0 12px 12px 0; }
-        .ev.facture { border-color:#3b82f6; } .ev.paiement { border-color:var(--success); } .ev.ajustement { border-color:var(--warn); }
-        .ev.annule { opacity:.65; }
-        .ev .h { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
-        .ev .d { color:var(--text-sub); font-size:.8rem; }
-        .ev .m { font-size:.86rem; margin-top:4px; }
-        .ev ul { margin:4px 0 0; padding-left:18px; font-size:.84rem; }
-        .pill { display:inline-block; font-size:.7rem; font-weight:700; border-radius:999px; padding:2px 8px; margin-left:6px; background:var(--bg); }
-        .pill.payee { background:#dcfce7; color:#166534; } .pill.partielle { background:#fef3c7; color:#92400e; }
-        .pill.ouverte { background:#fee2e2; color:#991b1b; } .pill.annulee, .pill.annule, .pill.rejete { background:#e2e8f0; color:#475569; }
-        .pill.probleme { background:#ffedd5; color:#9a3412; } .pill.en_attente { background:#fef3c7; color:#92400e; } .pill.valide { background:#dcfce7; color:#166534; }
-        .empty { color:var(--text-sub); text-align:center; padding:20px; }
-        @media print { .no-print, a.back, .actions, .ev .btn { display:none !important; } body { background:#fff; color:#000; } .card, .ev { border-color:#999; } }
+        .actions .btn { flex:1 1 0; }
+        .actions .btn.primary { flex:1.3 1 0; }
+        .actions .btn.more { flex:none; width:44px; padding:0; }
+        .actions .btn[hidden], .actions .btn[style*="display: none"] { display:none !important; }
+        .menu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:220px; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.5); padding:6px; display:none; }
+        .menu.open { display:block; }
+        .menu a, .menu button { display:flex; align-items:center; gap:10px; width:100%; min-height:44px; padding:0 12px; border:0; background:none; color:var(--text-main); font-size:.9rem; font-weight:600; text-align:left; text-decoration:none; border-radius:10px; cursor:pointer; }
+        .menu a:hover, .menu button:hover { background:rgba(148,163,184,.12); }
+        .menu i { width:16px; text-align:center; color:var(--text-sub); }
+
+        /* Chronologie : vraie timeline verticale */
+        .tl-head { font-weight:800; font-size:.95rem; }
+        #timeline { position:relative; margin-top:10px; padding-left:0; }
+        #timeline::before { content:""; position:absolute; left:15px; top:6px; bottom:6px; width:2px; background:var(--border); border-radius:2px; }
+        .ev { position:relative; padding:0 0 12px 42px; margin:0; min-width:0; }
+        .ev:last-child { padding-bottom:0; }
+        .ev .dot { position:absolute; left:0; top:0; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.78rem; color:#fff; background:var(--primary-strong); border:3px solid var(--surface); }
+        .ev.paiement .dot { background:#059669; } .ev.ajustement .dot { background:#d97706; }
+        .ev.annule { opacity:.6; }
+        .ev .box { background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:10px 12px; min-width:0; }
+        .ev .h { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+        .ev .t { min-width:0; font-weight:700; font-size:.9rem; line-height:1.25; overflow-wrap:anywhere; }
+        .ev .amt { flex:none; font-weight:800; font-size:.95rem; white-space:nowrap; text-align:right; }
+        .ev .d { color:var(--text-sub); font-size:.72rem; margin-top:3px; }
+        .ev .m { font-size:.8rem; margin-top:6px; line-height:1.4; color:var(--text-main); overflow-wrap:anywhere; }
+        .ev .m.calc { color:var(--text-sub); font-variant-numeric:tabular-nums; }
+        .ev .pr { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:6px; font-size:.82rem; }
+        .ev ul { margin:6px 0 0; padding-left:16px; font-size:.8rem; color:var(--text-sub); }
+        .ev .actions { margin-top:8px; }
+        .ev .actions .btn { min-height:40px; font-size:.8rem; }
+        .pill { display:inline-block; vertical-align:middle; font-size:.62rem; font-weight:800; letter-spacing:.02em; border-radius:999px; padding:2px 8px; margin:0 0 0 6px; background:rgba(148,163,184,.18); color:#cbd5e1; text-transform:uppercase; }
+        .pill.payee, .pill.valide { background:rgba(52,211,153,.16); color:#6ee7b7; }
+        .pill.partielle, .pill.en_attente { background:rgba(251,191,36,.16); color:#fcd34d; }
+        .pill.ouverte { background:rgba(248,113,113,.16); color:#fca5a5; }
+        .pill.annulee, .pill.annule, .pill.rejete { background:rgba(148,163,184,.18); color:#a8b5cb; }
+        .pill.probleme { background:rgba(249,115,22,.18); color:#fdba74; }
+        .empty { color:var(--text-sub); text-align:center; padding:18px; font-size:.85rem; }
+        #timeline .empty { padding-left:0; }
+        #timeline:has(.empty)::before { display:none; }
+        @media (max-width:359px) { .btn span.lbl { display:none; } }
+        @media print {
+            :root { color-scheme: light; --bg:#fff; --surface:#fff; --surface-2:#fff; --text-main:#000; --text-sub:#444; --border:#999; --success:#166534; --danger:#991b1b; --warn:#92400e; --shadow:none; }
+            .no-print, .actions, .ev .btn, .menu { display:none !important; } body { background:#fff; color:#000; }
+            .ev .dot { border-color:#fff; }
+        }
     </style>
 </head>
 <body>
 <div class="wrap">
-    <a class="back no-print" href="../statistiques/stats.html"><i class="fa-solid fa-arrow-left"></i> Statistiques</a>
     <div class="card">
-        <h1 id="client">Relevé de compte</h1>
-        <div class="sub" id="meta">Chargement…</div>
-        <div id="compta-migration" style="display:none"></div>
-        <div class="tiles" style="margin-top:14px">
-            <div class="tile"><div class="l">Facturé</div><div class="v" id="t-facture">—</div></div>
-            <div class="tile"><div class="l">Payé</div><div class="v good" id="t-paye">—</div></div>
-            <div class="tile"><div class="l">Ajustements</div><div class="v" id="t-ajust">—</div></div>
-            <div class="tile"><div class="l">Arriérés</div><div class="v bad" id="t-arrieres">—</div></div>
-            <div class="tile"><div class="l">Avance</div><div class="v good" id="t-avance">—</div></div>
-            <div class="tile"><div class="l">Solde</div><div class="v" id="t-solde">—</div></div>
+        <div class="top">
+            <a class="back no-print" href="../statistiques/stats.html" aria-label="Retour aux statistiques" title="Statistiques"><i class="fa-solid fa-arrow-left"></i></a>
+            <div class="who">
+                <h1 id="client">Relevé de compte</h1>
+                <div class="chips" id="meta"><span class="chip">Chargement…</span></div>
+            </div>
         </div>
-        <div class="sub" id="provisoire"></div>
-        <div class="actions">
-            <button class="btn primary" id="btn-pay" style="display:none"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>
-            <button class="btn" id="btn-adj" style="display:none"><i class="fa-solid fa-scale-balanced"></i> Ajustement</button>
-            <button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimer le relevé</button>
+        <div id="compta-migration" style="display:none"></div>
+        <div class="kpis">
+            <div class="kpi main"><div class="l">Facturé</div><div class="v" id="t-facture">—</div></div>
+            <div class="kpi main"><div class="l">Payé</div><div class="v good" id="t-paye">—</div></div>
+            <div class="kpi main solde"><div class="l">Solde à payer</div><div class="v" id="t-solde">—</div></div>
+        </div>
+        <div class="kpis second">
+            <div class="kpi"><div class="l">Arriérés</div><div class="v bad" id="t-arrieres">—</div></div>
+            <div class="kpi"><div class="l">Avance</div><div class="v good" id="t-avance">—</div></div>
+            <div class="kpi"><div class="l">Ajustements</div><div class="v" id="t-ajust">—</div></div>
+        </div>
+        <div class="sub" id="provisoire" style="margin-top:8px"></div>
+        <div class="actions no-print">
+            <button class="btn primary" id="btn-pay" style="display:none"><i class="fa-solid fa-hand-holding-dollar"></i><span class="lbl">Encaisser</span></button>
+            <button class="btn" id="btn-adj" style="display:none"><i class="fa-solid fa-scale-balanced"></i><span class="lbl">Ajustement</span></button>
+            <button class="btn" id="btn-print" onclick="window.print()"><i class="fa-solid fa-print"></i><span class="lbl">Imprimer</span></button>
+            <button class="btn more" id="btn-more" aria-haspopup="true" aria-expanded="false" aria-label="Plus d'actions"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+            <div class="menu" id="menu" role="menu">
+                <a href="../statistiques/stats.html" role="menuitem"><i class="fa-solid fa-chart-column"></i> Statistiques</a>
+                <button id="mi-refresh" role="menuitem"><i class="fa-solid fa-rotate"></i> Actualiser l'affichage</button>
+                <button id="mi-copy" role="menuitem"><i class="fa-regular fa-copy"></i> Copier le n° de compteur</button>
+            </div>
         </div>
     </div>
     <div class="card">
-        <div style="font-weight:700">Chronologie</div>
-        <div class="sub">Factures, paiements (et leur affectation), ajustements — du plus ancien au plus récent.</div>
+        <div class="tl-head">Chronologie</div>
+        <div class="sub">Factures, paiements et ajustements, du plus ancien au plus récent.</div>
         <div id="timeline"><div class="empty">Chargement…</div></div>
     </div>
 </div>
@@ -112,6 +176,11 @@ const TYPES = { remise: 'Remise', majoration: 'Majoration', correction: 'Correct
 const STATUTS = { ouverte: 'ouverte', partielle: 'partielle', payee: 'payée', annulee: 'annulée', valide: 'validé', annule: 'annulé', en_attente: 'en attente', rejete: 'rejeté' };
 
 function toast(msg) { alert(msg); }
+function setMeta(numero, zone) {
+    document.getElementById('meta').innerHTML =
+        `<span class="chip"><i class="fa-solid fa-gauge"></i>Compteur n°${esc(numero || '—')}</span>` +
+        `<span class="chip"><i class="fa-solid fa-location-dot"></i>${esc(zone || 'Sans zone')}</span>`;
+}
 
 function render() {
     const S = UI.getState();
@@ -150,41 +219,40 @@ function render() {
             const prob = f.probleme && f.probleme.actif
                 ? `<span class="pill probleme">${f.probleme.resolu ? '✓ problème résolu' : '⚠ surconsommation ' + esc(f.probleme.valeur_m3) + ' m³'}</span>` : '';
             const canResolve = f.probleme && f.probleme.actif && !f.probleme.resolu && (role === 'président' || role === 'secrétaire');
-            return `<div class="ev facture ${f.annulee ? 'annule' : ''}">
-                <div class="h"><span>Facture ${esc(cyc(f.cycle))}<span class="pill ${f.statut}">${STATUTS[f.statut] || f.statut}</span>${prob}</span><span>${fcfa(f.montant_net)}</span></div>
+            return `<div class="ev facture ${f.annulee ? 'annule' : ''}"><span class="dot"><i class="fa-solid fa-file-invoice"></i></span><div class="box">
+                <div class="h"><div class="t">Facture ${esc(cyc(f.cycle))}<span class="pill ${f.statut}">${STATUTS[f.statut] || f.statut}</span>${prob}</div><div class="amt">${fcfa(f.montant_net)}</div></div>
                 <div class="d">${dt(f.date_creation)} · ${esc(SOURCES[f.source] || f.source)}</div>
-                <div class="m">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} : ${esc(f.consommation)} m³ × ${esc(f.facteur)} F = ${fcfa(f.montant_initial)}` : ''}
-                ${f.montant_net !== f.montant_initial ? ` · net après ajustements : <b>${fcfa(f.montant_net)}</b>` : ''}</div>
-                <div class="m">Payé : <b class="good">${fcfa(f.montant_paye)}</b> · Reste : <b class="${f.reste_a_payer > 0 ? 'bad' : 'good'}">${fcfa(f.reste_a_payer)}</b></div>
+                ${f.ancien_index != null ? `<div class="m calc">Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³ × ${esc(f.facteur)} F = ${fcfa(f.montant_initial)}${f.montant_net !== f.montant_initial ? ` · net après ajustements : <b>${fcfa(f.montant_net)}</b>` : ''}</div>` : (f.montant_net !== f.montant_initial ? `<div class="m calc">Net après ajustements : <b>${fcfa(f.montant_net)}</b></div>` : '')}
+                <div class="pr"><span>Payé : <b class="good">${fcfa(f.montant_paye)}</b></span><span>Reste : <b class="${f.reste_a_payer > 0 ? 'bad' : 'good'}">${fcfa(f.reste_a_payer)}</b></span></div>
                 ${f.probleme && f.probleme.resolu && f.probleme.resolution ? `<div class="d">Problème résolu le ${dt(f.probleme.resolution.resolu_le)} : ${esc(f.probleme.resolution.motif)} (résolu ≠ payé)</div>` : ''}
                 ${canResolve ? `<div class="actions"><button class="btn small" data-resolve="${esc(f.facture_id)}"><i class="fa-solid fa-screwdriver-wrench"></i> Marquer le problème résolu</button></div>` : ''}
-            </div>`;
+            </div></div>`;
         }
         if (e.kind === 'paiement') {
             const p = e.p;
             const affs = Object.entries((S.affectations[p.paiement_id]) || {}).sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0))
                 .map(([fid, a]) => `<li>${esc(cyc(a.cycle))} : ${fcfa(a.montant)}${a.statut === 'annulee' ? ' <i>(annulée)</i>' : ''}</li>`).join('');
             const valide = p.statut === 'valide';
-            return `<div class="ev paiement ${valide ? '' : 'annule'}">
-                <div class="h"><span>Paiement — reçu n°${esc(p.numero_recu)}<span class="pill ${p.statut}">${STATUTS[p.statut] || p.statut}</span></span><span class="good">${fcfa(p.montant)}</span></div>
+            return `<div class="ev paiement ${valide ? '' : 'annule'}"><span class="dot"><i class="fa-solid fa-hand-holding-dollar"></i></span><div class="box">
+                <div class="h"><div class="t">Paiement · reçu n°${esc(p.numero_recu)}<span class="pill ${p.statut}">${STATUTS[p.statut] || p.statut}</span></div><div class="amt good">+${fcfa(p.montant)}</div></div>
                 <div class="d">${dt(p.date_paiement)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}${p.reference ? ' · réf. ' + esc(p.reference) : ''} · par ${esc(p.encaisse_par_nom || p.role || '—')}</div>
                 ${affs ? `<ul>${affs}</ul>` : '<div class="m">Aucune facture réglée : montant conservé en avance.</div>'}
                 ${valide && p.disponible > 0 ? `<div class="m good">Avance disponible sur ce paiement : ${fcfa(p.disponible)}</div>` : ''}
                 ${!valide ? `<div class="m bad">Annulé le ${dt(p.annule_le)} : ${esc(p.motif_annulation || '')}</div>` : ''}
                 <div class="actions">
                     <button class="btn small" data-recu="${esc(p.paiement_id)}"><i class="fa-solid fa-receipt"></i> Reçu</button>
-                    ${valide && role === 'président' ? `<button class="btn small danger" data-cancel="${esc(p.paiement_id)}"><i class="fa-solid fa-ban"></i> Annuler ce paiement</button>` : ''}
+                    ${valide && role === 'président' ? `<button class="btn small danger" data-cancel="${esc(p.paiement_id)}"><i class="fa-solid fa-ban"></i> Annuler</button>` : ''}
                 </div>
-            </div>`;
+            </div></div>`;
         }
         const j = e.j;
         const signe = j.type === 'remise' ? -Math.abs(j.montant) : (j.type === 'majoration' ? Math.abs(j.montant) : (j.type === 'annulation' ? -Math.abs(j.montant) : j.montant));
-        return `<div class="ev ajustement ${j.statut === 'rejete' ? 'annule' : ''}">
-            <div class="h"><span>${esc(TYPES[j.type] || j.type)} — ${esc(cyc(j.cycle))}<span class="pill ${j.statut}">${STATUTS[j.statut] || j.statut}</span></span><span>${signe > 0 ? '+' : ''}${fcfa(signe)}</span></div>
+        return `<div class="ev ajustement ${j.statut === 'rejete' ? 'annule' : ''}"><span class="dot"><i class="fa-solid fa-scale-balanced"></i></span><div class="box">
+            <div class="h"><div class="t">${esc(TYPES[j.type] || j.type)} · ${esc(cyc(j.cycle))}<span class="pill ${j.statut}">${STATUTS[j.statut] || j.statut}</span></div><div class="amt ${signe > 0 ? 'bad' : 'good'}">${signe > 0 ? '+' : ''}${fcfa(signe)}</div></div>
             <div class="d">${dt(j.created_at)} · proposé par ${esc(j.cree_par_nom || '—')}${j.date_validation ? ' · ' + (j.statut === 'valide' ? 'validé' : 'traité') + ' le ' + dt(j.date_validation) + (j.valide_par_nom ? ' par ' + esc(j.valide_par_nom) : '') : ''}</div>
             <div class="m">Motif : ${esc(j.motif)}</div>
             ${j.statut === 'en_attente' && role === 'président' ? `<div class="actions"><button class="btn small primary" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn small danger" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}
-        </div>`;
+        </div></div>`;
     }).join('');
 }
 
@@ -242,18 +310,30 @@ document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
 });
 document.getElementById('btn-adj').onclick = openAdjustment;
 
+const menu = document.getElementById('menu'), more = document.getElementById('btn-more');
+const setMenu = (open) => { menu.classList.toggle('open', open); more.setAttribute('aria-expanded', String(open)); };
+more.onclick = (e) => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); };
+document.addEventListener('click', () => setMenu(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+document.getElementById('mi-refresh').onclick = () => { setMenu(false); render(); };
+document.getElementById('mi-copy').onclick = () => {
+    setMenu(false);
+    const n = (releve && releve.numero_compteur) || '';
+    if (navigator.clipboard && n) navigator.clipboard.writeText(String(n)).catch(() => {});
+};
+
 onAuthStateChanged(auth, async (user) => {
     if (!user) { if (window.handleFirebaseSessionLoss) window.handleFirebaseSessionLoss('releve.html'); return; }
-    if (!cid) { document.getElementById('meta').textContent = 'Compteur non précisé.'; return; }
+    if (!cid) { document.getElementById('meta').innerHTML = '<span class="chip">Compteur non précisé</span>'; return; }
     UI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
     try {
         const snap = await get(ref(db, `${P.compteurs}/${cid}`));
         releve = snap.exists() ? snap.val() : null;
         const src = releve || (Object.values(UI.getState().factures).find(f => f.compteur_id === cid) || {});
         document.getElementById('client').textContent = (releve ? releve.name : src.client) || 'Client';
-        document.getElementById('meta').textContent = `Compteur n°${(releve ? releve.numero_compteur : src.numero_compteur) || '—'} · ${(releve ? releve.zone : src.zone) || 'Sans zone'}`;
+        setMeta(releve ? releve.numero_compteur : src.numero_compteur, releve ? releve.zone : src.zone);
     } catch (e) {
-        document.getElementById('meta').textContent = 'Lecture impossible (' + (e.code || e.message) + ').';
+        document.getElementById('meta').innerHTML = '<span class="chip">Lecture impossible (' + esc(e.code || e.message) + ')</span>';
     }
     UI.subscribe((st, mig, ready) => { if (ready) render(); });
 });
