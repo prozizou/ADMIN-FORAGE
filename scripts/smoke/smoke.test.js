@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
 
 // ── Firebase simulé (modules ES injectés à la place des CDN gstatic) ──
 const FB_APP = `export const initializeApp = () => ({}); export const deleteApp = async () => {};`;
-const FB_AUTH = `export const getAuth = () => ({}); export const onAuthStateChanged = (a, cb) => { setTimeout(() => cb({ uid: 'u1', email: 'x@asufor.local' }), 0); return () => {}; };
+const FB_AUTH = `const A = {}; export const getAuth = () => A; export const onAuthStateChanged = (a, cb) => { setTimeout(() => { A.currentUser = { uid: 'u1', email: 'x@asufor.local' }; cb(A.currentUser); }, 0); return () => {}; };
 export const createUserWithEmailAndPassword = async () => ({ user: { uid: 'x' } }); export const signOut = async () => {};`;
 const FB_DB = `
 const DB = () => window.__DB;
@@ -108,6 +108,27 @@ async function newPage(browser, role, tree, opts) {
 }
 
 const db = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__DB.tree)));
+const Compta = require(path.join(ROOT, 'compta.js'));
+function applyUpdates(tree, updates) {
+    Object.keys(updates).forEach((k) => {
+        const parts = k.split('/'); let n = tree;
+        for (let i = 0; i < parts.length - 1; i++) { if (n[parts[i]] == null || typeof n[parts[i]] !== 'object') n[parts[i]] = {}; n = n[parts[i]]; }
+        const last = parts[parts.length - 1];
+        if (updates[k] === null) delete n[last]; else n[last] = JSON.parse(JSON.stringify(updates[k]));
+    });
+    return tree;
+}
+/** Base simulée APRÈS migration comptable (factures « migration_backup » créées par compta.js). */
+function migratedSeed(t) {
+    t = t || seed();
+    const F = t.Asufor[FA];
+    let n = 0;
+    const r = Compta.buildMigrationOps(Compta.emptyState(), {
+        paths: Compta.pathsFor('Asufor/' + FA), backup: F.backup, compteurs: F.compteurs,
+        now: new Date(Date.now() - 3600e3).toISOString(), user: { uid: 'u1', nom: 'Président', role: 'président' }, newId: () => 'mig' + (++n)
+    });
+    return applyUpdates(t, r.updates);
+}
 const num = (t) => parseInt(String(t).replace(/[^\d-]/g, ''), 10) || 0;
 
 module.exports = { server, newPage, seed, FA, chromium };
@@ -118,164 +139,213 @@ async function main() {
     let failures = 0;
     const check = (name, fn) => Promise.resolve().then(fn).then(() => console.log('  ✓ ' + name), (e) => { failures++; console.log('  ✗ ' + name + '\n    ' + (e.message || e)); });
 
-    // ══════════ STATISTIQUES ══════════
-    console.log('Statistiques');
-    {
-        const { page, errors } = await newPage(browser, 'trésorier', seed());
-        // les archives arrivent avec retard : l'encaissement doit être bloqué d'ici là
-        await page.addInitScript((f) => { window.__DB.delays['Asufor/' + f + '/backup'] = 1200; }, FA);
-        await page.goto(base + '/statistiques/stats.html');
-        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-
-        await check('bouton Encaisser grisé tant que les archives ne sont pas chargées', async () => {
-            const dis = await page.$$eval('#releves-list .btn-paye', bs => bs.every(b => b.disabled));
-            assert.ok(dis, 'les boutons devraient être disabled');
-            await page.evaluate(() => window.updateStatus('c1', 'paye'));
-            const toast = await page.textContent('#toast');
-            assert.match(toast, /Archives en cours de chargement/);
-            const w = await page.evaluate(() => window.__DB.writes.length);
-            assert.strictEqual(w, 0, 'aucune écriture avant chargement complet');
-        });
-
-        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .btn-paye')].every(b => !b.disabled), null, { timeout: 8000 });
-
-        await check('cumul intégral affiché : Aminata = 1500 + 6000 (juin 5000 + juillet 1000)', async () => {
-            const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
-            const a = t.find(x => x.includes('Aminata'));
-            assert.ok(/7[,.\s  ]?500/.test(a), a);
-        });
-
-        await check('à réclamer = mois + arriérés (c1 7500 + c2 500+1500), reçu = c3 seulement', async () => {
-            assert.strictEqual(num(await page.textContent('#total-debt')), 7500 + 500 + 1500);
-            assert.strictEqual(num(await page.textContent('#total-money')), 1000);   // c3 : 4 m³ × 250
-        });
-
-        await check('Encaisser en cascade : archives réglées + mémoire, reçu inclut les arriérés réglés', async () => {
-            await page.evaluate(() => window.updateStatus('c1', 'paye'));
-            await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('arriérés réglé'), null, { timeout: 5000 });
-            const t = await db(page);
-            const c1 = t.Asufor[FA].compteurs.c1;
-            assert.strictEqual(c1.status, 'paye');
-            assert.strictEqual(c1.arrieres_regles, 6000);
-            assert.deepStrictEqual(c1.cycles_regles, ['2026-06|c1', '2026-07|c1']);
-            assert.strictEqual(t.Asufor[FA].backup['2026-06'].donnees.c1.status, 'paye');
-            assert.strictEqual(t.Asufor[FA].backup['2026-07'].donnees.c1.status, 'paye');
-            // c2 (autre client) : ses archives ne sont pas touchées
-            assert.strictEqual(t.Asufor[FA].backup['2026-07'].donnees.c2.status, 'impaye');
-            // reçu = c3 (1000) + c1 (1500 + 6000 réglés)
-            assert.strictEqual(num(await page.textContent('#total-money')), 1000 + 1500 + 6000);
-        });
-
-        await check('la ligne « ghost » (archive sans compteur) n\'est attribuée à personne', async () => {
-            const t = await db(page);
-            assert.strictEqual(t.Asufor[FA].backup['2026-06'].donnees.ghost.status, 'impaye');
-        });
-
-        await check('Corriger le paiement : mois courant ET cycles réglés remis à impayé', async () => {
-            await page.evaluate(() => window.updateStatus('c1', 'impaye'));
-            await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('remis à encaisser'), null, { timeout: 5000 });
-            const t = await db(page);
-            assert.strictEqual(t.Asufor[FA].compteurs.c1.status, 'impaye');
-            assert.strictEqual(t.Asufor[FA].compteurs.c1.arrieres_regles, undefined);
-            assert.strictEqual(t.Asufor[FA].backup['2026-06'].donnees.c1.status, 'impaye');
-            assert.strictEqual(t.Asufor[FA].backup['2026-07'].donnees.c1.status, 'impaye');
-            assert.strictEqual(num(await page.textContent('#total-debt')), 7500 + 500 + 1500);
-        });
-
-        await check('droits insuffisants : message clair + rien de modifié localement', async () => {
-            await page.evaluate(() => { window.__DB.denyWrites = true; });
-            await page.evaluate(() => window.updateStatus('c1', 'paye'));
-            await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Droits insuffisants'), null, { timeout: 5000 });
-            const t = await db(page);
-            assert.strictEqual(t.Asufor[FA].compteurs.c1.status, 'impaye');
-            await page.evaluate(() => { window.__DB.denyWrites = false; });
-        });
-        await check('aucune erreur JavaScript (stats)', () => assert.deepStrictEqual(errors, []));
-        await page.context().close();
-    }
-
-    // archives illisibles : l'encaissement reste bloqué
-    {
-        const { page, errors } = await newPage(browser, 'trésorier', seed());
-        await page.addInitScript((f) => { window.__DB.failReads.push('Asufor/' + f + '/backup'); }, FA);
-        await page.goto(base + '/statistiques/stats.html');
-        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await check('archives en échec de chargement : encaissement bloqué', async () => {
-            await page.evaluate(() => window.updateStatus('c1', 'paye'));
-            assert.match(await page.textContent('#toast'), /Archives|archives/);
-            assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), 0);
-        });
-        await page.context().close();
-    }
-
-    // ══════════ IMPRESSION ══════════
-    console.log('Impression');
+    // ══════════ STATISTIQUES v7 : migration comptable ══════════
+    console.log('Statistiques — migration comptable');
     {
         const { page, errors } = await newPage(browser, 'président', seed());
-        await page.goto(base + '/impression/impression.html');
-        await page.waitForSelector('.facture-item', { timeout: 8000 });
-
-        await check('arriérés = cumul intégral des archives (c1 : 6000, c2 : 1500, c3 : 0)', async () => {
-            const arr = async (k) => num(await page.textContent('#arr-' + k));
-            assert.strictEqual(await arr('c1'), 6000);
-            assert.strictEqual(await arr('c2'), 1500);
-            assert.strictEqual(await arr('c3'), 0);
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await check('avant migration : bandeau « Migrer » (président) et encaissement bloqué', async () => {
+            await page.waitForSelector('#compta-migration .cui-banner button', { timeout: 8000 });
+            const dis = await page.$$eval('#releves-list .btn-paye', bs => bs.length > 0 && bs.every(b => b.disabled));
+            assert.ok(dis, 'Encaisser doit être grisé avant la migration');
+            await page.evaluate(() => window.encaisser('c1'));
+            assert.match(await page.textContent('#toast'), /Migration comptable requise/);
         });
-        await check('ligne de contrôle : cumul + dette orpheline signalée (Parti)', async () => {
-            const t = await page.textContent('#prevArrearsInfo');
-            assert.match(t, /7[,.\s  ]?500/);
-            assert.match(t, /Parti/);
+        await check('avant migration : arriérés affichés depuis les archives (Aminata = 1 500 + 6 000)', async () => {
+            const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
+            assert.ok(/7[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))));
         });
-        await check('correction manuelle : enregistrée (ajustement + audit atomique), affichée et persistante', async () => {
-            await page.evaluate(() => window.openEditModal('c1'));
-            await page.fill('#edit-input-arrieres', '4000');
-            await page.evaluate(() => window.confirmEdit());
-            await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Correction enregistrée'), null, { timeout: 5000 });
+        await check('migration : aperçu (9 500 F, 4 factures), sauvegarde téléchargée OBLIGATOIRE, puis exécution', async () => {
+            await page.click('#compta-migration .cui-banner button');
+            await page.waitForSelector('.cui-box #cui-run', { timeout: 8000 });
+            assert.match(await page.textContent('.cui-box'), /9[\s  ]?500 F/);
+            assert.strictEqual(await page.$eval('#cui-run', b => b.disabled), true);
+            const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#cui-save')]);
+            assert.match(dl.suggestedFilename(), /sauvegarde-avant-migration/);
+            await page.waitForFunction(() => !document.getElementById('cui-run').disabled);
+            await page.click('#cui-run');
+            await page.waitForFunction(() => /Migration effectuée/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
             const t = await db(page);
-            assert.strictEqual(t.Asufor[FA].compteurs.c1.arrieres_ajustement, -2000);
-            const audits = Object.values(t.Asufor[FA].audit_arrieres || {});
-            assert.strictEqual(audits.length, 1);
-            assert.strictEqual(audits[0].nouveauArrieres, 4000);
-            assert.strictEqual(audits[0].ancienArrieres, 6000);
-            assert.strictEqual(num(await page.textContent('#arr-c1')), 4000);
-            // « rechargement » : le listener relit la base → même valeur (persistante)
-            await page.evaluate(() => window.changeMonth());
-            await page.waitForSelector('.facture-item');
-            assert.strictEqual(num(await page.textContent('#arr-c1')), 4000);
-            assert.ok(await page.$('.facture-item.is-modified'));
+            const F = t.Asufor[FA];
+            assert.strictEqual(F.migration_comptable.v1.total_arrieres, 9500);
+            assert.strictEqual(F.migration_comptable.v1.nb_factures_migrees, 4);
+            assert.strictEqual(F.migration_comptable.v1.releves_marques_payes, 1);      // c3 : signalé, aucun paiement inventé
+            assert.strictEqual(F.paiements, undefined);
+            assert.deepStrictEqual(Object.keys(F.factures).sort(), ['2026-06_c1', '2026-06_ghost', '2026-07_c1', '2026-07_c2']);
+            assert.ok(Object.values(F.factures).every(f => f.source === 'migration_backup'));
+            assert.deepStrictEqual(F.backup, seed().Asufor[FA].backup, 'archives intactes');
         });
-        await check('même correction visible dans Statistiques (cohérence)', async () => {
-            const tree = await db(page);
-            const { page: p2, errors: e2 } = await newPage(browser, 'président', tree);
-            await p2.goto(base + '/statistiques/stats.html');
-            await p2.waitForSelector('#releves-list .item', { timeout: 8000 });
-            await p2.waitForFunction(() => [...document.querySelectorAll('#releves-list .btn-paye')].every(b => !b.disabled), null, { timeout: 8000 });
-            const t = await p2.$$eval('#releves-list .item', els => els.map(e => e.innerText));
-            assert.ok(/5[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))), 'Aminata = 1500 + 4000');
-            assert.deepStrictEqual(e2, []);
-            await p2.context().close();
-        });
-        await check('annuler la correction : ajustement supprimé', async () => {
-            await page.evaluate(() => window.openEditModal('c1'));
-            await page.evaluate(() => window.resetOneOverride());
-            await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Correction annulée'), null, { timeout: 5000 });
-            const t = await db(page);
-            assert.strictEqual(t.Asufor[FA].compteurs.c1.arrieres_ajustement, undefined);
-            assert.strictEqual(num(await page.textContent('#arr-c1')), 6000);
-        });
-        await check('échec d\'écriture : rien n\'est modifié à l\'écran, message d\'erreur', async () => {
-            await page.evaluate(() => { window.__DB.denyWrites = true; });
-            await page.evaluate(() => window.openEditModal('c1'));
-            await page.fill('#edit-input-arrieres', '1');
-            await page.evaluate(() => window.confirmEdit());
-            await page.waitForFunction(() => /Droits insuffisants/.test(document.querySelector('#toast').textContent), null, { timeout: 5000 });
-            assert.strictEqual(num(await page.textContent('#arr-c1')), 6000);
-            await page.evaluate(() => { window.__DB.denyWrites = false; });
-        });
-        await check('aucune erreur JavaScript inattendue (impression)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
+        await check('aucune erreur JavaScript (migration)', () => assert.deepStrictEqual(errors, []));
         await page.context().close();
     }
 
+    // ══════════ STATISTIQUES v7 : encaissement partiel, FIFO, avance ══════════
+    console.log('Statistiques — encaissement');
+    let afterPayment = null, paiementId = null;
+    {
+        const { page, errors } = await newPage(browser, 'trésorier', migratedSeed());
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .btn-paye')].length > 0 && [...document.querySelectorAll('#releves-list .btn-paye')].every(b => !b.disabled), null, { timeout: 8000 });
+        await check('après migration : Aminata dû = arriérés 6 000 + relevé du mois 1 500', async () => {
+            const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
+            assert.ok(/7[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))));
+        });
+        await check('fenêtre d\'encaissement : total dû par défaut, aperçu FIFO, avance et reste après paiement', async () => {
+            await page.evaluate(() => window.encaisser('c1'));
+            await page.waitForSelector('#cui-montant', { timeout: 8000 });
+            assert.strictEqual(await page.inputValue('#cui-montant'), '7500');
+            await page.fill('#cui-montant', '7000');
+            await page.fill('#cui-ref', 'TX-42');
+            const prev = await page.textContent('#cui-prev');
+            assert.match(prev, /Juin 2026 : 5[\s  ]?000 F soldée/);
+            assert.match(prev, /Juillet 2026 : 1[\s  ]?000 F soldée/);
+            assert.match(prev, /Avance créée : 1[\s  ]?000 F/);
+            assert.match(prev, /Reste dû après paiement : 500 F/);
+        });
+        await check('validation : paiement immuable + 2 affectations + factures payées + avance + audit, en UNE écriture', async () => {
+            const w0 = await page.evaluate(() => window.__DB.writes.length);
+            await page.click('#cui-ok');
+            await page.waitForFunction(() => /Encaissement enregistré/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
+            assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), w0 + 1);
+            const F = (await db(page)).Asufor[FA];
+            const pays = Object.values(F.paiements);
+            assert.strictEqual(pays.length, 1);
+            const p = pays[0]; paiementId = p.paiement_id;
+            assert.deepStrictEqual([p.montant, p.mode, p.reference, p.statut, p.encaisse_par], [7000, 'especes', 'TX-42', 'valide', 'u1']);
+            assert.ok(p.numero_recu.length > 0);
+            assert.deepStrictEqual(Object.keys(F.affectations[p.paiement_id]).sort(), ['2026-06_c1', '2026-07_c1']);
+            assert.strictEqual(F.factures['2026-06_c1'].statut, 'payee');
+            assert.strictEqual(F.factures['2026-07_c1'].statut, 'payee');
+            assert.strictEqual(F.soldes.c1.avance, 1000);
+            assert.strictEqual(F.soldes.c1.arrieres, 0);
+            assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_CREE' && e.role === 'trésorier'));
+            assert.strictEqual(F.compteurs.c1.status, 'impaye');                  // il reste 500 F sur le relevé du mois
+            ['apaid', 'arriere', 'arrieres', 'facture', 'print', 'diff'].forEach(k => assert.ok(!(k in F.compteurs.c1), 'champ historique ' + k));
+            await page.click('#cui-close');
+        });
+        await check('indicateurs : Encaissé 7 000 · Arriérés 3 500 (c2 + ancien compteur) · Avances 1 000', async () => {
+            await page.waitForFunction(() => /7[\s  ,.]?000/.test(document.getElementById('total-money').textContent), null, { timeout: 8000 });
+            assert.strictEqual(num(await page.textContent('#rc-arrieres')), 3500);
+            assert.strictEqual(num(await page.textContent('#rc-avances')), 1000);
+        });
+        await check('écriture refusée (droits / concurrence) : message clair, rien d\'écrit', async () => {
+            await page.evaluate(() => { window.__DB.denyWrites = true; });
+            await page.evaluate(() => window.encaisser('c2'));
+            await page.waitForSelector('#cui-ok', { timeout: 8000 });
+            const w0 = await page.evaluate(() => window.__DB.writes.length);
+            await page.click('#cui-ok');
+            await page.waitForFunction(() => /Opération refusée/.test(document.getElementById('cui-err').textContent), null, { timeout: 8000 });
+            assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), w0);
+            await page.evaluate(() => { window.__DB.denyWrites = false; });
+            await page.click('#cui-cancel');
+        });
+        await check('aucune erreur JavaScript (encaissement)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
+        afterPayment = await db(page);
+        await page.context().close();
+    }
+
+    // ══════════ RELEVÉ DE COMPTE + REÇU ══════════
+    console.log('Relevé de compte et reçu');
+    {
+        const { page, errors } = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
+        await page.goto(base + '/compte/releve.html?c=c1');
+        await page.waitForSelector('#timeline .ev', { timeout: 8000 });
+        await check('chronologie : 2 factures + 1 paiement (affectations), soldes cohérents', async () => {
+            const t = await page.textContent('#timeline');
+            assert.match(t, /Facture Juin 2026/); assert.match(t, /Facture Juillet 2026/);
+            assert.match(t, /Paiement — reçu n°/);
+            assert.strictEqual(num(await page.textContent('#t-avance')), 1000);
+            assert.strictEqual(num(await page.textContent('#t-arrieres')), 0);
+        });
+        await check('reçu imprimable : n°, montant, factures réglées, avance', async () => {
+            const r = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
+            await r.page.goto(base + '/compte/recu.html?p=' + encodeURIComponent(paiementId));
+            await r.page.waitForSelector('.recu', { timeout: 8000 });
+            const t = await r.page.textContent('.recu');
+            assert.match(t, /REÇU DE PAIEMENT N°/); assert.match(t, /7[\s  ]?000 FCFA/);
+            assert.match(t, /Juin 2026/); assert.match(t, /Avance/);
+            await r.page.context().close();
+        });
+        await check('président : annulation motivée → paiement « annule » conservé, factures rouvertes', async () => {
+            await page.click('[data-cancel]');
+            await page.fill('#mot', 'Billet refusé à la banque');
+            await page.click('#ok');
+            await page.waitForFunction(() => /annulé/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            const F = (await db(page)).Asufor[FA];
+            const p = F.paiements[paiementId];
+            assert.deepStrictEqual([p.statut, p.montant, p.motif_annulation], ['annule', 7000, 'Billet refusé à la banque']);
+            assert.strictEqual(F.factures['2026-06_c1'].reste_a_payer, 5000);
+            assert.strictEqual(F.soldes.c1.arrieres, 6000);
+            assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_ANNULE'));
+        });
+        await check('ajustement : remise validée par le président (motif obligatoire), facture figée intacte', async () => {
+            await page.click('#btn-adj');
+            await page.selectOption('#typ', 'remise');
+            await page.fill('#mnt', '500');
+            await page.click('#ok');
+            assert.match(await page.textContent('#err'), /motif/i);
+            await page.fill('#mot', 'Fuite sur le réseau public');
+            await page.click('#ok');
+            await page.waitForFunction(() => /Remise/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            const F = (await db(page)).Asufor[FA];
+            const j = Object.values(F.ajustements)[0];
+            assert.deepStrictEqual([j.type, j.statut, j.montant], ['remise', 'valide', 500]);
+            const f = F.factures[j.facture_id];
+            assert.strictEqual(f.montant_net, f.montant_initial - 500);
+        });
+        await check('aucune erreur JavaScript (relevé)', () => assert.deepStrictEqual(errors, []));
+        await page.context().close();
+    }
+    {
+        const { page } = await newPage(browser, 'trésorier', JSON.parse(JSON.stringify(afterPayment)));
+        await page.goto(base + '/compte/releve.html?c=c1');
+        await page.waitForSelector('#timeline .ev', { timeout: 8000 });
+        await check('trésorier : ne peut pas annuler un paiement ; son ajustement reste « en attente »', async () => {
+            assert.strictEqual(await page.$('[data-cancel]'), null);
+            await page.click('#btn-adj');
+            await page.selectOption('#typ', 'majoration');
+            await page.fill('#mnt', '300');
+            await page.fill('#mot', 'Frais de réouverture');
+            await page.click('#ok');
+            await page.waitForFunction(() => /en attente/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            const j = Object.values((await db(page)).Asufor[FA].ajustements)[0];
+            assert.strictEqual(j.statut, 'en_attente');
+            assert.strictEqual(await page.$('[data-validate]'), null);
+        });
+        await page.context().close();
+    }
+
+    // ══════════ IMPRESSION (grand livre) ══════════
+    console.log('Impression — grand livre');
+    {
+        const { page, errors } = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
+        await page.goto(base + '/impression/impression.html');
+        await page.waitForSelector('.facture-item', { timeout: 8000 });
+        await check('arriérés et avance depuis le grand livre (c1 : 0 d\'arriéré, 1 000 d\'avance ; c2 : 1 500)', async () => {
+            await page.waitForFunction(() => document.getElementById('av-c1'), null, { timeout: 8000 });
+            assert.strictEqual(num(await page.textContent('#arr-c1')), 0);
+            assert.strictEqual(num(await page.textContent('#av-c1')), 1000);
+            assert.strictEqual(num(await page.textContent('#total-c1')), 500);      // 1 500 du mois − 1 000 d'avance
+            assert.strictEqual(num(await page.textContent('#arr-c2')), 1500);
+        });
+        await check('ligne de contrôle : dette d\'un compteur absent de la liste signalée (2 000)', async () => {
+            const t = await page.textContent('#prevArrearsInfo');
+            assert.match(t, /absent/); assert.match(t, /2[\s  ]?000/);
+        });
+        await check('plus de correction manuelle d\'arriérés : lien vers le relevé de compte', async () => {
+            assert.strictEqual(await page.$('#edit-overlay'), null);
+            assert.ok(await page.$('a.btn-edit[href*="compte/releve.html?c=c1"]'));
+        });
+        await check('facture imprimée : ligne « Avance déduite »', async () => {
+            await page.check('.bill-cb[data-id="c1"]');
+            await page.evaluate(() => window.renderPrint());
+            assert.match(await page.textContent('#print-zone'), /Avance déduite/);
+        });
+        await check('aucune erreur JavaScript (impression)', () => assert.deepStrictEqual(errors, []));
+        await page.context().close();
+    }
 
     // ══════════ IMPRESSION : consommation inhabituelle + impayé → « Arriéré » ══════════
     console.log('Impression — consommation inhabituelle');
@@ -321,12 +391,12 @@ async function main() {
         const ym = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
         const cycle = ym(now);
         const prev = ym(new Date(now.getFullYear(), now.getMonth() - 1, 1));
-        const mk = () => {
+        const mk = (opts) => {
             const t = seed();
             t.Asufor[FA].config.maintenance_passcode_hash = hash;
             t.Asufor[FA].backup[prev] = { info: { cycle: prev }, donnees: { c1: rec({ name: 'Aminata', last_index: '24', new_index: 30 }) } };  // 1500 impayé
             t.Asufor[FA].backup['2026-05'] = { info: { cycle: '2026-05' }, donnees: { c1: rec({ name: 'Aminata', last_index: '500', new_index: 50 }) } };   // anomalie
-            return t;
+            return (opts && opts.sansMigration) ? t : migratedSeed(t);
         };
         const open = async (tree) => {
             const r = await newPage(browser, 'président', tree);
@@ -341,19 +411,35 @@ async function main() {
 
         {
             const { page, errors } = await open(mk());
-            await check('clôture : archive créée ET compteurs remis à zéro en une écriture', async () => {
+            await check('clôture : archive + remise à zéro + FACTURES figées + avance, en une écriture', async () => {
                 await run(page);
                 await page.waitForFunction(() => /MAINTENANCE RÉUSSIE/.test(document.getElementById('log-msg').textContent), null, { timeout: 8000 });
                 const t = await db(page);
-                assert.ok(t.Asufor[FA].backup[cycle].donnees.c1);
-                assert.strictEqual(t.Asufor[FA].backup[cycle].info.total_entrees, 3);
-                assert.strictEqual(t.Asufor[FA].compteurs.c1.new_index, 0);
-                assert.strictEqual(t.Asufor[FA].compteurs.c1.last_index, '30');
-                assert.strictEqual(t.Asufor[FA].compteurs.c1.status, 'impaye');
+                const F = t.Asufor[FA];
+                assert.ok(F.backup[cycle].donnees.c1);
+                assert.strictEqual(F.backup[cycle].info.total_entrees, 3);
+                assert.strictEqual(F.compteurs.c1.new_index, 0);
+                assert.strictEqual(F.compteurs.c1.last_index, '30');
+                assert.strictEqual(F.compteurs.c1.status, 'impaye');
+                ['apaid', 'arrieres', 'facture', 'print'].forEach(k => assert.ok(!(k in F.compteurs.c1), 'champ historique ' + k));
+                const f = F.factures[cycle + '_c1'];
+                assert.deepStrictEqual([f.montant_initial, f.source, f.statut, f.verrouillee], [1500, 'cloture', 'ouverte', true]);
+                assert.ok(F.factures[cycle + '_c3']);                                  // c3 marqué payé sans paiement : facturé (rien d'inventé)
+                assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'CLOTURE_EFFECTUEE'));
+                assert.match(await page.textContent('#log-msg'), /facture\(s\) émise\(s\)/);
                 const w = await page.evaluate(() => window.__DB.writes.length);
                 assert.strictEqual(w, 1, 'une seule écriture (atomique)');
             });
             await check('aucune erreur JavaScript (clôture)', () => assert.deepStrictEqual(errors, []));
+            await page.context().close();
+        }
+        {
+            const { page } = await open(mk({ sansMigration: true }));
+            await check('clôture SANS migration comptable : refusée avec message, rien d\'écrit', async () => {
+                await run(page);
+                await page.waitForFunction(() => /Migration comptable requise/.test(document.getElementById('log-msg').textContent), null, { timeout: 8000 });
+                assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), 0);
+            });
             await page.context().close();
         }
         {
@@ -384,18 +470,20 @@ async function main() {
         }
         {
             const { page } = await open(mk());
-            await check('corriger l\'archive « payé » : solde aussi les mois plus anciens, hors anomalie', async () => {
+            await check('correction d\'index d\'une archive facturée : facture figée intacte + ajustement « correction » validé', async () => {
                 await page.click('#btn-verify');
-                await page.waitForSelector('#stat_c1', { timeout: 8000 });
-                await page.selectOption('#stat_c1', 'paye');
+                await page.waitForSelector('#idx_c1', { timeout: 8000 });
+                assert.strictEqual(await page.$('#stat_c1'), null, 'plus de statut « payé » modifiable ici');
+                await page.fill('#idx_c1', '28');                                        // 30 → 28 : 1 500 → 1 000
                 await page.click('#item_c1 .btn-save-item');
-                await page.waitForFunction(() => !document.getElementById('item_c1'), null, { timeout: 8000 });
-                const t = await db(page);
-                const B = t.Asufor[FA].backup;
-                assert.strictEqual(B[prev].donnees.c1.status, 'paye');
-                assert.strictEqual(B['2026-06'].donnees.c1.status, 'paye');
-                assert.strictEqual(B['2026-07'].donnees.c1.status, 'paye');
-                assert.strictEqual(B['2026-05'].donnees.c1.status, 'impaye', 'anomalie jamais réglée automatiquement');
+                await page.waitForFunction(() => /Corrigé/.test(document.querySelector('#item_c1 .btn-save-item').textContent), null, { timeout: 8000 });
+                const F = (await db(page)).Asufor[FA];
+                assert.strictEqual(F.backup[prev].donnees.c1.new_index, 28);
+                const f = F.factures[prev + '_c1'];
+                assert.deepStrictEqual([f.montant_initial, f.montant_net], [1500, 1000]);
+                const j = Object.values(F.ajustements)[0];
+                assert.deepStrictEqual([j.type, j.montant, j.statut], ['correction', -500, 'valide']);
+                assert.strictEqual(F.backup['2026-05'].donnees.c1.status, 'impaye');
             });
             await page.context().close();
         }

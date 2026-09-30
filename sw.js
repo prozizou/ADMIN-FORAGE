@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v51';
+const CACHE_NAME = 'asufor-cache-v52';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -19,6 +19,8 @@ const APP_SHELL = [
     './manifest.json',
     './pwa.js',
     './billing.js',
+    './compta.js',
+    './compta-ui.js',
     './loader.js',
     './data-cache.js',
     './security.js',
@@ -34,6 +36,8 @@ const APP_SHELL = [
     './statistiques/stats.css',
     './statistiques/stats.js',
     './impression/impression.html',
+    './compte/releve.html',
+    './compte/recu.html',
     './reset/zero.html',
     './agents/agent.html',
     './admin/admin.html',

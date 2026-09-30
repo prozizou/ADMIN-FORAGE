@@ -81,6 +81,12 @@ body {
 .recap-val { font-size: 1.25rem; font-weight: 800; margin-top: 3px; word-break: break-word; }
 .recap-val-good { color: var(--success); }
 .recap-val-bad  { color: var(--danger); }
+.recap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+.recap-mini { display: flex; flex-direction: column; min-width: 0; }
+.recap-mini-val { font-size: 0.98rem; font-weight: 800; margin-top: 2px; word-break: break-word; color: var(--text-main); }
+.recap-mini-val.recap-val-bad { color: var(--danger); }
+.recap-mini-val.recap-val-good { color: var(--success); }
+.recap-source { font-size: 0.7rem; color: var(--text-sub); margin: 8px 0 0; text-align: center; }
 .recap-bar-bg { height: 14px; border-radius: 8px; background: var(--border-color); overflow: hidden; margin-top: 16px; }
 /* ✅ v4 : jauge rouge → orange → vert selon le niveau (au lieu d'un vert fixe) */
 .recap-bar-fill { height: 100%; border-radius: 8px; background: var(--danger); transition: width .6s ease, background .4s ease; width: 0; }

@@ -22,6 +22,7 @@ const {
 } = require('@firebase/rules-unit-testing');
 
 const Billing = require('../../billing.js');
+const Compta = require('../../compta.js');
 // RULES_FILE permet de rejouer la suite contre d'autres règles (ex. l'ancienne version, pour vérifier que les tests détectent bien les défauts).
 const RULES = fs.readFileSync(process.env.RULES_FILE || path.join(__dirname, '..', '..', 'database.rules.json'), 'utf8');
 
@@ -156,100 +157,185 @@ describe('Isolation des comptes par forage', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-describe('Accès legacy restreints', () => {
+describe('Accès legacy fermés (v7 : nœuds absents de la base de référence)', () => {
     const LEGACY = ['asufor_db_diandioly', 'db_agents', 'asufor_backup', 'asufor_depenses', 'asufor_motivations'];
 
-    it('un compte d\'un autre forage ne lit plus aucun nœud legacy', async () => {
+    it('personne ne lit un nœud legacy (autre forage, Diandioly, super-admin, anonyme)', async () => {
         for (const n of LEGACY) {
             await assertFails(read(as('presB'), n));
             await assertFails(read(as('presA'), n));
+            await assertFails(read(as('diaPres', 'president@diandioly.com'), n));
+            await assertFails(read(superDb(), n));
             await assertFails(read(anon(), n));
         }
     });
 
-    it('lecture legacy : membre du forage Asufor_diandioly ou super-admin', async () => {
-        for (const n of LEGACY) {
-            await assertSucceeds(read(as('diaPres', 'president@diandioly.com'), n));
-            await assertSucceeds(read(superDb(), n));
-        }
-    });
-
-    it('écriture legacy : e-mail historique ET membre de Diandioly (un homonyme d\'un autre forage est refusé)', async () => {
-        await assertSucceeds(as('diaPres', 'president@diandioly.com').ref('asufor_db_diandioly/x/status').set('paye'));
-        // même e-mail mais fiche users d'un AUTRE forage → refus
-        await assertFails(as('presB', 'president@diandioly.com').ref('asufor_db_diandioly/x/status').set('paye'));
-        await assertFails(as('presB', 'president@diandioly.com').ref('asufor_backup/2026-05/donnees/x/status').set('paye'));
-        // membre de Diandioly mais sans e-mail historique → refus
-        await assertFails(as('diaPres', 'autre@asufor.local').ref('asufor_db_diandioly/x/status').set('paye'));
+    it('personne n\'écrit dans un nœud legacy (même avec l\'e-mail historique)', async () => {
+        await assertFails(as('diaPres', 'president@diandioly.com').ref('asufor_db_diandioly/x/status').set('paye'));
+        await assertFails(as('diaPres', 'president@diandioly.com').ref('asufor_backup/2026-05/donnees/x/status').set('paye'));
+        await assertFails(superDb().ref('db_agents/g/zone').set('Z2'));
     });
 });
 
 // ─────────────────────────────────────────────────────────────
-describe('Régularisation par le trésorier (archives)', () => {
-    const payFields = (cycle, key, status) => ({
-        [`Asufor/${FA}/backup/${cycle}/donnees/${key}/status`]: status,
-        [`Asufor/${FA}/backup/${cycle}/donnees/${key}/statut`]: status === 'paye',
-        [`Asufor/${FA}/backup/${cycle}/donnees/${key}/date_paiement`]: status === 'paye' ? '2026-09-01T00:00:00Z' : null,
-        [`Asufor/${FA}/backup/${cycle}/donnees/${key}/last_modified_by`]: 'trésorier',
-        [`Asufor/${FA}/backup/${cycle}/donnees/${key}/last_modified_at`]: '2026-09-01T00:00:00Z'
+describe('Comptabilité v7 — opérations réelles (compta.js) sous les règles', () => {
+    const CP = Compta.pathsFor(`Asufor/${FA}`);
+    let n = 0;
+    const newId = () => 'k' + Date.now().toString(36) + '_' + (++n);
+    const U = (uid) => ({ uid, nom: uid, role: USERS[uid].role });
+    const now = () => new Date().toISOString();
+    const S = async () => Compta.normState(await raw(`Asufor/${FA}`) || {});
+    const migrate = async (uid) => Compta.buildMigrationOps(await S(), { paths: CP, backup: await raw(`Asufor/${FA}/backup`), now: now(), user: U(uid), newId });
+    const payOps = async (uid, montant, over) => Compta.buildPaymentOps(await S(), Object.assign({ paths: CP, compteurId: 'c1', montant, mode: 'especes', numero_recu: 'R-' + (++n), user: U(uid), now: now(), newId }, over || {}));
+
+    it('migration : président seulement, une seule fois ; factures « migration_backup », aucun paiement créé', async () => {
+        await assertFails(as('tresA').ref().update((await migrate('tresA')).updates));
+        const r = await migrate('presA');
+        await assertSucceeds(as('presA').ref().update(r.updates));
+        assert.strictEqual(r.resume.total_arrieres, 5000);
+        const f = await raw(`${CP.factures}/2026-06_c1`);
+        assert.strictEqual(f.source, 'migration_backup'); assert.strictEqual(f.reste_a_payer, 5000);
+        assert.strictEqual(await raw(CP.paiements), null);
+        assert.strictEqual((await raw(`${CP.migration}/v1`)).statut, 'terminee');
+        // rejouer : migration_comptable/v1 existe déjà → refus complet
+        const again = await migrate('presA');
+        await assertFails(as('presA').ref().update(again.updates));
     });
 
-    it('le trésorier encaisse en cascade (base active + archives) avec le vrai buildPaymentUpdates', async () => {
-        const backups = await raw(`Asufor/${FA}/backup`);
-        const cpt = await raw(`Asufor/${FA}/compteurs`);
-        const r = Billing.buildPaymentUpdates({
-            activePath: `Asufor/${FA}/compteurs`, activeKey: 'c1', record: cpt.c1,
-            indexedBackups: Billing.indexBackups(backups), backupPath: `Asufor/${FA}/backup`,
-            currentKeys: { c1: true }, paidBy: 'trésorier', timestamp: '2026-09-01T00:00:00Z'
-        });
-        assert.ok(r.cyclesRegularises.includes('2026-06'));
+    it('trésorier : encaissement partiel atomique (paiement + affectation + facture + solde + audit)', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const r = await payOps('tresA', 2000);
         await assertSucceeds(as('tresA').ref().update(r.updates));
-        const after = await raw(`Asufor/${FA}/backup/2026-06/donnees/c1`);
-        assert.strictEqual(after.status, 'paye');
-        assert.strictEqual(after.new_index, 20);                 // index intacts
-        const act = await raw(`Asufor/${FA}/compteurs/c1`);
-        assert.strictEqual(act.status, 'paye');
-        assert.strictEqual(act.arrieres_regles, r.arrieresRegles);
-        assert.deepStrictEqual(act.cycles_regles, ['2026-06|c1']);
+        const f = await raw(`${CP.factures}/2026-06_c1`);
+        assert.deepStrictEqual([f.statut, f.montant_paye, f.reste_a_payer], ['partielle', 2000, 3000]);
+        assert.strictEqual((await raw(`${CP.affectations}/${r.paiementId}/2026-06_c1`)).montant, 2000);
+        assert.strictEqual((await raw(`${CP.soldes}/c1`)).arrieres, 3000);
+        const audit = Object.values(await raw(CP.audit));
+        assert.ok(audit.some(e => e.action === 'PAIEMENT_CREE' && e.utilisateur === 'tresA'));
     });
 
-    it('le trésorier peut corriger le paiement (révocation qui remet les archives à impayé)', async () => {
-        await as('presA').ref().update(payFields('2026-06', 'c1', 'paye'));
-        const cpt = await raw(`Asufor/${FA}/compteurs`);
-        const paid = Object.assign({}, cpt.c1, { status: 'paye', statut: true, cycles_regles: ['2026-06|c1'], arrieres_regles: 5000 });
-        const r = Billing.buildRevokeUpdates({
-            activePath: `Asufor/${FA}/compteurs`, activeKey: 'c1', record: paid,
-            indexedBackups: Billing.indexBackups(await raw(`Asufor/${FA}/backup`)), backupPath: `Asufor/${FA}/backup`
-        });
-        assert.deepStrictEqual(r.cyclesRestaures, ['2026-06']);
-        await assertSucceeds(as('tresA').ref().update(r.updates));
-        assert.strictEqual((await raw(`Asufor/${FA}/backup/2026-06/donnees/c1`)).status, 'impaye');
+    it('concurrence : deux encaissements calculés sur le même état → le second est refusé EN ENTIER', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const r1 = await payOps('tresA', 5000);
+        const r2 = await payOps('presA', 5000);                 // même état de départ (périmé après r1)
+        await assertSucceeds(as('tresA').ref().update(r1.updates));
+        await assertFails(as('presA').ref().update(r2.updates));
+        assert.strictEqual(await raw(`${CP.paiements}/${r2.paiementId}`), null);
+        assert.strictEqual((await raw(`${CP.factures}/2026-06_c1`)).montant_paye, 5000);   // jamais 10 000
     });
 
-    it('le trésorier ne peut PAS toucher aux index/données d\'une archive, ni la créer/supprimer', async () => {
-        const db = as('tresA');
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/new_index`).set(999));
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/facteur`).set(1));
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1`).remove());
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06`).remove());
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-07`).set({ donnees: { c1: rec() } }));
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/nouveau/status`).set('paye'));   // ligne inexistante
-        assert.strictEqual((await raw(`Asufor/${FA}/backup/2026-06/donnees/c1`)).new_index, 20);
+    it('paiement validé : ni modification, ni suppression ; annulation motivée par le président uniquement', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const r = await payOps('tresA', 3000);
+        await as('tresA').ref().update(r.updates);
+        const pp = `${CP.paiements}/${r.paiementId}`;
+        await assertFails(as('tresA').ref(`${pp}/montant`).set(1));
+        await assertFails(as('presA').ref(`${pp}/montant`).set(1));
+        await assertFails(as('presA').ref(pp).remove());
+        await assertFails(as('tresA').ref().update((Compta.buildPaymentCancelOps(await S(), { paths: CP, paiementId: r.paiementId, motif: 'Erreur', user: U('tresA'), now: now(), newId })).updates));
+        await assertFails(as('presA').ref().update({ [`${pp}/statut`]: 'annule', [`${pp}/annule_par`]: 'presA' }));   // sans motif
+        const c = Compta.buildPaymentCancelOps(await S(), { paths: CP, paiementId: r.paiementId, motif: 'Billet refusé', user: U('presA'), now: now(), newId });
+        await assertSucceeds(as('presA').ref().update(c.updates));
+        const p = await raw(pp);
+        assert.deepStrictEqual([p.statut, p.montant], ['annule', 3000]);
+        assert.strictEqual((await raw(`${CP.factures}/2026-06_c1`)).reste_a_payer, 5000);
+        await assertFails(as('presA').ref(`${pp}/statut`).set('valide'));             // pas de « désannulation »
     });
 
-    it('valeurs de paiement contrôlées (statut ∈ paye/impaye, booléen, chaînes)', async () => {
-        const db = as('tresA');
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/status`).set('gratuit'));
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/statut`).set('true'));
-        await assertFails(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/date_paiement`).set(12));
-        await assertSucceeds(db.ref(`Asufor/${FA}/backup/2026-06/donnees/c1/status`).set('paye'));
+    it('avance : un paiement supérieur à la dette crée un crédit, utilisé à la clôture suivante', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const r = await payOps('tresA', 7000);
+        await as('tresA').ref().update(r.updates);
+        assert.strictEqual((await raw(`${CP.soldes}/c1`)).avance, 2000);
+        const cl = Compta.buildClosureOps(await S(), { paths: CP, cycleKey: '2026-09', compteurs: await raw(`Asufor/${FA}/compteurs`), now: now(), dateLabel: 'x', user: U('presA'), newId });
+        await assertSucceeds(as('presA').ref().update(cl.updates));
+        const f = await raw(`${CP.factures}/2026-09_c1`);                             // 10 m³ × 250 = 2 500
+        assert.deepStrictEqual([f.montant_initial, f.montant_paye, f.reste_a_payer, f.source], [2500, 2000, 500, 'cloture']);
+        assert.strictEqual((await raw(`${CP.soldes}/c1`)).avance, 0);
     });
 
-    it('le trésorier d\'un autre forage, le secrétaire et les anonymes n\'ont pas ce droit', async () => {
-        await assertFails(as('tresB').ref().update(payFields('2026-06', 'c1', 'paye')));
-        await assertFails(as('secA').ref().update(payFields('2026-06', 'c1', 'paye')));
-        await assertFails(anon().ref().update(payFields('2026-06', 'c1', 'paye')));
-        await assertSucceeds(as('presA').ref().update(payFields('2026-06', 'c1', 'paye')));
+    it('factures : création président seulement ; champs figés ; le trésorier ne change ni montant net ni statut « annulee »', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const fp = `${CP.factures}/2026-06_c1`;
+        const f = await raw(fp);
+        await assertFails(as('tresA').ref(`${CP.factures}/2026-07_c1`).set(Object.assign({}, f, { facture_id: '2026-07_c1', cycle: '2026-07', rev: 1 })));
+        await assertFails(as('presA').ref().update({ [`${fp}/montant_initial`]: 1, [`${fp}/rev`]: 2 }));
+        await assertFails(as('presA').ref().update({ [`${fp}/nouvel_index`]: 99, [`${fp}/rev`]: 2 }));
+        await assertFails(as('tresA').ref().update({ [`${fp}/montant_net`]: 0, [`${fp}/reste_a_payer`]: 0, [`${fp}/statut`]: 'payee', [`${fp}/rev`]: 2 }));
+        await assertFails(as('presA').ref().update({ [`${fp}/montant_paye`]: 9000, [`${fp}/rev`]: 2 }));   // payé > net, reste incohérent
+        await assertFails(as('presA').ref(fp).remove());
+        assert.strictEqual((await raw(fp)).montant_initial, 5000);
+    });
+
+    it('ajustements : le trésorier propose, seul le président valide ; jamais modifiés ensuite', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const base = { paths: CP, factureId: '2026-06_c1', type: 'remise', montant: 1000, motif: 'Geste commercial', now: now(), newId };
+        await assertFails(as('tresA').ref().update(Compta.buildAdjustmentOps(await S(), Object.assign({}, base, { user: U('tresA'), valider: true })).updates));
+        const prop = Compta.buildAdjustmentOps(await S(), Object.assign({}, base, { user: U('tresA') }));
+        await assertSucceeds(as('tresA').ref().update(prop.updates));
+        const ap = `${CP.ajustements}/${prop.ajustementId}`;
+        await assertFails(as('tresA').ref().update(Compta.buildAdjustmentValidationOps(await S(), { paths: CP, ajustementId: prop.ajustementId, decision: 'valide', user: U('tresA'), now: now(), newId }).updates));
+        await assertFails(as('secA').ref().update(Compta.buildAdjustmentValidationOps(await S(), { paths: CP, ajustementId: prop.ajustementId, decision: 'valide', user: U('secA'), now: now(), newId }).updates));
+        const v = Compta.buildAdjustmentValidationOps(await S(), { paths: CP, ajustementId: prop.ajustementId, decision: 'valide', user: U('presA'), now: now(), newId });
+        await assertSucceeds(as('presA').ref().update(v.updates));
+        assert.strictEqual((await raw(`${CP.factures}/2026-06_c1`)).montant_net, 4000);
+        await assertFails(as('presA').ref(`${ap}/montant`).set(5000));
+        await assertFails(as('presA').ref(`${ap}/statut`).set('rejete'));
+        await assertFails(as('presA').ref(ap).remove());
+        // motif obligatoire (écriture directe sans motif refusée)
+        await assertFails(as('presA').ref(`${CP.ajustements}/x1`).set({ ajustement_id: 'x1', compteur_id: 'c1', facture_id: '2026-06_c1', type: 'remise', montant: 1, motif: '', cree_par: 'presA', created_at: now(), statut: 'en_attente' }));
+    });
+
+    it('secrétaire : aucun droit financier, mais peut résoudre un problème technique sans toucher aux montants', async () => {
+        const b = await raw(`Asufor/${FA}/backup`);
+        b['2026-06'].donnees.c1.new_index = 150;                                  // surconsommation dans l'archive
+        await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(`Asufor/${FA}/backup`).set(b); });
+        await as('presA').ref().update((await migrate('presA')).updates);
+        await assertFails(as('secA').ref().update((await payOps('secA', 1000)).updates));
+        await assertFails(as('secA').ref().update((await migrate('secA')).updates));
+        const fp = `${CP.factures}/2026-06_c1`;
+        assert.strictEqual((await raw(fp)).probleme.type, 'surconsommation');
+        const res = Compta.buildProblemResolutionOps(await S(), { paths: CP, factureId: '2026-06_c1', motif: 'Fuite réparée', user: U('secA'), now: now(), newId });
+        await assertSucceeds(as('secA').ref().update(res.updates));
+        const f = await raw(fp);
+        assert.strictEqual(f.probleme.resolu, true); assert.strictEqual(f.reste_a_payer, 37500);   // résolu ≠ payé
+        await assertFails(as('secA').ref().update({ [`${fp}/montant_paye`]: 37500, [`${fp}/reste_a_payer`]: 0, [`${fp}/statut`]: 'payee', [`${fp}/rev`]: f.rev + 1 }));
+    });
+
+    it('affectations et audit : jamais diminués, supprimés, ni écrits au nom d\'un autre', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const r = await payOps('tresA', 2000);
+        await as('tresA').ref().update(r.updates);
+        const ap = `${CP.affectations}/${r.paiementId}/2026-06_c1`;
+        await assertFails(as('tresA').ref(`${ap}/montant`).set(1000));
+        await assertFails(as('presA').ref(ap).remove());
+        const audits = await raw(CP.audit);
+        const eid = Object.keys(audits)[0];
+        await assertFails(as('presA').ref(`${CP.audit}/${eid}/action`).set('PAIEMENT_ANNULE'));
+        await assertFails(as('presA').ref(`${CP.audit}/${eid}`).remove());
+        await assertFails(as('tresA').ref(`${CP.audit}/faux`).set({ action: 'PAIEMENT_CREE', entite: 'paiement', entite_id: 'x', utilisateur: 'presA', role: 'président', date: now() }));
+    });
+
+    it('isolation : le trésorier d\'un autre forage ne peut rien encaisser ici ; soldes : cache recalculable par le président', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        await assertFails(as('tresB').ref().update((await payOps('tresB', 1000)).updates));
+        await assertFails(read(as('presB'), CP.factures));
+        await assertFails(read(as('presB'), CP.paiements));
+        const rb = Compta.buildSoldesRebuild(await S(), { paths: CP, now: now() });
+        await assertSucceeds(as('presA').ref().update(rb.updates));
+        assert.deepStrictEqual(Compta.checkSoldes(await S()), []);
+    });
+
+    it('clôture v7 : archive + factures + audit en un seul update ; seconde clôture refusée en entier', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const cl = () => S().then(st => raw(`Asufor/${FA}/compteurs`).then(c => Compta.buildClosureOps(st, { paths: CP, cycleKey: '2026-09', compteurs: c, now: now(), dateLabel: 'x', user: U('presA'), newId })));
+        const first = await cl();
+        await assertFails(as('tresA').ref().update(first.updates));
+        await assertSucceeds(as('presA').ref().update(first.updates));
+        assert.strictEqual((await raw(`${CP.factures}/2026-09_c1`)).montant_initial, 2500);
+        assert.ok(Object.values(await raw(CP.audit)).some(e => e.action === 'CLOTURE_EFFECTUEE'));
+        const second = Compta.buildClosureOps(Compta.emptyState(), { paths: CP, cycleKey: '2026-09', compteurs: { c1: rec({ new_index: 30 }) }, now: now(), dateLabel: 'y', user: U('pres2A'), newId });
+        await assertFails(as('pres2A').ref().update(second.updates));
     });
 });
 
@@ -382,17 +468,15 @@ describe('Non-régression des accès existants', () => {
         await assertSucceeds(as('secA').ref(`Asufor/${FA}/compteurs/n2`).set(rec()));
         await assertFails(as('tresA').ref(`Asufor/${FA}/compteurs/n3`).set(rec()));
         await assertSucceeds(as('tresA').ref(`Asufor/${FA}/compteurs/c1/status`).set('paye'));
-        // mémoire de règlement et ajustements : champs libres du relevé
-        await assertSucceeds(as('tresA').ref(`Asufor/${FA}/compteurs/c1/arrieres_regles`).set(5000));
-        await assertSucceeds(as('secA').ref(`Asufor/${FA}/compteurs/c1/arrieres_ajustement`).set(-100));
     });
 
-    it('dépenses / motivations : président et trésorier ; audit : écriture de tout membre du forage', async () => {
+    it('dépenses / motivations : président et trésorier ; ancien journal audit_arrieres en lecture seule', async () => {
         const dep = { libelle: 'Carburant', montant: 1000 };
         await assertSucceeds(as('tresA').ref(`Asufor/${FA}/depenses/2026-09/d1`).set(dep));
         await assertFails(as('secA').ref(`Asufor/${FA}/depenses/2026-09/d2`).set(dep));
         const audit = { compteurKey: 'c1', compteur: '1', proprietaire: 'x', zone: 'N', ancienArrieres: 0, nouveauArrieres: 5, modifiePar: 'a', modifieRole: 'r', modifieLe: 't', sessionForage: FA };
-        await assertSucceeds(as('tresA').ref(`Asufor/${FA}/audit_arrieres/e9`).set(audit));
+        await assertFails(as('tresA').ref(`Asufor/${FA}/audit_arrieres/e9`).set(audit));
+        await assertFails(as('presA').ref(`Asufor/${FA}/audit_arrieres/e9`).set(audit));
     });
 
     it('agents : président/secrétaire seulement', async () => {
