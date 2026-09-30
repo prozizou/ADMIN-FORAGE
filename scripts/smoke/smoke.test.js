@@ -447,6 +447,9 @@ async function main() {
             assert.strictEqual(num(await page.textContent('#rc-arrieres')), 3500);
             assert.strictEqual(num(await page.textContent('#rc-avances')), 1000);
         });
+        await check('« Annuler encaissement » réservé au président : invisible pour le trésorier malgré le paiement existant', async () => {
+            assert.strictEqual(await page.$('#releves-list .btn-cancel-pay'), null);
+        });
         await check('écriture refusée (droits / concurrence) : message clair, rien d\'écrit', async () => {
             await page.evaluate(() => { window.__DB.denyWrites = true; });
             await page.evaluate(() => window.encaisser('c2'));
@@ -461,6 +464,69 @@ async function main() {
         await check('aucune erreur JavaScript (encaissement)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
         afterPayment = await db(page);
         await page.context().close();
+    }
+
+    // ══════════ STATISTIQUES v8 : « Annuler encaissement » (correction d'un paiement, président) ══════════
+    console.log('Statistiques — annulation d\'un encaissement');
+    {
+        const { page, errors, ctx } = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => document.querySelectorAll('#releves-list .btn-cancel-pay').length > 0, null, { timeout: 8000 });
+        await check('bouton visible uniquement sur la carte du client ayant un paiement valide (président)', async () => {
+            const has = (name) => page.evaluate((n) => {
+                const el = [...document.querySelectorAll('#releves-list .item')].find(e => e.innerText.includes(n));
+                return el ? !!el.querySelector('.btn-cancel-pay') : null;
+            }, name);
+            assert.strictEqual(await has('Aminata'), true);
+            assert.strictEqual(await has('Boubacar'), false);   // aucun paiement valide : pas de bouton
+        });
+        await check('dialogue : paiement affiché (montant, date, reçu), motif obligatoire, rien sans confirmation', async () => {
+            await page.evaluate(() => window.annulerEncaissement('c1'));
+            await page.waitForSelector('#cui-yes', { timeout: 8000 });
+            const box = await page.textContent('.cui-box');
+            assert.match(box, /7[\s\u202f\xa0]?000 F/);
+            assert.match(box, /reçu n°/);
+            await page.click('#cui-yes');
+            assert.match(await page.textContent('#cui-err'), /motif est obligatoire/);
+            await page.fill('#cui-motif', 'x');
+            await page.click('#cui-yes');
+            assert.match(await page.textContent('#cui-err'), /3 caractères/);
+        });
+        await check('annulation : Encaissé -7 000, arriérés +7 000, UNE écriture, audit PAIEMENT_ANNULE, paiement jamais supprimé', async () => {
+            const w0 = await page.evaluate(() => window.__DB.writes.length);
+            await page.fill('#cui-motif', 'Montant saisi par erreur');
+            await page.click('#cui-yes');
+            await page.waitForFunction(() => /Paiement annulé/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
+            assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), w0 + 1);
+            const F = (await db(page)).Asufor[FA];
+            const p = F.paiements[paiementId];
+            assert.strictEqual(p.statut, 'annule');
+            assert.strictEqual(p.montant, 7000);                              // jamais supprimé : montant, auteur, date conservés
+            assert.strictEqual(p.annule_par, 'u1');
+            assert.match(p.motif_annulation, /erreur/);
+            assert.ok(Object.values(F.affectations[paiementId]).every(a => a.statut === 'annulee'));
+            assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_ANNULE' && e.entite_id === paiementId && e.role === 'président'));
+            assert.strictEqual(F.soldes.c1.avance, 0);
+            assert.strictEqual(F.soldes.c1.arrieres, 6000);                  // les 6 000 d'arriérés qu'il avait réglés redeviennent dus
+            await page.click('.cui-box #cui-close2');
+        });
+        await check('rafraîchissement immédiat sans reload : Bilan (Encaissé/À réclamer), arriérés, carte client, bouton disparu', async () => {
+            await page.waitForFunction(() => document.getElementById('total-money').textContent.trim().startsWith('0'), null, { timeout: 8000 });
+            assert.strictEqual(num(await page.textContent('#total-money')), 0);       // 7 000 − 7 000
+            assert.strictEqual(num(await page.textContent('#rc-arrieres')), 9500);    // 3 500 (inchangé) + 6 000 (Aminata, de nouveau dus)
+            const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
+            assert.ok(/7[,.\s\u202f\xa0]?500/.test(t.find(x => x.includes('Aminata'))));      // total dû revenu à l'identique d'avant paiement
+            assert.strictEqual(await page.$('#releves-list .btn-cancel-pay'), null);   // plus aucun paiement valide à annuler
+        });
+        await check('double annulation empêchée proprement (jamais un second contre-passage silencieux)', async () => {
+            const err = await page.evaluate((pid) => window.ComptaUI.run((S, base) =>
+                window.Compta.buildPaymentCancelOps(S, Object.assign({}, base, { paiementId: pid, motif: 'seconde tentative' }))
+            ).then(() => null, (e) => e.message), paiementId);
+            assert.match(err, /déjà annulé/);
+        });
+        await check('aucune erreur JavaScript (annulation)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
+        await ctx.close();
     }
 
     // ══════════ RELEVÉ DE COMPTE + REÇU ══════════

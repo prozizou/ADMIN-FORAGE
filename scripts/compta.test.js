@@ -321,6 +321,42 @@ test('statistiques : un paiement annulé ne compte pas dans l\'encaissé ; avanc
     assert.deepStrictEqual([st.encaisse, st.arrieres, st.avances], [0, 5000, 0]);
 });
 
+test('Statistiques — « Annuler encaissement » : paiement de 11 500 F, Encaissé -11 500, dette +11 500, audit et KPI recalculés', () => {
+    const db = newDb();
+    close(db, '2026-06', { c1: rel(0, 46) });                           // 46 m³ × 250 F = 11 500 F
+    const p = pay(db, 'c1', 11500);                                     // facture soldée par un seul paiement
+    let avant = C.periodStats(state(db), { cycle: '2026-06', start: 0, end: Infinity });
+    assert.deepStrictEqual([avant.encaisse, avant.arrieres], [11500, 0]);
+    assert.strictEqual(acc(db, 'c1').arrieres, 0);
+
+    const r = C.buildPaymentCancelOps(state(db), { paths: P, paiementId: p.paiementId, motif: 'Montant saisi par erreur', user: USER_P, now: tick(), newId });
+    apply(db, r.updates);
+
+    // Encaissé -11 500 F, dette (arriérés) +11 500 F, sur les KPI de la période comme sur le compte client.
+    const apres = C.periodStats(state(db), { cycle: '2026-06', start: 0, end: Infinity });
+    assert.deepStrictEqual([apres.encaisse - avant.encaisse, apres.arrieres - avant.arrieres], [-11500, 11500]);
+    assert.strictEqual(acc(db, 'c1').arrieres, 11500);
+    assert.strictEqual(acc(db, 'c1').solde, 11500);
+
+    // Le paiement n'est jamais supprimé : historique, auteur et motif conservés.
+    const pAnnule = state(db).paiements[p.paiementId];
+    assert.strictEqual(pAnnule.montant, 11500);
+    assert.strictEqual(pAnnule.statut, 'annule');
+    assert.strictEqual(pAnnule.annule_par, USER_P.uid);
+    assert.strictEqual(pAnnule.motif_annulation, 'Montant saisi par erreur');
+
+    // Audit tracé (PAIEMENT_ANNULE), rien d'autre supprimé.
+    const audit = Object.values(state(db).affectations[p.paiementId] || {});
+    assert.ok(audit.every(a => a.statut === 'annulee'), 'affectations FIFO annulées');
+    const events = Object.values(getAt(db.tree, BASE + '/audit_comptable') || {});
+    const evt = events.find(e => e.action === 'PAIEMENT_ANNULE' && e.entite_id === p.paiementId);
+    assert.ok(evt, 'PAIEMENT_ANNULE absent du journal d\'audit');
+    assert.strictEqual(evt.role, 'président');
+
+    // Double annulation refusée (jamais de suppression, jamais un second contre-passage silencieux).
+    assert.throws(() => C.buildPaymentCancelOps(state(db), { paths: P, paiementId: p.paiementId, motif: 'x', user: USER_P, now: tick(), newId }), /déjà annulé/);
+});
+
 test('invariants : solde = arriérés − avance, Σ affectations ≤ paiement, cache soldes = recalcul intégral', () => {
     const db = newDb();
     let i = 0;
