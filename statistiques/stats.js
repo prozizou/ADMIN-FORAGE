@@ -150,14 +150,33 @@ window.scrollToTop = function() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
+// Relevé RÉELLEMENT en cours d'un compteur (pas celui affiché à l'écran si une archive est consultée) :
+// utilisé pour la facture provisoire du mois actuel et le statut payé/impayé du compteur. En vue
+// « Données actuelles », c'est déjà storeReleves[key] ; en archive, on va le relire (données déjà en
+// cache local via AsuforCache la plupart du temps, donc quasi instantané).
+async function currentReleveFor(key) {
+    if (!isArchiveView) return storeReleves[key] || {};
+    try {
+        const snap = await sget(ref(db, `${P.compteurs}/${key}`));
+        return snap.exists() ? snap.val() : {};
+    } catch (e) {
+        console.error('Relevé courant introuvable :', e.code, e.message);
+        return {};
+    }
+}
+
 // --- ENCAISSEMENT (v7) ---
 // L'encaissement ne solde plus « tout » : il ouvre la fenêtre de paiement (montant libre,
 // mode, n° de reçu, aperçu FIFO). Toute la logique et l'écriture atomique sont dans compta.js.
-window.encaisser = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : encaissez depuis « Données actuelles ».", true); return; }
+// ✅ v8 : l'encaissement fonctionne aussi depuis une archive (mois passé) — le paiement est simplement
+// daté d'aujourd'hui et réglé en FIFO sur les factures les plus anciennes ouvertes, celle de l'archive
+// consultée y compris. Le « relevé en cours » utilisé pour la facture provisoire du mois ACTUEL et pour
+// le statut payé/impayé du compteur doit toujours être le relevé réellement en cours (pas celui de
+// l'archive affichée à l'écran) : on va le relire quand une archive est consultée.
+window.encaisser = async function(key) {
     if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
     if (!ComptaUI.isMigrated()) { showToast("⚠️ Migration comptable requise (président) avant tout encaissement.", true); return; }
-    const item = storeReleves[key] || {};
+    const item = await currentReleveFor(key);
     ComptaUI.openPaymentDialog({
         compteurId: key,
         releve: item,
@@ -168,10 +187,9 @@ window.encaisser = function(key) {
     });
 };
 
-window.annulerEncaissement = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : les corrections de paiement se font depuis « Données actuelles ».", true); return; }
+window.annulerEncaissement = async function(key) {
     if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
-    const item = storeReleves[key] || {};
+    const item = await currentReleveFor(key);
     ComptaUI.openPaymentCancelDialog({
         compteurId: key,
         releve: item,
@@ -312,8 +330,10 @@ async function loadDataForMonth(selection, opts) {
     const bannerText = document.getElementById('archive-banner-text');
     if (bannerText) {
         bannerText.textContent = isPresident()
-            ? 'Archive — vous pouvez corriger les relevés (index, facteur…) : une facture déjà émise est corrigée par un ajustement tracé.'
-            : 'Archive — données clôturées, lecture seule.';
+            ? 'Archive — vous pouvez corriger les relevés (index, facteur…), encaisser une dette ancienne ou annuler un paiement erroné : chaque correction reste tracée (ajustement, audit).'
+            : (ComptaUI.canCollect()
+                ? 'Archive — les relevés sont figés ; vous pouvez encaisser une dette ancienne depuis cette page.'
+                : 'Archive — données clôturées, lecture seule.');
     }
     const recapTitle = document.getElementById('recap-title');
     if (recapTitle) recapTitle.textContent = isArchiveView ? `Bilan — ${monthLabelFR(selection)}` : 'Bilan du mois';
@@ -598,13 +618,12 @@ window.applyFilter = function() {
         return isNameMatch || isCompteurMatch;
     });
 
-    // Compteurs ayant au moins un paiement valide (une seule passe, pas par carte) : conditionne le
-    // bouton « Annuler encaissement » (président uniquement, voir comptaButtons).
-    let compteursAvecPaiement = null;
-    if (ledgerMode) {
-        compteursAvecPaiement = new Set();
-        Object.values(S.paiements || {}).forEach(p => { if (p.statut === 'valide') compteursAvecPaiement.add(p.compteur_id); });
-    }
+    // Compteurs ayant au moins un paiement valide dans le GRAND LIVRE (une seule passe, pas par carte) :
+    // conditionne le bouton « Annuler encaissement » (président uniquement, voir comptaButtons). Toujours
+    // calculé depuis l'état comptable réel — indépendant de ledgerMode, qui ne régit que les montants
+    // AFFICHÉS sur la carte d'une archive antérieure à la clôture de migration.
+    const compteursAvecPaiement = new Set();
+    if (migrated) Object.values(S.paiements || {}).forEach(p => { if (p.statut === 'valide') compteursAvecPaiement.add(p.compteur_id); });
 
     // Montants de chaque carte : TOUJOURS via billing.js / compta.js (aucun calcul métier ici).
     filteredBase.forEach(item => {
@@ -643,7 +662,7 @@ window.applyFilter = function() {
             item.estSolde = window.Billing.isPaid(item);
         }
         item.hasAnomalie = (parseFloat(item.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(item);
-        item.hasValidPayment = !!(compteursAvecPaiement && compteursAvecPaiement.has(item.key));
+        item.hasValidPayment = compteursAvecPaiement.has(item.key);
     });
 
     currentFilteredData = filteredBase.filter(item => {
@@ -859,7 +878,9 @@ function updateRelevesProgress() {
 
 // Boutons comptables d'une carte : « Encaisser » (président/trésorier, période actuelle) et « Relevé ».
 function comptaButtons(item, due) {
-    const canPay = !isArchiveView && ComptaUI.canCollect() && due > 0;
+    // ✅ v8 : Encaisser et Annuler restent disponibles en archive (mois passé) — payer une vieille dette
+    // ou corriger un paiement mal saisi ne dépend pas du mois affiché à l'écran.
+    const canPay = ComptaUI.canCollect() && due > 0;
     const ready = ledgerReady && backupsLoaded && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
@@ -867,7 +888,7 @@ function comptaButtons(item, due) {
     // ✅ v8 : correction d'un paiement saisi par erreur — réservé au président, visible seulement si
     // ce client a au moins un paiement valide. Toute la logique (contre-écriture, FIFO, audit) est
     // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
-    const canCancelPay = !isArchiveView && ComptaUI.isPresident() && item.hasValidPayment;
+    const canCancelPay = ComptaUI.isPresident() && item.hasValidPayment;
     const cancel = canCancelPay ? `<button class="btn-cancel-pay" onclick="annulerEncaissement('${item.key}')" ${lock} title="Annuler un encaissement saisi par erreur (président)"><i class="fa-solid fa-rotate-left"></i></button>` : '';
     return pay + rel + cancel;
 }
