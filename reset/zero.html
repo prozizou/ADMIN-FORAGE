@@ -21,6 +21,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
@@ -331,6 +332,9 @@
 
         const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
+        // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+        const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
+
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
@@ -348,7 +352,7 @@
         // partagent la même app).
         let villageName = 'ce forage';
         document.getElementById('path-badge').textContent = P.compteurs;
-        get(ref(db, P.config)).then((snap) => {
+        sget(ref(db, P.config)).then((snap) => {
             const cfg = snap.exists() ? snap.val() : {};
             villageName = cfg.siege || cfg.nom || P.forageKey;
             document.getElementById('page-h1').textContent = 'Maintenance ' + villageName;
@@ -363,7 +367,7 @@
         const CP = window.Compta.pathsFor(P.base || P.compteurs.replace(/\/compteurs$/, ''));
         async function readLedger() {
             const names = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes'];
-            const snaps = await Promise.all(names.map(n => get(ref(db, CP[n]))));
+            const snaps = await Promise.all(names.map(n => sget(ref(db, CP[n]))));
             const st = {};
             names.forEach((n, i) => { st[n] = snaps[i].val() || {}; });
             return window.Compta.normState(st);
@@ -392,7 +396,7 @@
         // Charger le hash du passcode depuis Firebase
         async function loadMaintenancePasscode() {
             try {
-                const snap = await get(ref(db, P.config + '/maintenance_passcode_hash'));
+                const snap = await sget(ref(db, P.config + '/maintenance_passcode_hash'));
                 if (snap.exists()) {
                     expectedPasscode = snap.val();
                     maintenancePasscodeSet = true;
@@ -471,7 +475,7 @@
             }
             try {
                 const backupRef = ref(db, `${P.backup}/${cycleKey}`);
-                const snap      = await get(backupRef);
+                const snap      = await sget(backupRef);
 
                 if (snap.exists()) {
                     stateDisp.textContent = "DÉJÀ EFFECTUÉ";
@@ -481,7 +485,7 @@
                     btnVerify.style.display = 'none';
                     log.textContent = "Le backup du cycle en cours existe déjà.";
                 } else {
-                    const srcSnap = await get(ref(db, P.compteurs));
+                    const srcSnap = await sget(ref(db, P.compteurs));
                     const count = srcSnap.exists() ? Object.keys(srcSnap.val()).length : 0;
                     countDisp.textContent = count + ' entrée(s)';
 
@@ -521,7 +525,7 @@
             
             try {
                 // Lecture depuis l'archive du mois précédent !
-                const snap = await get(ref(db, `${P.backup}/${prevCycleKey}/donnees`));
+                const snap = await sget(ref(db, `${P.backup}/${prevCycleKey}/donnees`));
                 if (!snap.exists()) {
                     contentDiv.innerHTML = `<div style="padding:10px; text-align:center; color:var(--text-dim)">Aucune archive trouvée pour ${prevCycleKey}.</div>`;
                     return;
@@ -616,10 +620,10 @@
                 //    validé (ou facture « correction_releve » si le relevé était en anomalie), dans la
                 //    MÊME écriture atomique (compta.js).
                 let note = '';
-                const migSnap = await get(ref(db, CP.migration + '/v1'));
+                const migSnap = await sget(ref(db, CP.migration + '/v1'));
                 if (migSnap.exists()) {
                     const st = await readLedger();
-                    const row = (await get(ref(db, `${P.backup}/${prevCycleKey}/donnees/${key}`))).val() || {};
+                    const row = (await sget(ref(db, `${P.backup}/${prevCycleKey}/donnees/${key}`))).val() || {};
                     const c = window.Compta.buildArchiveCorrectionOps(st, {
                         paths: CP, cycle: prevCycleKey, compteurId: key, newRecord: Object.assign({}, row, { new_index: Number(newIdx) }),
                         motif: `Correction du relevé ${prevCycleKey} depuis la maintenance (index → ${newIdx})`,
@@ -721,12 +725,12 @@
                 //    Si le cycle a déjà été archivé (double clic, second onglet,
                 //    deuxième président), on REFUSE d'écraser le backup existant
                 //    et de réinitialiser les compteurs une 2ème fois (perte de données).
-                const existingBackup = await get(ref(db, `${P.backup}/${cycleKey}/info`));
+                const existingBackup = await sget(ref(db, `${P.backup}/${cycleKey}/info`));
                 if (existingBackup.exists()) {
                     throw new Error(`Le cycle ${cycleKey} a DÉJÀ été archivé le ${existingBackup.val().date_sauvegarde || '(date inconnue)'}. Clôture annulée pour protéger l'archive existante.`);
                 }
 
-                const sourceSnap = await get(ref(db, P.compteurs));
+                const sourceSnap = await sget(ref(db, P.compteurs));
 
                 if (!sourceSnap.exists()) {
                     throw new Error("La base de données est vide. Rien à archiver.");
@@ -743,7 +747,7 @@
                 // ✅ v7 : la clôture crée aussi UNE FACTURE FIGÉE par relevé valide (anomalies d'index :
                 //    aucune facture), affecte automatiquement les avances disponibles, met à jour les
                 //    soldes et trace l'audit — toujours dans le même update atomique (compta.js).
-                const migSnap = await get(ref(db, CP.migration + '/v1'));
+                const migSnap = await sget(ref(db, CP.migration + '/v1'));
                 if (!migSnap.exists()) {
                     throw new Error("Migration comptable requise : ouvrez Statistiques et lancez « Migrer » (président) avant la première clôture.");
                 }
@@ -756,7 +760,7 @@
 
                 // Anti-concurrence : si un paiement / un relevé a modifié les compteurs pendant la
                 // préparation, l'archive préparée serait périmée → on s'arrête sans rien écrire.
-                const recheck = await get(ref(db, P.compteurs));
+                const recheck = await sget(ref(db, P.compteurs));
                 if (JSON.stringify(recheck.val()) !== JSON.stringify(data)) {
                     throw new Error("Les compteurs ont été modifiés pendant la préparation de la clôture (paiement, relevé…). Rien n'a été écrit : relancez la clôture.");
                 }

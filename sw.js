@@ -9,7 +9,7 @@
 //  • Page hors-ligne dédiée (offline.html) si aucune version en cache.
 //  • Support SKIP_WAITING → mise à jour immédiate déclenchée par l'utilisateur.
 
-const CACHE_NAME = 'asufor-cache-v55';
+const CACHE_NAME = 'asufor-cache-v56';
 
 // App shell relatif à la racine du scope (le SW est à la racine admin/)
 const APP_SHELL = [
@@ -22,6 +22,7 @@ const APP_SHELL = [
     './compta.js',
     './compta-ui.js',
     './loader.js',
+    './sync.js',
     './data-cache.js',
     './security.js',
     './biometric.js',

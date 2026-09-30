@@ -50,10 +50,14 @@
         return paths;
     }
 
+    var Sync = function () { return root.AsuforSync || null; };
+    /** get() protégé (délai maximal + nouvelles tentatives) quand sync.js est chargé. */
+    function sget(r) { var y = Sync(); return y ? y.safeGet(fb.get, r) : fb.get(r); }
+
     /** Relit l'état comptable complet (et la migration) depuis Firebase. */
     function reload() {
         var names = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes'];
-        return Promise.all(names.map(function (n) { return fb.get(fb.ref(fb.db, paths[n])); }).concat([fb.get(fb.ref(fb.db, paths.migration + '/v1'))]))
+        return Promise.all(names.map(function (n) { return sget(fb.ref(fb.db, paths[n])); }).concat([sget(fb.ref(fb.db, paths.migration + '/v1'))]))
             .then(function (snaps) {
                 var S = {};
                 names.forEach(function (n, i) { S[n] = snaps[i].exists() ? snaps[i].val() : {}; });
@@ -63,26 +67,84 @@
             });
     }
 
-    /** Écoute en continu le grand livre (rafraîchit l'état et appelle cb). */
-    function subscribe(cb) {
-        if (cb) listeners.push(cb);
-        if (subscribe._on) return;
-        subscribe._on = true;
-        var S = C.emptyState(), got = {};
-        var NODES = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes'];
-        // ready = vrai seulement quand TOUS les nœuds ont été reçus (sinon affichage/encaissement faux)
-        var fire = function () {
-            state = C.normState(S);
-            ready = NODES.every(function (n) { return got[n]; }) && got.migration;
-            listeners.forEach(function (f) { try { f(state, migration, ready); } catch (e) { console.error(e); } });
-        };
-        NODES.forEach(function (n) {
-            fb.onValue(fb.ref(fb.db, paths[n]), function (snap) { S[n] = snap.val() || {}; got[n] = true; fire(); },
-                function (err) { console.error('[Compta] lecture ' + n + ' :', err && err.code); });
-        });
-        fb.onValue(fb.ref(fb.db, paths.migration + '/v1'), function (snap) { migration = snap.exists() ? snap.val() : null; got.migration = true; fire(); },
-            function (err) { console.error('[Compta] lecture migration :', err && err.code); });
+    // ── Écoute continue du grand livre : états loading / ready / degraded / error, avec reprise automatique ──
+    var NODES = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes', 'migration'];
+    var live = { S: null, got: {}, failed: {}, attempts: {}, timers: {}, unsubs: {}, hydrate: null, on: false };
+    var lastInfo = { status: 'loading', failed: [] };
+
+    function nodePath(n) { return n === 'migration' ? paths.migration + '/v1' : paths[n]; }
+    function computeInfo() {
+        var failed = NODES.filter(function (n) { return live.failed[n]; });
+        var st = ready ? (failed.length ? 'degraded' : 'ready') : (failed.length ? 'error' : 'loading');
+        return { status: st, failed: failed };
     }
+    function fire() {
+        state = C.normState(live.S);
+        // ready reste vrai une fois le grand livre reçu en entier : une panne ultérieure d'un nœud donne « degraded »
+        // (les données affichées restent valables ; toute écriture relit l'état frais).
+        if (NODES.every(function (n) { return live.got[n]; })) ready = true;
+        lastInfo = computeInfo();
+        listeners.forEach(function (f) { try { f(state, migration, ready, lastInfo); } catch (e) { console.error(e); } });
+    }
+    function setNode(n, snap) {
+        if (n === 'migration') migration = snap.exists() ? snap.val() : null;
+        else live.S[n] = snap.val() || {};
+        live.got[n] = true; live.failed[n] = false; live.attempts[n] = 0;
+    }
+    function scheduleRetry(n) {
+        clearTimeout(live.timers[n]);
+        var k = live.attempts[n] = (live.attempts[n] || 0) + 1;
+        var wait = Math.min(30000, 1500 * Math.pow(2, k - 1)) * (root.__ASUFOR_SYNC && root.__ASUFOR_SYNC.fast ? 0.02 : 1);
+        live.timers[n] = setTimeout(function () { attach(n); }, wait);
+    }
+    function attach(n) {
+        clearTimeout(live.timers[n]);
+        var un;
+        var onErr = function (err) {
+            console.error('[Compta] lecture ' + n + ' :', err && err.code);
+            live.failed[n] = true; fire(); scheduleRetry(n);
+        };
+        try {
+            un = fb.onValue(fb.ref(fb.db, nodePath(n)), function (snap) { setNode(n, snap); fire(); }, onErr);
+        } catch (e) { onErr(e); return; }
+        var y = Sync();
+        if (y) y.track('compta:' + n, un); else { if (live.unsubs[n]) { try { live.unsubs[n](); } catch (_) {} } live.unsubs[n] = un; }
+    }
+    /** Filet de sécurité : si un nœud n'a rien reçu au bout de quelques secondes, lecture directe protégée. */
+    function hydrateMissing() {
+        NODES.filter(function (n) { return !live.got[n]; }).forEach(function (n) {
+            sget(fb.ref(fb.db, nodePath(n))).then(function (snap) {
+                if (live.got[n]) return;
+                setNode(n, snap); fire();
+            }, function () { live.failed[n] = true; fire(); });
+        });
+    }
+    function subscribe(cb) {
+        if (cb) {
+            listeners.push(cb);
+            if (live.on) { try { cb(state || C.emptyState(), migration, ready, lastInfo); } catch (e) { console.error(e); } }
+        }
+        if (live.on) return;
+        live.on = true;
+        live.S = C.emptyState();
+        NODES.forEach(attach);
+        var y = Sync();
+        if (y) y.onResync(function (why) { return restart(why === 'reconnect' || why === 'pageshow-bfcache' || why === 'visible' || why === 'loader-retry' || why === 'badge'); });
+        var ms = (root.__ASUFOR_SYNC && root.__ASUFOR_SYNC.hydrate) || 6000;
+        live.hydrate = setTimeout(function () { if (!ready) hydrateMissing(); }, ms);
+    }
+    /**
+     * Relance l'écoute : nœuds en échec ou jamais reçus toujours ; tous les nœuds si `force` (retour d'arrière-plan,
+     * reconnexion) pour éviter les listeners zombies. L'état affiché n'est jamais vidé.
+     */
+    function restart(force) {
+        if (!live.on) return Promise.resolve();
+        NODES.forEach(function (n) { if (force || live.failed[n] || !live.got[n]) attach(n); });
+        if (!ready) hydrateMissing();
+        return Promise.resolve();
+    }
+    function retry() { return restart(true); }
+    function getStatus() { return lastInfo; }
 
     function getState() { return state || C.emptyState(); }
     function isReady() { return ready; }
@@ -317,7 +379,7 @@
     }
 
     root.ComptaUI = {
-        init: init, reload: reload, subscribe: subscribe, run: run,
+        init: init, reload: reload, subscribe: subscribe, run: run, retry: retry, restart: restart, getStatus: getStatus,
         getState: getState, isReady: isReady, getMigration: getMigration, isMigrated: isMigrated,
         canCollect: canCollect, isPresident: isPresident, user: user, newId: newId,
         openPaymentDialog: openPaymentDialog, openMigrationDialog: openMigrationDialog, migrationBanner: migrationBanner,

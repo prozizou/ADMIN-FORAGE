@@ -21,6 +21,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
@@ -241,6 +242,8 @@
     if (!session) throw new Error('Accès refusé');
 
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+    // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+    const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
@@ -276,7 +279,7 @@
         }
         teamList.innerHTML = '<tr class="empty-row"><td colspan="3">Chargement…</td></tr>';
         try {
-            const snap = await get(ref(db, 'Asufor/' + forageKey + '/team'));
+            const snap = await sget(ref(db, 'Asufor/' + forageKey + '/team'));
             const team = snap.val() || {};
             const uids = Object.keys(team);
             if (uids.length === 0) {
@@ -299,7 +302,7 @@
         if (!session.isSuperadmin) return;
         forageField.style.display = '';
         try {
-            const snap = await get(ref(db, 'Asufor'));
+            const snap = await sget(ref(db, 'Asufor'));
             const forages = snap.val() || {};
             const keys = Object.keys(forages);
             if (keys.length === 0) {
