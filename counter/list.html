@@ -430,12 +430,10 @@
             last_index:      String(start),
             new_index:       parseInt(start) || 0,
             facteur:         parseInt(price) || 250,
-            diff:            "0",
-            date_paiement:   new Date().toISOString(),
-            statut:          "false",
-            status:          "impaye",
-            facture:         "false",
-            print:           "false"
+            // ✅ v7 : plus aucun champ historique (diff, facture, print…) ; le statut n'est
+            // qu'indicatif — la situation financière vient du grand livre (compta.js).
+            statut:          false,
+            status:          "impaye"
         };
 
         try {

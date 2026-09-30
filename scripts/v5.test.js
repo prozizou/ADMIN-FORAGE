@@ -136,9 +136,10 @@ function deriveV5(login, pin) {
         assert.ok(g.includes('pins.json'), 'pins.json non protégé');
     });
 
-    await test('database.rules.json : legacy db_agents accepte passcode_hash', () => {
+    await test('database.rules.json : agents namespacés acceptent passcode_hash (anciens nœuds retirés en v7)', () => {
         const r = fs.readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8');
-        assert.ok(r.includes("newData.hasChild('passcode') || newData.hasChild('passcode_hash')"), 'règle legacy non assouplie');
+        assert.ok(r.includes('"passcode_hash": { ".validate": "newData.isString() && newData.val().matches(/^[0-9a-f]{64}$/)" }'), 'passcode_hash non validé');
+        assert.ok(!/"db_agents"\s*:/.test(r), 'ancien nœud db_agents encore ouvert');
     });
 
     await test('scripts/migrate-passcodes.js : script de migration présent', () => {

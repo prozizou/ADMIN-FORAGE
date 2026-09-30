@@ -112,6 +112,7 @@
     function namespacedPaths(key) {
         var base = 'Asufor/' + key;
         return {
+            base:      base,
             compteurs: base + '/compteurs',
             backup:    base + '/backup',
             agents:    base + '/agents',

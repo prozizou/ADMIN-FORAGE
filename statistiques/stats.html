@@ -36,6 +36,9 @@
     <script src="../firebase-config.js"></script>
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
     <script src="../billing.js"></script>
+    <!-- ✅ v7 : moteur comptable (factures, paiements FIFO, avances, ajustements) + fenêtres -->
+    <script src="../compta.js"></script>
+    <script src="../compta-ui.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
     <script src="../admin-config.js"></script>
     <script src="../forage-context.js"></script>
@@ -97,20 +100,32 @@
              ("Il reste X F à encaisser") plutôt qu'en pourcentage brut, avec
              une jauge qui va du rouge au vert. Vocabulaire courant plutôt que
              "Encaissé"/"Impayé". -->
+        <!-- ✅ v7 : bandeau « migration comptable requise » (vide une fois la migration faite) -->
+        <div id="compta-migration" style="display:none"></div>
+
         <div class="recap-card">
             <div class="recap-title" id="recap-title">Bilan du mois</div>
             <div class="recap-row">
                 <div class="recap-cell">
-                    <span class="recap-lbl">Argent reçu</span>
+                    <span class="recap-lbl">Encaissé</span>
                     <span class="recap-val recap-val-good" id="total-money">0 CFA</span>
                     <div id="trend-money" class="trend-indicator"></div>
                 </div>
                 <div class="recap-cell">
-                    <span class="recap-lbl">Argent à réclamer</span>
+                    <span class="recap-lbl">À réclamer</span>
                     <span class="recap-val recap-val-bad" id="total-debt">0 CFA</span>
                     <div id="trend-debt" class="trend-indicator"></div>
                 </div>
             </div>
+            <!-- ✅ v7 : chaque montant n'est compté qu'une fois (une facture > 100 m³ impayée : 1 problème + son montant en arriérés) -->
+            <div class="recap-grid">
+                <div class="recap-mini"><span class="recap-lbl" id="rc-facture-lbl">Facturé</span><span class="recap-mini-val" id="rc-facture">—</span></div>
+                <div class="recap-mini"><span class="recap-lbl">Arriérés</span><span class="recap-mini-val recap-val-bad" id="rc-arrieres">—</span></div>
+                <div class="recap-mini"><span class="recap-lbl">Avances</span><span class="recap-mini-val recap-val-good" id="rc-avances">—</span></div>
+                <div class="recap-mini"><span class="recap-lbl">Ajustements</span><span class="recap-mini-val" id="rc-ajust">—</span></div>
+                <div class="recap-mini"><span class="recap-lbl">Problèmes</span><span class="recap-mini-val" id="rc-problemes">—</span></div>
+            </div>
+            <p class="recap-source" id="rc-source"></p>
             <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
             <p class="recap-story" id="recap-story">—</p>
             <div class="recap-pct" id="recap-pct">0 % encaissé</div>

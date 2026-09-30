@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -24,7 +24,6 @@ if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
 let storeReleves = {};
 let storeAgents = {};
-let prevMonthData = {}; 
 let unsubCurrentMonth = null; 
 
 let currentTab = 'all';
@@ -47,7 +46,10 @@ let allBackupsCache = {};
 // le cas, l'encaissement est bloqué : régulariser un paiement sans connaître les cycles
 // impayés laisserait des arriérés ouverts sans que personne ne le voie.
 let backupsLoaded = false;
-let prevMonthCycle = null;
+// ✅ v7 : grand livre (factures / paiements / affectations / ajustements) entièrement chargé.
+let ledgerReady = false;
+const Compta = window.Compta;
+const ComptaUI = window.ComptaUI;
 
 let currentUser = 'Trésorier/Admin';
 
@@ -127,155 +129,26 @@ window.scrollToTop = function() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
-// --- AUDIT TRAIL : MODIFICATION DU STATUT ---
-// ✅ v4 : ton adouci ("Corriger" un paiement, pas une alerte "ATTENTION") —
-// cette action reste réversible, elle ne mérite pas un ton alarmant.
-window.confirmRevoke = function(key) {
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
-    if (confirm("Remettre cette facture en \"à encaisser\" ? Elle ne sera plus marquée comme payée.")) {
-        window.updateStatus(key, 'impaye');
-    }
+// --- ENCAISSEMENT (v7) ---
+// L'encaissement ne solde plus « tout » : il ouvre la fenêtre de paiement (montant libre,
+// mode, n° de reçu, aperçu FIFO). Toute la logique et l'écriture atomique sont dans compta.js.
+window.encaisser = function(key) {
+    if (isArchiveView) { showToast("🔒 Archive : encaissez depuis « Données actuelles ».", true); return; }
+    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    if (!ComptaUI.isMigrated()) { showToast("⚠️ Migration comptable requise (président) avant tout encaissement.", true); return; }
+    const item = storeReleves[key] || {};
+    ComptaUI.openPaymentDialog({
+        compteurId: key,
+        releve: item,
+        client: item.name || '',
+        numero: item.numero_compteur || '',
+        recuUrl: (pid) => `../compte/recu.html?p=${encodeURIComponent(pid)}`,
+        onDone: () => { showToast("✅ Encaissement enregistré."); window.applyFilter(); }
+    });
 };
 
-// Applique dans le cache local des archives les écritures qui viennent de réussir
-// (chemins « {P.backup}/{cycle}/donnees/{clé}/{champ} »), pour que les arriérés
-// recalculés reflètent tout de suite le règlement / la correction.
-function patchBackupCacheFromUpdates(updates) {
-    const prefix = P.backup + '/';
-    Object.entries(updates).forEach(([path, value]) => {
-        if (!path.startsWith(prefix)) return;
-        const [cycle, sect, key, field] = path.slice(prefix.length).split('/');
-        if (sect !== 'donnees' || !key || !field) return;
-        const donnees = allBackupsCache[cycle] && allBackupsCache[cycle].donnees;
-        if (!donnees || !donnees[key]) return;
-        if (value === null) delete donnees[key][field]; else donnees[key][field] = value;
-    });
-}
-
-// Relit, pour CE client, sa ligne dans chaque archive : le cache est chargé une seule fois à
-// l'ouverture de la page, un autre appareil a pu régler ou corriger un mois depuis.
-async function refreshClientArchiveRows(key) {
-    const cycles = Object.keys(allBackupsCache);
-    await Promise.all(cycles.map(async (cycle) => {
-        const snap = await get(ref(db, `${P.backup}/${cycle}/donnees/${key}`));
-        const node = allBackupsCache[cycle];
-        if (!node || !node.donnees) return;
-        if (snap.exists()) node.donnees[key] = snap.val(); else delete node.donnees[key];
-    }));
-}
-
-const paymentsInFlight = new Set();
-
-window.updateStatus = async function(key, newStatus) {
-    // ✅ v2 : verrou défensif — la carte ne propose déjà plus ce bouton sur une
-    // archive, mais on bloque aussi l'appel direct (deuxième ligne de défense).
-    if (isArchiveView) { showToast("🔒 Archive : lecture seule, modification impossible.", true); return; }
-    if (!currentActivePath) {
-        showToast("Erreur : Chemin de base de données inconnu.", true);
-        return;
-    }
-    if (!window.Billing) {
-        showToast("Erreur : moteur de facturation non chargé. Rechargez la page.", true);
-        return;
-    }
-    // ✅ Encaissement bloqué tant que les archives ne sont pas chargées en entier.
-    if (!backupsLoaded) {
-        showToast("⏳ Archives en cours de chargement : patientez un instant avant d'encaisser.", true);
-        return;
-    }
-    if (paymentsInFlight.has(key)) return;      // double clic
-    paymentsInFlight.add(key);
-
-    try {
-        // Données fraîches de CE client dans toutes les archives (voir refreshClientArchiveRows).
-        try {
-            await refreshClientArchiveRows(key);
-        } catch (err) {
-            showToast("Impossible de vérifier les archives (" + (err.code || err.message) + ") : opération annulée.", true);
-            return;
-        }
-        if (isArchiveView || currentActivePath !== P.compteurs) return;   // l'utilisateur a changé de mois entre-temps
-
-        const now = new Date().toISOString();
-        const record = storeReleves[key] || {};
-        const indexedBackups = window.Billing.indexBackups(allBackupsCache);
-
-        let built;
-        if (newStatus === 'paye') {
-            // Régularisation : mois courant + TOUS les cycles impayés (hors anomalies), et
-            // mémoire de ce qui est réglé (arrieres_regles) pour le total « encaissé ».
-            built = window.Billing.buildPaymentUpdates({
-                activePath: currentActivePath,
-                activeKey: key,
-                record,
-                indexedBackups,
-                currentKeys: Object.fromEntries(Object.keys(storeReleves).map(k => [k, true])),
-                backupPath: P.backup,
-                paidBy: currentUser,
-                timestamp: now
-            });
-        } else {
-            // Correction : remet à impayé le mois courant ET les cycles que CE paiement avait réglés.
-            built = window.Billing.buildRevokeUpdates({
-                activePath: currentActivePath,
-                activeKey: key,
-                record,
-                indexedBackups,
-                backupPath: P.backup,
-                paidBy: currentUser,
-                timestamp: now
-            });
-        }
-        const updates = built.updates;
-
-        // ✅ Mise à jour optimiste — reflète le changement dans la liste immédiatement ;
-        //   en cas d'échec, on annule localement (le listener réconcilie sinon).
-        const previousRecord = storeReleves[key] ? { ...storeReleves[key] } : null;
-        if (storeReleves[key]) {
-            const base = `${currentActivePath}/${key}/`;
-            const next = { ...storeReleves[key] };
-            Object.entries(updates).forEach(([path, value]) => {
-                if (!path.startsWith(base)) return;
-                const field = path.slice(base.length);
-                if (value === null) delete next[field]; else next[field] = value;
-            });
-            storeReleves[key] = next;
-            window.applyFilter();
-        }
-
-        try {
-            await update(ref(db), updates);
-        } catch (err) {
-            if (previousRecord) {
-                storeReleves[key] = previousRecord;
-                window.applyFilter();
-            }
-            const denied = err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(String(err.message || err)));
-            showToast(denied
-                ? "⛔ Droits insuffisants : régulariser des arriérés d'archives est réservé au président et au trésorier."
-                : "Erreur réseau : " + err, true);
-            return;
-        }
-
-        patchBackupCacheFromUpdates(updates);
-        window.applyFilter();
-
-        if (newStatus === 'paye') {
-            const nb = built.cyclesRegularises.length;
-            let msg = nb > 0
-                ? `✅ Facture encaissée ! ${nb} mois d'arriérés réglé(s) (${Math.round(built.arrieresRegles).toLocaleString()} F).`
-                : "✅ Facture encaissée !";
-            if (built.cyclesIgnores.length) msg += ` ⚠️ ${built.cyclesIgnores.length} mois en anomalie non réglé(s) automatiquement.`;
-            showToast(msg);
-        } else {
-            const nb = built.cyclesRestaures.length;
-            showToast(nb > 0
-                ? `↩️ Paiement corrigé : facture et ${nb} mois d'arriérés remis à encaisser.`
-                : "↩️ Paiement corrigé : facture remise à encaisser.");
-        }
-    } finally {
-        paymentsInFlight.delete(key);
-    }
+window.openReleve = function(key) {
+    window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}`;
 };
 
 // --- EXPORT CSV ---
@@ -285,7 +158,7 @@ window.exportCSV = function() {
         return;
     }
     let csvContent = "\uFEFF"; 
-    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant Mois (CFA);Arriérés (CFA);Total dû (CFA);Statut;Dernière Modif;Par\n";
+    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant Mois (CFA);Arriérés (CFA);Avance (CFA);Total dû (CFA);Statut;Dernière Modif;Par\n";
 
     currentFilteredData.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
@@ -297,14 +170,15 @@ window.exportCSV = function() {
         const arriere = item.arriere || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
 
-        const isPaid = window.Billing.isPaid(item) ? 'Paye' : 'Impaye';
+        const isPaid = item.estSolde ? 'Paye' : 'Impaye';
+        const avance = item.avance || 0;
         const zoneName = zoneOf(item);
         const clientName = (item.name || "Client Inconnu").replace(/;/g, ' ');
         const numCompteur = (item.numero_compteur || "").replace(/;/g, ' ');
         const lastModif = item.last_modified_at ? new Date(item.last_modified_at).toLocaleString() : 'N/A';
         const par = item.last_modified_by || 'N/A';
 
-        csvContent += `${clientName};${numCompteur};${zoneName};${lIdx};${nIdx};${conso};${facteur};${calculatedAmount};${arriere};${totalDu};${isPaid};${lastModif};${par}\n`;
+        csvContent += `${clientName};${numCompteur};${zoneName};${lIdx};${nIdx};${conso};${facteur};${calculatedAmount};${arriere};${avance};${totalDu};${isPaid};${lastModif};${par}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -383,17 +257,7 @@ async function loadDataForMonth(selection) {
         unsubCurrentMonth = null;
     }
 
-    let dbPath = "";
-    let monthForTrend = "";
-
-    if (selection === "actuel") {
-        dbPath = P.compteurs;
-        const now = new Date();
-        monthForTrend = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    } else {
-        dbPath = `${P.backup}/${selection}/donnees`;
-        monthForTrend = selection;
-    }
+    const dbPath = (selection === "actuel") ? P.compteurs : `${P.backup}/${selection}/donnees`;
 
     currentActivePath = dbPath;
 
@@ -409,7 +273,7 @@ async function loadDataForMonth(selection) {
     const bannerText = document.getElementById('archive-banner-text');
     if (bannerText) {
         bannerText.textContent = isPresident()
-            ? 'Archive — paiements figés. Vous pouvez corriger les relevés (index, facteur…).'
+            ? 'Archive — vous pouvez corriger les relevés (index, facteur…) : une facture déjà émise est corrigée par un ajustement tracé.'
             : 'Archive — données clôturées, lecture seule.';
     }
     const recapTitle = document.getElementById('recap-title');
@@ -426,7 +290,7 @@ async function loadDataForMonth(selection) {
         document.getElementById('skeleton-loader').style.display = "none";
         document.getElementById('releves-list').innerHTML = "";
         if (window.AsuforLoader) AsuforLoader.hide();
-        fetchPreviousMonthStats(monthForTrend);
+        window.applyFilter();
     } else {
         document.getElementById('skeleton-loader').style.display = "flex";
         document.getElementById('releves-list').innerHTML = "";
@@ -442,7 +306,7 @@ async function loadDataForMonth(selection) {
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         document.getElementById('skeleton-loader').style.display = "none";
         if (window.AsuforLoader) AsuforLoader.hide();
-        fetchPreviousMonthStats(monthForTrend);
+        window.applyFilter();
     } catch (err) {
         console.error('Firebase relevés :', err.code, err.message);
         if (cached) {
@@ -476,30 +340,6 @@ async function loadDataForMonth(selection) {
         window.applyFilter();
     });
     unsubCurrentMonth = () => { unsubAdd(); unsubChange(); unsubRemove(); };
-}
-
-function fetchPreviousMonthStats(baseMonthStr) {
-    let yyyy, mm;
-    if (baseMonthStr.includes('-')) {
-        [yyyy, mm] = baseMonthStr.split('-');
-    } else {
-        const now = new Date();
-        yyyy = now.getFullYear();
-        mm = now.getMonth() + 1;
-    }
-    
-    let prevDate = new Date(parseInt(yyyy), parseInt(mm) - 2, 1);
-    let prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-    
-    get(ref(db, `${P.backup}/${prevMonthStr}/donnees`)).then((snap) => {
-        prevMonthData = snap.val() || {};
-        prevMonthCycle = prevMonthStr;
-        window.applyFilter();
-    }).catch(() => {
-        prevMonthData = {};
-        prevMonthCycle = null;
-        window.applyFilter();
-    });
 }
 
 // --- SYNCHRONISATION INITIALE ---
@@ -557,6 +397,12 @@ async function syncAgents() {
 }
 
 window.startSync = function() {
+    // ✅ v7 : grand livre comptable (lecture continue ; écritures via compta.js).
+    ComptaUI.init({ db, ref, get, update, push, onValue, P, session: JSON.parse(localStorage.getItem('asufor_session') || '{}'), getUid: () => auth.currentUser && auth.currentUser.uid });
+    ComptaUI.subscribe((st, mig, ready) => {
+        ledgerReady = ready;
+        if (ready) window.applyFilter();
+    });
     // ✅ Les agents et les relevés se chargent en PARALLÈLE (l'un n'attend
     // pas l'autre) : chacun affiche sa propre copie en cache instantanément
     // pendant que sa version fraîche arrive en tâche de fond.
@@ -630,24 +476,18 @@ window.applyFilter = function() {
     
     const monthSel = (document.getElementById('month-filter') || {}).value || 'actuel';
     const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
-    // ✅ Tous les calculs viennent de billing.js (source unique de vérité).
     const indexedBackups = window.Billing.indexBackups(allBackupsCache);
-    // Clients du mois affiché : leur ligne d'archive ne peut pas être reprise par un autre.
     const currentKeys = {};
     Object.keys(storeReleves).forEach(k => { currentKeys[k] = true; });
 
-    // Mois précédent, mesuré comme le mois affiché (encaissé = factures + arriérés réglés,
-    // à réclamer = mois + arriérés) — sinon la tendance compare deux définitions différentes.
-    const prevItems = Object.entries(prevMonthData)
-        .filter(([, rec]) => rec && typeof rec === 'object' && (selectedId === "all" || rec.agent_id === selectedId))
-        .map(([k, rec]) => ({
-            record: rec,
-            statement: window.Billing.computeStatement(rec, indexedBackups, { beforeCycle: prevMonthCycle || undefined, fbKey: k })
-        }));
-    const prevRecap = window.Billing.summarizeRecap(prevItems);
-    const tCFA_Paye_Prev = prevRecap.paye;
-    const tCFA_Impaye_Prev = prevRecap.impaye;
-    const recapItems = [];
+    // ✅ v7 : quelle source pour cette période ?
+    //   • grand livre (factures/paiements) : « Données actuelles » et archives clôturées APRÈS la migration ;
+    //   • historique (archives) : avant la migration comptable, ou tant qu'elle n'a pas été faite.
+    const S = ComptaUI.getState();
+    const mig = ComptaUI.getMigration();
+    const migrated = ComptaUI.isMigrated();
+    const cutoff = migrated ? (mig.dernier_cycle || '') : null;
+    const ledgerMode = migrated && (monthSel === 'actuel' || monthSel > cutoff);
 
     let filteredBase = entries.filter(item => {
         if (selectedId !== "all" && item.agent_id !== selectedId) return false;
@@ -660,50 +500,59 @@ window.applyFilter = function() {
         return isNameMatch || isCompteurMatch;
     });
 
+    // Montants de chaque carte : TOUJOURS via billing.js / compta.js (aucun calcul métier ici).
+    filteredBase.forEach(item => {
+        const cur = window.Billing.computeCurrent(item);
+        item.conso = cur.conso;                               // 0 si anomalie de relevé
+        item.avance = 0;
+        if (ledgerMode && monthSel === 'actuel') {
+            const du = Compta.amountDueNow(S, item.key, item);
+            item.calculatedAmount = du.facture_provisoire;    // relevé du mois (facturé à la clôture)
+            item.arriere = du.arrieres;                       // factures échues non réglées
+            item.avance = du.avance;
+            item.totalDu = du.total_du;
+            item.estSolde = du.total_du <= 0 && (du.facture_provisoire > 0 || du.account.total_paye > 0 || du.account.total_facture > 0);
+        } else if (ledgerMode) {
+            const f = S.factures[Compta.factureId(monthSel, item.key)];
+            const acc = Compta.computeAccount(S, item.key);
+            const anterieurs = acc.factures.filter(x => x.cycle < monthSel && !x.annulee).reduce((t, x) => t + x.reste_a_payer, 0);
+            if (f) {
+                const st = Compta.factureState(S, f);
+                item.calculatedAmount = st.montant_net;
+                item.factureStatut = st.statut;
+                item.totalDu = st.reste_a_payer + anterieurs;
+                item.estSolde = st.statut === 'payee' || st.statut === 'annulee';
+            } else {
+                item.calculatedAmount = 0;
+                item.factureStatut = null;
+                item.totalDu = anterieurs;
+                item.estSolde = anterieurs <= 0;
+            }
+            item.arriere = anterieurs;
+        } else {
+            const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key, currentKeys });
+            item.calculatedAmount = stmt.facture_courante;
+            item.arriere = stmt.arriere;
+            item.totalDu = stmt.total;
+            item.estSolde = window.Billing.isPaid(item);
+        }
+        item.hasAnomalie = (parseFloat(item.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(item);
+    });
+
     currentFilteredData = filteredBase.filter(item => {
-        const stmt = window.Billing.computeStatement(item, indexedBackups, { beforeCycle, fbKey: item.key, currentKeys });
-        const calculatedAmount = stmt.facture_courante; // facture du mois courant
-        const arriere = stmt.arriere;                   // arriérés cumulés (+ correction manuelle enregistrée)
-        const totalDu = stmt.total;                     // facture + arriérés
-        item.conso = stmt.conso;                        // ✅ 0 si consommation invraisemblable (anomalie)
-
-        item.calculatedAmount = calculatedAmount;
-        item.arriere = arriere;
-        item.totalDu = totalDu;
-
-        if (isNaN(totalDu)) return false;
-
-        const isPaid = window.Billing.isPaid(item);
-        recapItems.push({ record: item, statement: stmt });
-
+        if (isNaN(item.totalDu)) return false;
+        const isPaid = item.estSolde;
         if (currentTab === 'paye' && !isPaid) return false;
-        if (currentTab === 'impaye' && isPaid) return false;
-        // ✅ v2 : onglet Anomalies — erreur d'index (nouveau < ancien) ou fuite (> 100 m³)
-        if (currentTab === 'anomalies') {
-            const nIdxA = parseFloat(item.new_index || 0);
-            const lIdxA = parseFloat(item.last_index || 0);
-            const realConsoA = nIdxA - lIdxA;
-            // ✅ Un compteur pas encore relevé (new_index = 0) n'est pas une
-            // anomalie — l'erreur d'index suppose qu'un index A été saisi.
-            const isAnomalyA = (nIdxA > 0 && realConsoA < 0) || window.Billing.isUnusualConsumption(item);
-            if (!isAnomalyA) return false;
-        }
-        // ✅ v2 : filtre secondaire (déplacé hors des onglets) — uniquement les
-        // compteurs dont l'index a bien été saisi (new_index > 0), ou l'inverse.
-        if (releveFilter === 'releves') {
-            const hasIndex = parseFloat(item.new_index || 0) > 0;
-            if (!hasIndex) return false;
-        }
-        if (releveFilter === 'non-releves') {
-            const hasIndex = parseFloat(item.new_index || 0) > 0;
-            if (hasIndex) return false;
-        }
-
+        if (currentTab === 'impaye' && (isPaid || !(item.totalDu > 0))) return false;
+        // ✅ onglet Problèmes : erreur d'index (nouveau < ancien) ou surconsommation (> 100 m³)
+        if (currentTab === 'anomalies' && !item.hasAnomalie) return false;
+        if (releveFilter === 'releves' && !(parseFloat(item.new_index || 0) > 0)) return false;
+        if (releveFilter === 'non-releves' && (parseFloat(item.new_index || 0) > 0)) return false;
         return true;
     });
 
-    if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.calculatedAmount || 0) - (a.calculatedAmount || 0));
-    else if (sortOption === "min_amount") currentFilteredData.sort((a, b) => (a.calculatedAmount || 0) - (b.calculatedAmount || 0));
+    if (sortOption === "max_amount") currentFilteredData.sort((a, b) => (b.totalDu || 0) - (a.totalDu || 0));
+    else if (sortOption === "min_amount") currentFilteredData.sort((a, b) => (a.totalDu || 0) - (b.totalDu || 0));
     else if (sortOption === "zone") currentFilteredData.sort((a, b) => zoneOf(a).localeCompare(zoneOf(b)));
     else if (sortOption === "name") currentFilteredData.sort((a, b) => (a.name || "Z").localeCompare(b.name || "Z"));
     else if (sortOption === "compteur") currentFilteredData.sort((a, b) => {
@@ -712,19 +561,39 @@ window.applyFilter = function() {
         return na.localeCompare(nb);
     });
 
-    // ✅ Encaissé = factures du mois payées + arriérés réglés avec elles ; à réclamer = mois + arriérés.
-    const recap = window.Billing.summarizeRecap(recapItems);
-    const tCFA_Paye = recap.paye;
-    const tCFA_Impaye = recap.impaye;
-    document.getElementById('total-money').innerText = tCFA_Paye.toLocaleString() + " CFA";
-    document.getElementById('total-debt').innerText = tCFA_Impaye.toLocaleString() + " CFA";
+    // ── Indicateurs (Facturé / Encaissé / Arriérés / Avances / Ajustements / Problèmes) ──
+    // Chaque montant n'est compté qu'UNE fois : une facture > 100 m³ impayée compte 1 dossier dans
+    // « Problèmes » et son montant dans « Arriérés », jamais deux fois.
+    // Sans filtre : TOUT le forage (y compris les dettes de compteurs absents de la liste) ;
+    // avec un filtre agent/recherche : uniquement les compteurs affichés.
+    let ids = null;
+    if (selectedId !== 'all' || searchQuery) {
+        ids = {};
+        filteredBase.forEach(it => { ids[it.key] = true; });
+    }
+    const fig = periodFigures(monthSel, filteredBase, ids, S, ledgerMode);
+    const prevCycle = previousCycleOf(monthSel);
+    const prevFig = prevCycle ? periodFigures(prevCycle, null, ids, S, migrated && prevCycle > cutoff) : null;
 
-    // ✅ v4 : la carte Bilan raconte le mois en une phrase ("Il reste X F à
-    // encaisser") plutôt qu'en pourcentage brut, avec une jauge qui va du
-    // rouge au vert selon le niveau atteint — plus parlant pour un novice
-    // qu'un simple "0,1 % recouvré".
-    const recapTotal = tCFA_Paye + tCFA_Impaye;
-    const recapPct = recapTotal > 0 ? (tCFA_Paye / recapTotal * 100) : 0;
+    const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    const F = (n) => Math.round(n || 0).toLocaleString() + " CFA";
+    const aReclamer = ledgerMode && monthSel === 'actuel'
+        ? filteredBase.reduce((t, it) => t + (it.totalDu || 0), 0)
+        : fig.arrieres;
+    document.getElementById('total-money').innerText = F(fig.encaisse);
+    document.getElementById('total-debt').innerText = F(aReclamer);
+    setTxt('rc-facture', F(fig.facture));
+    setTxt('rc-facture-lbl', fig.previsionnel ? 'Facturé (prévisionnel)' : 'Facturé');
+    setTxt('rc-arrieres', F(fig.arrieres));
+    setTxt('rc-avances', F(fig.avances));
+    setTxt('rc-ajust', (fig.ajustements > 0 ? '+' : '') + F(fig.ajustements));
+    setTxt('rc-problemes', String(fig.problemes));
+    setTxt('rc-source', fig.historique
+        ? 'Chiffres reconstitués depuis les archives (avant la comptabilité).'
+        : (migrated ? 'Grand livre : factures, paiements, affectations et ajustements.' : ''));
+
+    const recapTotal = fig.encaisse + aReclamer;
+    const recapPct = recapTotal > 0 ? (fig.encaisse / recapTotal * 100) : 0;
     const recapBar = document.getElementById('recap-bar-fill');
     if (recapBar) {
         recapBar.style.width = Math.min(100, recapPct) + '%';
@@ -732,24 +601,18 @@ window.applyFilter = function() {
     }
     const recapStoryEl = document.getElementById('recap-story');
     if (recapStoryEl) {
-        recapStoryEl.textContent = tCFA_Impaye > 0
-            ? `Il reste ${Math.round(tCFA_Impaye).toLocaleString()} F à encaisser ce mois-ci`
-            : '🎉 Tout est encaissé ce mois-ci !';
+        recapStoryEl.textContent = aReclamer > 0
+            ? `Il reste ${Math.round(aReclamer).toLocaleString()} F à encaisser`
+            : '🎉 Rien à réclamer !';
     }
     const recapPctEl = document.getElementById('recap-pct');
     if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % encaissé';
 
-    // ✅ v2 : la couleur reflète si la variation est une BONNE ou une MAUVAISE
-    // nouvelle pour cet indicateur — avant, +294,6 % d'impayés s'affichait en
-    // vert (hausse = vert, peu importe le sens), ce qui donnait le message
-    // exactement inverse de la réalité.
-    // ✅ v4 : mène par un mot simple ("Plutôt bien"/"À surveiller") — le
-    // pourcentage exact reste affiché, mais en second plan, moins anxiogène
-    // qu'un chiffre brut du type "+294,6 %".
+    // Tendances : même définition pour la période précédente (sinon comparaison trompeuse).
     const calcTrend = (current, prev, elId, goodWhenUp) => {
         const el = document.getElementById(elId);
         if (!el) return;
-        if (prev === 0) { el.innerHTML = ""; return; }
+        if (!prev) { el.innerHTML = ""; return; }
         const diff = ((current - prev) / prev) * 100;
         const dirUp = diff >= 0;
         const sign = dirUp ? '+' : '';
@@ -757,15 +620,80 @@ window.applyFilter = function() {
         const isGood = dirUp === goodWhenUp;
         const colorClass = isGood ? 'trend-good' : 'trend-bad';
         const qualifier = isGood ? 'Plutôt bien' : 'À surveiller';
-        el.innerHTML = `<span class="${colorClass}">${arrow} ${qualifier} <span class="trend-detail">(${sign}${diff.toFixed(1)}% vs mois dernier)</span></span>`;
+        el.innerHTML = `<span class="${colorClass}">${arrow} ${qualifier} <span class="trend-detail">(${sign}${diff.toFixed(1)}% vs mois précédent)</span></span>`;
     };
+    calcTrend(fig.encaisse, prevFig && prevFig.encaisse, 'trend-money', true);
+    calcTrend(fig.arrieres, prevFig && prevFig.arrieres, 'trend-debt', false);
 
-    calcTrend(tCFA_Paye, tCFA_Paye_Prev, 'trend-money', true);   // encaissé : une hausse est une bonne nouvelle
-    calcTrend(tCFA_Impaye, tCFA_Impaye_Prev, 'trend-debt', false); // impayés : une hausse est une mauvaise nouvelle
-
+    renderMigrationBanner();
     renderList();
     renderTopQuartiers();
     updateRelevesProgress();
+}
+
+// Cycle précédent (archive) de la période affichée ; null s'il n'y en a pas.
+function previousCycleOf(sel) {
+    const cycles = Object.keys(allBackupsCache).sort();
+    if (sel === 'actuel') return cycles[cycles.length - 1] || null;
+    const i = cycles.indexOf(sel);
+    return i > 0 ? cycles[i - 1] : null;
+}
+
+/**
+ * Chiffres d'une période. Grand livre (compta.js) si ledger, sinon reconstitués depuis l'archive.
+ * @param {string} sel - 'actuel' ou cycle archivé
+ * @param {Array|null} items - relevés affichés (déjà calculés) ou null (période voisine : lecture archive)
+ * @param {object|null} ids - {compteurId:true} pour restreindre (filtre agent/recherche) ; null = tous
+ */
+function periodFigures(sel, items, ids, S, ledger) {
+    const W = Compta.cycleWindows(allBackupsCache);
+    if (ledger) {
+        const isOpen = sel === 'actuel';
+        const w = isOpen ? { start: W.openStart, end: Infinity } : (W.windows[sel] || { start: 0, end: Infinity });
+        const st = Compta.periodStats(S, { cycle: isOpen ? '__ouvert__' : sel, start: w.start, end: w.end, compteurIds: ids || undefined });
+        let problemes = st.problemes;
+        let facture = st.facture, previsionnel = false;
+        const rows = items || (isOpen ? null : Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r })));
+        if (isOpen && items) {
+            facture = items.reduce((t, it) => t + (it.calculatedAmount || 0), 0);   // relevés en cours, facturés à la clôture
+            previsionnel = true;
+        }
+        if (rows) rows.forEach(it => {
+            if (ids && !ids[it.key]) return;
+            const cur = window.Billing.computeCurrent(it);
+            // anomalies d'index du relevé (pas de facture) ; les surconsommations facturées sont déjà dans st.problemes
+            if (parseFloat(it.new_index || 0) > 0 && cur.anomalie) problemes++;
+            else if (isOpen && window.Billing.isUnusualConsumption(it)) problemes++;
+        });
+        if (isOpen) {
+            // factures d'anciens cycles dont le problème n'est pas encore résolu
+            Object.values(S.factures).forEach(f => {
+                if ((!ids || ids[f.compteur_id]) && f.probleme && f.probleme.actif && !f.probleme.resolu) problemes++;
+            });
+        }
+        return { facture, previsionnel, encaisse: st.encaisse, arrieres: st.arrieres, avances: st.avances, ajustements: st.ajustements, problemes, historique: false };
+    }
+    // Historique : relevés de la période (archive ou actuel avant migration)
+    const rows = items || Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r }));
+    const idx = window.Billing.indexBackups(allBackupsCache);
+    let facture = 0, encaisse = 0, arrieres = 0, problemes = 0;
+    rows.forEach(it => {
+        if (ids && !ids[it.key]) return;
+        const cur = window.Billing.computeCurrent(it);
+        const paid = window.Billing.isPaid(it);
+        if (!cur.anomalie) { facture += cur.montant; if (paid) encaisse += cur.montant; }
+        const arr = items ? (it.arriere || 0) : window.Billing.computeArrears(it, idx, { beforeCycle: sel, fbKey: it.key }).arriere;
+        arrieres += arr + (!paid && !cur.anomalie ? cur.montant : 0);
+        if ((parseFloat(it.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(it)) problemes++;
+    });
+    return { facture, previsionnel: sel === 'actuel', encaisse, arrieres, avances: 0, ajustements: 0, problemes, historique: sel !== 'actuel' };
+}
+
+// Bandeau « migration comptable requise » (président : bouton Migrer).
+function renderMigrationBanner() {
+    const box = document.getElementById('compta-migration');
+    if (!box || !ledgerReady) return;
+    ComptaUI.migrationBanner(box, () => window.applyFilter());
 }
 
 // ✅ v4 : remplace le donut ET le graphique en barres (noms de zone inclinés)
@@ -822,6 +750,16 @@ function updateRelevesProgress() {
     if (pctEl) pctEl.textContent = pct + '%';
 }
 
+// Boutons comptables d'une carte : « Encaisser » (président/trésorier, période actuelle) et « Relevé ».
+function comptaButtons(item, due) {
+    const canPay = !isArchiveView && ComptaUI.canCollect() && due > 0;
+    const ready = ledgerReady && backupsLoaded && ComptaUI.isMigrated();
+    const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
+    const pay = canPay ? `<button class="btn-paye" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>` : '';
+    const rel = `<button class="btn-edit" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i> Relevé</button>`;
+    return pay + rel;
+}
+
 function renderList() {
     // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
     const esc = escHtml;
@@ -861,9 +799,11 @@ function renderList() {
         // financier à afficher — une simple action à venir, pas un problème.
         if (isNotRead) {
             const arriere = item.arriere || 0;
-            const arriereNote = arriere > 0
+            const arriereNote = (arriere > 0
                 ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
-                : '';
+                : '') + ((item.avance || 0) > 0
+                ? `<div style="color:var(--success);font-weight:700;">Avance disponible : ${item.avance.toLocaleString()} F</div>`
+                : '');
             // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
             // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
             // l'objectif de la page. Elle reste réservée au président, hors
@@ -905,7 +845,7 @@ function renderList() {
                 ${arriereNote}
                 ${noteHtml}
                 ${agentLine}
-                ${(callBtn || editOrLock) ? `<div class="citem-actions">${editOrLock}${callBtn}</div>` : ''}
+                <div class="citem-actions">${editOrLock}${callBtn}${comptaButtons(item, item.totalDu || 0)}</div>
             `;
             listDiv.appendChild(div);
             return;
@@ -942,12 +882,14 @@ function renderList() {
 
         const calculatedAmount = item.calculatedAmount || 0;
         const arriere = item.arriere || 0;
+        const avance = item.avance || 0;
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
-        const isPaid = window.Billing.isPaid(item);
-        // Détail arriérés affiché uniquement quand il y en a (compteurs avec dette passée)
-        const arriereHtml = (!isPaid && arriere > 0)
-            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">Mois : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F</div>`
-            : '';
+        const isPaid = !!item.estSolde;
+        // Détail : mois + arriérés − avance (seulement quand il y a quelque chose à expliquer)
+        const arriereHtml = ((arriere > 0 || avance > 0) && !isPaid)
+            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">${isArchiveView ? 'Facture' : 'Mois'} : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F${avance > 0 ? ` − Avance : ${avance.toLocaleString()} F` : ''}</div>`
+            : (avance > 0 ? `<div style="font-size:0.8rem;color:var(--success);font-weight:700;">Avance disponible : ${avance.toLocaleString()} F</div>` : '');
+        const factStatut = item.factureStatut ? { payee: '✓ Facture payée', partielle: '◐ Facture partielle', ouverte: '✕ Facture ouverte', annulee: '⊘ Facture annulée' }[item.factureStatut] : null;
 
         // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
         // affichée normalement, avec une simple alerte en plus (contrairement
@@ -974,17 +916,9 @@ function renderList() {
             ? `<button class="btn-edit" onclick="openEditModal('${item.key}')" title="Modifier les données"><i class="fa-solid fa-pen-to-square"></i> Modifier</button>`
             : '';
 
-        // ✅ v4 : "Encaisser" est l'action principale de la page pour un
-        // compteur impayé — gros bouton bleu, bien visible sur la carte.
-        // "Annuler le paiement" → "Corriger" : une correction courante, pas
-        // une suppression, n'a pas à être présentée en rouge vif.
-        // ✅ Bloqué (grisé) tant que les archives ne sont pas chargées en entier.
-        const archivesLockAttr = backupsLoaded ? '' : 'disabled title="Chargement des archives en cours…" style="opacity:.55;cursor:wait"';
-        const statusBtn = isArchiveView
-            ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>`
-            : (!isPaid
-                ? `<button class="btn-paye" onclick="updateStatus('${item.key}', 'paye')" ${archivesLockAttr}><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>`
-                : `<button class="btn-revoquer" onclick="confirmRevoke('${item.key}')" ${archivesLockAttr}><i class="fa-solid fa-rotate-left"></i> Corriger</button>`);
+        // ✅ v7 : « Encaisser » ouvre la fenêtre de paiement (partiel, avance, reçu) ; la correction
+        // d'un paiement se fait depuis le relevé de compte (annulation tracée par le président).
+        const statusBtn = comptaButtons(item, totalDu);
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
@@ -1004,7 +938,7 @@ function renderList() {
                 <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
                 <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
             </div>
-            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${isPaid ? '✓ Payé' : '✕ Impayé'}</span>
+            <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${factStatut || (isPaid ? '✓ Payé' : '✕ Impayé')}</span>
             ${arriereHtml}
             ${auditHtml}
             ${anomalyHtml}
@@ -1114,19 +1048,37 @@ window.submitEdit = function() {
         }
     }
 
+    const done = (msgExtra) => {
+        // Garder le cache des archives cohérent.
+        if (isArchiveView) patchBackupCache(editedCycle, key, updatedData);
+        if (propagatedTo && propagatedTo.cycle !== 'actuel') {
+            patchBackupCache(propagatedTo.cycle, key, { last_index: String(newIdx) });
+        }
+        showToast((propagatedTo
+            ? `✅ Relevé mis à jour (report sur ${propagatedTo.label}).`
+            : "✅ Données du compteur mises à jour !") + (msgExtra || ''));
+        closeEditModal();
+    };
+
+    // ✅ v7 : un relevé ARCHIVÉ corrigé après la migration ne réécrit jamais la facture figée :
+    // l'écart devient un ajustement « correction » validé (ou une facture « correction_releve »
+    // si le relevé était en anomalie), écrit dans la MÊME opération atomique que la correction.
+    if (isArchiveView && ComptaUI.isMigrated()) {
+        const newRecord = { ...(storeReleves[key] || {}), ...updatedData };
+        ComptaUI.run((St, base) => {
+            const c = Compta.buildArchiveCorrectionOps(St, { ...base, cycle: editedCycle, compteurId: key, newRecord, motif: `Correction du relevé ${monthLabelFR(editedCycle)} (index ${lastIdx} → ${newIdx})` });
+            return { updates: Object.assign({}, updates, c.updates), correction: c };
+        }).then((r) => {
+            const c = r && r.correction;
+            done(c && c.action === 'ajustement' ? ` Facture corrigée par ajustement (${c.ecart > 0 ? '+' : ''}${c.ecart.toLocaleString()} F).`
+                : (c && c.action === 'facture' ? ` Facture créée (${c.ecart.toLocaleString()} F).` : ''));
+        }).catch(err => showToast("Erreur lors de la mise à jour : " + (err.message || err), true));
+        return;
+    }
+
     update(ref(db), updates)
-        .then(() => {
-            // Garder le cache des archives (arriérés billing.js) cohérent.
-            if (isArchiveView) patchBackupCache(editedCycle, key, updatedData);
-            if (propagatedTo && propagatedTo.cycle !== 'actuel') {
-                patchBackupCache(propagatedTo.cycle, key, { last_index: String(newIdx) });
-            }
-            showToast(propagatedTo
-                ? `✅ Relevé mis à jour (report sur ${propagatedTo.label}).`
-                : "✅ Données du compteur mises à jour !");
-            closeEditModal();
-        })
-        .catch(err => showToast("Erreur lors du mise à jour : " + err, true));
+        .then(() => done())
+        .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));
 };
 
 // Cible du report d'index pour le mois qui suit `cycle` : archive suivante
@@ -1231,7 +1183,7 @@ window.exportPDFImpayes = function() {
     // Exclure les payés ET les montants à 0 (total dû = facture du mois + arriérés)
     const impayes = currentFilteredData.filter(item => {
         const du = (item.totalDu != null) ? item.totalDu : (item.calculatedAmount || 0);
-        return item.status !== 'paye' && du > 0;
+        return !item.estSolde && du > 0;
     });
 
     if (impayes.length === 0) {

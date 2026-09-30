@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta name="theme-color" content="#f8fafc">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Satigué Eau">
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <link rel="manifest" href="../manifest.json">
+    <script src="../pwa.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satigué Eau – Relevé de compte</title>
+
+    <script src="../biometric.js"></script>
+    <script src="../security.js"></script>
+    <script src="../loader.js"></script>
+    <script src="../firebase-config.js"></script>
+    <script src="../admin-config.js"></script>
+    <script src="../forage-context.js"></script>
+    <script src="../superadmin-village.js"></script>
+    <script src="../billing.js"></script>
+    <script src="../compta.js"></script>
+    <script src="../compta-ui.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <script>
+        if (typeof window.checkAccess === 'function') window.checkAccess(['président', 'secrétaire', 'trésorier']);
+    </script>
+    <style>
+        :root { --bg:#f1f5f9; --surface:#fff; --text-main:#0f172a; --text-sub:#64748b; --border:#e2e8f0; --primary:#0439a0; --success:#15803d; --danger:#b91c1c; --warn:#b45309; }
+        @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --surface:#131c2e; --text-main:#e2e8f0; --text-sub:#94a3b8; --border:#243049; --primary:#3b82f6; --success:#22c55e; --danger:#f87171; --warn:#fbbf24; } }
+        * { box-sizing: border-box; }
+        body { margin:0; background:var(--bg); color:var(--text-main); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        .wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 60px; }
+        a.back { color: var(--text-sub); text-decoration:none; font-size:.9rem; display:inline-flex; gap:6px; align-items:center; margin-bottom:10px; }
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; margin-bottom:14px; }
+        h1 { font-size:1.2rem; margin:0; }
+        .sub { color:var(--text-sub); font-size:.85rem; margin-top:4px; }
+        .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:10px; }
+        .tile .l { font-size:.68rem; font-weight:700; text-transform:uppercase; color:var(--text-sub); letter-spacing:.02em; }
+        .tile .v { font-size:1.05rem; font-weight:800; margin-top:2px; }
+        .good { color:var(--success); } .bad { color:var(--danger); } .warn { color:var(--warn); }
+        .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+        .btn { border:0; border-radius:10px; padding:10px 14px; font-weight:600; font-size:.9rem; cursor:pointer; background:var(--bg); color:var(--text-main); display:inline-flex; align-items:center; gap:6px; }
+        .btn.primary { background:var(--primary); color:#fff; }
+        .btn.danger { background:transparent; color:var(--danger); border:1px solid var(--danger); }
+        .btn.small { padding:6px 10px; font-size:.8rem; }
+        .btn:disabled { opacity:.5; cursor:not-allowed; }
+        .ev { border-left:4px solid var(--border); padding:10px 12px; margin:10px 0; background:var(--surface); border-radius:0 12px 12px 0; }
+        .ev.facture { border-color:#3b82f6; } .ev.paiement { border-color:var(--success); } .ev.ajustement { border-color:var(--warn); }
+        .ev.annule { opacity:.65; }
+        .ev .h { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
+        .ev .d { color:var(--text-sub); font-size:.8rem; }
+        .ev .m { font-size:.86rem; margin-top:4px; }
+        .ev ul { margin:4px 0 0; padding-left:18px; font-size:.84rem; }
+        .pill { display:inline-block; font-size:.7rem; font-weight:700; border-radius:999px; padding:2px 8px; margin-left:6px; background:var(--bg); }
+        .pill.payee { background:#dcfce7; color:#166534; } .pill.partielle { background:#fef3c7; color:#92400e; }
+        .pill.ouverte { background:#fee2e2; color:#991b1b; } .pill.annulee, .pill.annule, .pill.rejete { background:#e2e8f0; color:#475569; }
+        .pill.probleme { background:#ffedd5; color:#9a3412; } .pill.en_attente { background:#fef3c7; color:#92400e; } .pill.valide { background:#dcfce7; color:#166534; }
+        .empty { color:var(--text-sub); text-align:center; padding:20px; }
+        @media print { .no-print, a.back, .actions, .ev .btn { display:none !important; } body { background:#fff; color:#000; } .card, .ev { border-color:#999; } }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <a class="back no-print" href="../statistiques/stats.html"><i class="fa-solid fa-arrow-left"></i> Statistiques</a>
+    <div class="card">
+        <h1 id="client">Relevé de compte</h1>
+        <div class="sub" id="meta">Chargement…</div>
+        <div id="compta-migration" style="display:none"></div>
+        <div class="tiles" style="margin-top:14px">
+            <div class="tile"><div class="l">Facturé</div><div class="v" id="t-facture">—</div></div>
+            <div class="tile"><div class="l">Payé</div><div class="v good" id="t-paye">—</div></div>
+            <div class="tile"><div class="l">Ajustements</div><div class="v" id="t-ajust">—</div></div>
+            <div class="tile"><div class="l">Arriérés</div><div class="v bad" id="t-arrieres">—</div></div>
+            <div class="tile"><div class="l">Avance</div><div class="v good" id="t-avance">—</div></div>
+            <div class="tile"><div class="l">Solde</div><div class="v" id="t-solde">—</div></div>
+        </div>
+        <div class="sub" id="provisoire"></div>
+        <div class="actions">
+            <button class="btn primary" id="btn-pay" style="display:none"><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>
+            <button class="btn" id="btn-adj" style="display:none"><i class="fa-solid fa-scale-balanced"></i> Ajustement</button>
+            <button class="btn" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimer le relevé</button>
+        </div>
+    </div>
+    <div class="card">
+        <div style="font-weight:700">Chronologie</div>
+        <div class="sub">Factures, paiements (et leur affectation), ajustements — du plus ancien au plus récent.</div>
+        <div id="timeline"><div class="empty">Chargement…</div></div>
+    </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const app = initializeApp(window.ASUFOR_FIREBASE_CONFIG);
+const db = getDatabase(app);
+const auth = getAuth(app);
+const P = window.ForageContext.paths();
+const C = window.Compta, UI = window.ComptaUI, B = window.Billing;
+const esc = UI.esc, fcfa = UI.fcfa, cyc = UI.cycleLabel;
+const session = JSON.parse(localStorage.getItem('asufor_session') || '{}');
+const role = session.role;
+const cid = new URLSearchParams(location.search).get('c');
+let releve = null;
+
+const dt = (iso) => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const SOURCES = { cloture: 'clôture mensuelle', migration_backup: 'reprise des archives', correction_releve: 'relevé corrigé' };
+const TYPES = { remise: 'Remise', majoration: 'Majoration', correction: 'Correction', annulation: 'Annulation de facture' };
+const STATUTS = { ouverte: 'ouverte', partielle: 'partielle', payee: 'payée', annulee: 'annulée', valide: 'validé', annule: 'annulé', en_attente: 'en attente', rejete: 'rejeté' };
+
+function toast(msg) { alert(msg); }
+
+function render() {
+    const S = UI.getState();
+    const acc = C.computeAccount(S, cid);
+    const du = C.amountDueNow(S, cid, releve);
+    document.getElementById('t-facture').textContent = fcfa(acc.total_facture);
+    document.getElementById('t-paye').textContent = fcfa(acc.total_paye);
+    document.getElementById('t-ajust').textContent = (acc.total_ajustements > 0 ? '+' : '') + fcfa(acc.total_ajustements);
+    document.getElementById('t-arrieres').textContent = fcfa(acc.arrieres);
+    document.getElementById('t-avance').textContent = fcfa(acc.avance);
+    const sol = document.getElementById('t-solde');
+    sol.textContent = acc.solde < 0 ? 'Crédit ' + fcfa(-acc.solde) : fcfa(acc.solde);
+    sol.className = 'v ' + (acc.solde > 0 ? 'bad' : 'good');
+    document.getElementById('provisoire').textContent = du.facture_provisoire
+        ? `Relevé du mois en cours : ${fcfa(du.facture_provisoire)} (facturé à la clôture) — total dû aujourd'hui : ${fcfa(du.total_du)}.`
+        : '';
+
+    const canPay = UI.canCollect() && UI.isMigrated();
+    const bp = document.getElementById('btn-pay');
+    bp.style.display = UI.canCollect() ? '' : 'none';
+    bp.disabled = !canPay;
+    document.getElementById('btn-adj').style.display = (UI.canCollect() && UI.isMigrated()) ? '' : 'none';
+    UI.migrationBanner(document.getElementById('compta-migration'), render);
+
+    const events = [];
+    acc.factures.forEach(f => events.push({ t: f.date_creation, kind: 'facture', f }));
+    acc.paiements.forEach(p => events.push({ t: p.date_paiement, kind: 'paiement', p }));
+    acc.ajustements.forEach(j => events.push({ t: j.created_at, kind: 'ajustement', j }));
+    events.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+
+    const tl = document.getElementById('timeline');
+    if (!events.length) { tl.innerHTML = `<div class="empty">${UI.isMigrated() ? 'Aucune écriture comptable pour ce compteur.' : 'Comptabilité non encore initialisée (migration requise).'}</div>`; return; }
+    tl.innerHTML = events.map(e => {
+        if (e.kind === 'facture') {
+            const f = e.f;
+            const prob = f.probleme && f.probleme.actif
+                ? `<span class="pill probleme">${f.probleme.resolu ? '✓ problème résolu' : '⚠ surconsommation ' + esc(f.probleme.valeur_m3) + ' m³'}</span>` : '';
+            const canResolve = f.probleme && f.probleme.actif && !f.probleme.resolu && (role === 'président' || role === 'secrétaire');
+            return `<div class="ev facture ${f.annulee ? 'annule' : ''}">
+                <div class="h"><span>Facture ${esc(cyc(f.cycle))}<span class="pill ${f.statut}">${STATUTS[f.statut] || f.statut}</span>${prob}</span><span>${fcfa(f.montant_net)}</span></div>
+                <div class="d">${dt(f.date_creation)} · ${esc(SOURCES[f.source] || f.source)}</div>
+                <div class="m">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} : ${esc(f.consommation)} m³ × ${esc(f.facteur)} F = ${fcfa(f.montant_initial)}` : ''}
+                ${f.montant_net !== f.montant_initial ? ` · net après ajustements : <b>${fcfa(f.montant_net)}</b>` : ''}</div>
+                <div class="m">Payé : <b class="good">${fcfa(f.montant_paye)}</b> · Reste : <b class="${f.reste_a_payer > 0 ? 'bad' : 'good'}">${fcfa(f.reste_a_payer)}</b></div>
+                ${f.probleme && f.probleme.resolu && f.probleme.resolution ? `<div class="d">Problème résolu le ${dt(f.probleme.resolution.resolu_le)} : ${esc(f.probleme.resolution.motif)} (résolu ≠ payé)</div>` : ''}
+                ${canResolve ? `<div class="actions"><button class="btn small" data-resolve="${esc(f.facture_id)}"><i class="fa-solid fa-screwdriver-wrench"></i> Marquer le problème résolu</button></div>` : ''}
+            </div>`;
+        }
+        if (e.kind === 'paiement') {
+            const p = e.p;
+            const affs = Object.entries((S.affectations[p.paiement_id]) || {}).sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0))
+                .map(([fid, a]) => `<li>${esc(cyc(a.cycle))} : ${fcfa(a.montant)}${a.statut === 'annulee' ? ' <i>(annulée)</i>' : ''}</li>`).join('');
+            const valide = p.statut === 'valide';
+            return `<div class="ev paiement ${valide ? '' : 'annule'}">
+                <div class="h"><span>Paiement — reçu n°${esc(p.numero_recu)}<span class="pill ${p.statut}">${STATUTS[p.statut] || p.statut}</span></span><span class="good">${fcfa(p.montant)}</span></div>
+                <div class="d">${dt(p.date_paiement)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}${p.reference ? ' · réf. ' + esc(p.reference) : ''} · par ${esc(p.encaisse_par_nom || p.role || '—')}</div>
+                ${affs ? `<ul>${affs}</ul>` : '<div class="m">Aucune facture réglée : montant conservé en avance.</div>'}
+                ${valide && p.disponible > 0 ? `<div class="m good">Avance disponible sur ce paiement : ${fcfa(p.disponible)}</div>` : ''}
+                ${!valide ? `<div class="m bad">Annulé le ${dt(p.annule_le)} : ${esc(p.motif_annulation || '')}</div>` : ''}
+                <div class="actions">
+                    <button class="btn small" data-recu="${esc(p.paiement_id)}"><i class="fa-solid fa-receipt"></i> Reçu</button>
+                    ${valide && role === 'président' ? `<button class="btn small danger" data-cancel="${esc(p.paiement_id)}"><i class="fa-solid fa-ban"></i> Annuler ce paiement</button>` : ''}
+                </div>
+            </div>`;
+        }
+        const j = e.j;
+        const signe = j.type === 'remise' ? -Math.abs(j.montant) : (j.type === 'majoration' ? Math.abs(j.montant) : (j.type === 'annulation' ? -Math.abs(j.montant) : j.montant));
+        return `<div class="ev ajustement ${j.statut === 'rejete' ? 'annule' : ''}">
+            <div class="h"><span>${esc(TYPES[j.type] || j.type)} — ${esc(cyc(j.cycle))}<span class="pill ${j.statut}">${STATUTS[j.statut] || j.statut}</span></span><span>${signe > 0 ? '+' : ''}${fcfa(signe)}</span></div>
+            <div class="d">${dt(j.created_at)} · proposé par ${esc(j.cree_par_nom || '—')}${j.date_validation ? ' · ' + (j.statut === 'valide' ? 'validé' : 'traité') + ' le ' + dt(j.date_validation) + (j.valide_par_nom ? ' par ' + esc(j.valide_par_nom) : '') : ''}</div>
+            <div class="m">Motif : ${esc(j.motif)}</div>
+            ${j.statut === 'en_attente' && role === 'président' ? `<div class="actions"><button class="btn small primary" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn small danger" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function withMotif(title, label, onOk) {
+    const m = UI.modal(`<h3>${esc(title)}</h3><label for="mot">${esc(label)}</label><textarea id="mot" rows="3" maxlength="300"></textarea><div class="cui-err" id="err"></div><div class="cui-act"><button class="cui-ghost" id="no">Annuler</button><button class="cui-primary" id="ok">Confirmer</button></div>`);
+    m.q('#no').onclick = m.close;
+    m.q('#ok').onclick = () => {
+        const motif = m.q('#mot').value.trim();
+        if (motif.length < 3) { m.q('#err').textContent = 'Le motif est obligatoire.'; return; }
+        m.q('#ok').disabled = true;
+        onOk(motif).then(() => { m.close(); render(); }, (e) => { m.q('#ok').disabled = false; m.q('#err').textContent = e.message || String(e); });
+    };
+}
+
+function openAdjustment() {
+    const acc = C.computeAccount(UI.getState(), cid);
+    const fs = acc.factures.filter(f => !f.annulee);
+    if (!fs.length) { toast('Aucune facture à ajuster pour ce compteur.'); return; }
+    const pres = role === 'président';
+    const m = UI.modal(`<h3>Ajustement</h3><p class="cui-sub">${pres ? 'Validé immédiatement (président) ou laissé en attente.' : 'Proposition soumise à la validation du président.'}</p>
+        <label for="fac">Facture</label><select id="fac">${fs.map(f => `<option value="${esc(f.facture_id)}">${esc(cyc(f.cycle))} — net ${fcfa(f.montant_net)}, reste ${fcfa(f.reste_a_payer)}</option>`).join('')}</select>
+        <label for="typ">Type</label><select id="typ"><option value="remise">Remise (−)</option><option value="majoration">Majoration (+)</option><option value="correction">Correction (±)</option><option value="annulation">Annulation de la facture</option></select>
+        <label for="mnt">Montant (F)${' '}<small>(correction : négatif pour réduire)</small></label><input id="mnt" type="number" step="1">
+        <label for="mot">Motif (obligatoire)</label><textarea id="mot" rows="2" maxlength="300"></textarea>
+        ${pres ? '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="val" checked style="width:auto"> Valider immédiatement</label>' : ''}
+        <div class="cui-err" id="err"></div>
+        <div class="cui-act"><button class="cui-ghost" id="no">Annuler</button><button class="cui-primary" id="ok">Enregistrer</button></div>`);
+    const syncType = () => { m.q('#mnt').disabled = m.q('#typ').value === 'annulation'; };
+    m.q('#typ').onchange = syncType; syncType();
+    m.q('#no').onclick = m.close;
+    m.q('#ok').onclick = () => {
+        m.q('#ok').disabled = true; m.q('#err').textContent = '';
+        UI.run((S, base) => C.buildAdjustmentOps(S, { ...base, factureId: m.q('#fac').value, type: m.q('#typ').value, montant: Number(m.q('#mnt').value), motif: m.q('#mot').value, valider: pres && m.q('#val').checked, releve }))
+            .then(() => { m.close(); render(); }, (e) => { m.q('#ok').disabled = false; m.q('#err').textContent = e.message || String(e); });
+    };
+}
+
+document.getElementById('timeline').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.recu) window.open(`recu.html?p=${encodeURIComponent(b.dataset.recu)}`, '_blank');
+    else if (b.dataset.cancel) withMotif('Annuler ce paiement', "Motif de l'annulation (obligatoire)", (motif) =>
+        UI.run((S, base) => C.buildPaymentCancelOps(S, { ...base, paiementId: b.dataset.cancel, motif, releve })));
+    else if (b.dataset.resolve) withMotif('Résoudre le problème', 'Comment le problème a-t-il été résolu ? (résolu ≠ payé)', (motif) =>
+        UI.run((S, base) => C.buildProblemResolutionOps(S, { ...base, factureId: b.dataset.resolve, motif })));
+    else if (b.dataset.validate || b.dataset.reject) {
+        const id = b.dataset.validate || b.dataset.reject, decision = b.dataset.validate ? 'valide' : 'rejete';
+        if (!confirm(decision === 'valide' ? 'Valider cet ajustement ?' : 'Rejeter cet ajustement ?')) return;
+        UI.run((S, base) => C.buildAdjustmentValidationOps(S, { ...base, ajustementId: id, decision, releve })).then(render, (err) => toast(err.message));
+    }
+});
+document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
+    compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
+    recuUrl: (pid) => `recu.html?p=${encodeURIComponent(pid)}`, onDone: render
+});
+document.getElementById('btn-adj').onclick = openAdjustment;
+
+onAuthStateChanged(auth, async (user) => {
+    if (!user) { if (window.handleFirebaseSessionLoss) window.handleFirebaseSessionLoss('releve.html'); return; }
+    if (!cid) { document.getElementById('meta').textContent = 'Compteur non précisé.'; return; }
+    UI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
+    try {
+        const snap = await get(ref(db, `${P.compteurs}/${cid}`));
+        releve = snap.exists() ? snap.val() : null;
+        const src = releve || (Object.values(UI.getState().factures).find(f => f.compteur_id === cid) || {});
+        document.getElementById('client').textContent = (releve ? releve.name : src.client) || 'Client';
+        document.getElementById('meta').textContent = `Compteur n°${(releve ? releve.numero_compteur : src.numero_compteur) || '—'} · ${(releve ? releve.zone : src.zone) || 'Sans zone'}`;
+    } catch (e) {
+        document.getElementById('meta').textContent = 'Lecture impossible (' + (e.code || e.message) + ').';
+    }
+    UI.subscribe((st, mig, ready) => { if (ready) render(); });
+});
+</script>
+</body>
+</html>

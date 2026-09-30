@@ -202,6 +202,8 @@ sur chaque push/PR (`.github/workflows/ci.yml`).
 
 - [`docs/MULTI-FORAGE.md`](docs/MULTI-FORAGE.md) — architecture multi-forage,
   modèle de données, runbook de déploiement, cas de test des règles Firebase.
+- [`docs/COMPTABILITE-v7.md`](docs/COMPTABILITE-v7.md) — comptabilité v7 :
+  factures, paiements, affectations FIFO, avances, ajustements, migration.
 - [`scripts/README-FACTURATION.md`](scripts/README-FACTURATION.md) — logique
-  de facturation détaillée et guide des scripts de migration
-  (`migrate-arrears.js`, `migrate-multi-forage.js`).
+  de facturation et guide des scripts (`migrate-comptable.js`,
+  `migrate-multi-forage.js`).

@@ -47,3 +47,6 @@ scripts/reports/
 
 # Source maps
 *.map
+
+# Règles compactes générées (scripts/rules-compact.js)
+database.rules.min.json

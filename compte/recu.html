@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satigué Eau – Reçu de paiement</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
+    <script src="../biometric.js"></script>
+    <script src="../security.js"></script>
+    <script src="../firebase-config.js"></script>
+    <script src="../admin-config.js"></script>
+    <script src="../forage-context.js"></script>
+    <script src="../billing.js"></script>
+    <script src="../compta.js"></script>
+    <script>
+        if (typeof window.checkAccess === 'function') window.checkAccess(['président', 'secrétaire', 'trésorier']);
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f1f5f9; color: #0f172a; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        .bar { max-width: 420px; margin: 16px auto 0; display: flex; gap: 8px; padding: 0 16px; }
+        .bar button { flex: 1; border: 0; border-radius: 10px; padding: 12px; font-weight: 600; cursor: pointer; background: #e2e8f0; }
+        .bar .p { background: #0439a0; color: #fff; }
+        .recu { position: relative; max-width: 420px; margin: 12px auto 40px; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 22px; }
+        .head { text-align: center; border-bottom: 2px dashed #cbd5e1; padding-bottom: 12px; margin-bottom: 12px; }
+        .head img { width: 42px; height: 42px; }
+        .head h1 { font-size: 1.05rem; margin: 6px 0 2px; }
+        .head .t { font-size: .8rem; color: #64748b; }
+        .num { text-align: center; font-weight: 800; letter-spacing: .04em; margin: 8px 0 14px; }
+        .row { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; padding: 4px 0; }
+        .row span:first-child { color: #64748b; }
+        .row b { text-align: right; }
+        .amount { text-align: center; font-size: 1.6rem; font-weight: 800; margin: 14px 0; }
+        table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+        th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #e2e8f0; }
+        td:last-child, th:last-child { text-align: right; }
+        .foot { margin-top: 16px; font-size: .75rem; color: #64748b; text-align: center; }
+        .void { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%) rotate(-18deg); font-size: 3rem; font-weight: 900; color: rgba(185, 28, 28, .25); border: 6px solid rgba(185, 28, 28, .25); padding: 4px 18px; border-radius: 12px; pointer-events: none; }
+        .msg { max-width: 420px; margin: 40px auto; text-align: center; color: #64748b; }
+        @media print { body { background: #fff; } .bar { display: none; } .recu { border: 0; margin: 0 auto; } }
+    </style>
+</head>
+<body>
+<div class="bar">
+    <button onclick="history.length > 1 ? history.back() : window.close()">Retour</button>
+    <button class="p" onclick="window.print()">Imprimer</button>
+</div>
+<div id="out"><div class="msg">Chargement du reçu…</div></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const app = initializeApp(window.ASUFOR_FIREBASE_CONFIG);
+const db = getDatabase(app);
+const auth = getAuth(app);
+const P = window.ForageContext.paths();
+const C = window.Compta;
+const CP = C.pathsFor(P.base || P.compteurs.replace(/\/compteurs$/, ''));
+const pid = new URLSearchParams(location.search).get('p');
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+const fcfa = (n) => Math.round(Number(n) || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
+const cyc = (c) => { const [y, m] = String(c).split('-'); const l = new Date(+y, +m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); return l.charAt(0).toUpperCase() + l.slice(1); };
+const dt = (iso) => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+onAuthStateChanged(auth, async (user) => {
+    const out = document.getElementById('out');
+    if (!user) { out.innerHTML = '<div class="msg">Session expirée : reconnectez-vous.</div>'; return; }
+    if (!pid) { out.innerHTML = '<div class="msg">Paiement non précisé.</div>'; return; }
+    try {
+        const [pSnap, cfgSnap, fSnap, aSnap, jSnap] = await Promise.all([
+            get(ref(db, `${CP.paiements}/${pid}`)), get(ref(db, P.config)), get(ref(db, CP.factures)),
+            get(ref(db, CP.affectations)), get(ref(db, CP.ajustements))
+        ]);
+        if (!pSnap.exists()) { out.innerHTML = '<div class="msg">Paiement introuvable.</div>'; return; }
+        const p = pSnap.val();
+        const cfg = cfgSnap.val() || {};
+        const cpt = (await get(ref(db, `${P.compteurs}/${p.compteur_id}`))).val() || {};
+        const S = C.normState({ factures: fSnap.val() || {}, paiements: { [pid]: p }, affectations: aSnap.val() || {}, ajustements: jSnap.val() || {} });
+        const affs = Object.entries(S.affectations[pid] || {}).filter(([, a]) => a.statut !== 'annulee').sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0));
+        const affecte = affs.reduce((t, [, a]) => t + (Number(a.montant) || 0), 0);
+        const avance = p.statut === 'valide' ? Math.max(0, p.montant - affecte) : 0;
+        out.innerHTML = `<div class="recu">
+            ${p.statut !== 'valide' ? '<div class="void">ANNULÉ</div>' : ''}
+            <div class="head">
+                <img src="../icons/logo.png" alt="">
+                <h1>${esc(cfg.nom || 'Satigué Eau')}</h1>
+                <div class="t">${esc(cfg.siege || '')}${cfg.telephone ? ' · Tél. ' + esc(cfg.telephone) : ''}</div>
+            </div>
+            <div class="num">REÇU DE PAIEMENT N° ${esc(p.numero_recu)}</div>
+            <div class="row"><span>Date</span><b>${dt(p.date_paiement)}</b></div>
+            <div class="row"><span>Client</span><b>${esc(cpt.name || p.client || '—')}</b></div>
+            <div class="row"><span>Compteur</span><b>n°${esc(cpt.numero_compteur || '—')}${cpt.zone ? ' · ' + esc(cpt.zone) : ''}</b></div>
+            <div class="amount">${fcfa(p.montant)}</div>
+            <div class="row"><span>Mode</span><b>${esc(C.MODES_LABEL[p.mode] || p.mode)}</b></div>
+            ${p.reference ? `<div class="row"><span>Référence</span><b>${esc(p.reference)}</b></div>` : ''}
+            <div class="row"><span>Encaissé par</span><b>${esc(p.encaisse_par_nom || p.role || '—')}</b></div>
+            <table><thead><tr><th>Facture réglée</th><th>Montant</th></tr></thead><tbody>
+                ${affs.length ? affs.map(([, a]) => `<tr><td>${esc(cyc(a.cycle))}</td><td>${fcfa(a.montant)}</td></tr>`).join('') : '<tr><td colspan="2">Aucune facture échue : montant en avance</td></tr>'}
+                ${avance > 0 ? `<tr><td>Avance (crédit client)</td><td>${fcfa(avance)}</td></tr>` : ''}
+            </tbody></table>
+            ${p.statut !== 'valide' ? `<div class="foot" style="color:#b91c1c">Paiement annulé le ${dt(p.annule_le)} : ${esc(p.motif_annulation || '')}</div>` : ''}
+            <div class="foot">Reçu généré le ${dt(new Date().toISOString())} · réf. interne ${esc(pid)}</div>
+        </div>`;
+    } catch (e) {
+        out.innerHTML = `<div class="msg">Lecture impossible (${esc(e.code || e.message)}).</div>`;
+    }
+});
+</script>
+</body>
+</html>

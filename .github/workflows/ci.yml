@@ -53,6 +53,8 @@ jobs:
         run: |
           echo "── billing.test.js ──"
           node scripts/billing.test.js
+          echo "── compta.test.js ──"
+          node scripts/compta.test.js
           echo "── crypto.test.js ──"
           node scripts/crypto.test.js
           echo "── integration.test.js ──"
@@ -113,6 +115,8 @@ jobs:
             "security.js"
             "firebase-config.js"
             "billing.js"
+            "compta.js"
+            "compta-ui.js"
             ".gitignore"
             "sw.js"
             "index.html"

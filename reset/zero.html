@@ -29,6 +29,7 @@
     <!-- ✅ Sécurité : hachage SHA-256 des passcodes maintenance -->
     <script src="../crypto.js"></script>
     <script src="../billing.js"></script>
+    <script src="../compta.js"></script>
 
     <style>
         :root {
@@ -319,7 +320,7 @@
     </div>
        <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, get, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         // ✅ Vérification d'accès
@@ -358,6 +359,20 @@
         // ✅ FIX LOGIQUE : un compteur d'eau est MONOTONE — son index ne régresse jamais.
         // Renvoie l'index réel à conserver : le nouveau relevé s'il est valide et >= ancien,
         // sinon (non relevé, 0, ou aberrant) on CONSERVE l'ancien index. Jamais de retour à 0.
+        // ✅ v7 : chemins comptables + lecture fraîche du grand livre (juste avant chaque écriture)
+        const CP = window.Compta.pathsFor(P.base || P.compteurs.replace(/\/compteurs$/, ''));
+        async function readLedger() {
+            const names = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes'];
+            const snaps = await Promise.all(names.map(n => get(ref(db, CP[n]))));
+            const st = {};
+            names.forEach((n, i) => { st[n] = snaps[i].val() || {}; });
+            return window.Compta.normState(st);
+        }
+        function currentUser() {
+            const s = JSON.parse(localStorage.getItem('asufor_session') || '{}');
+            return { uid: auth.currentUser && auth.currentUser.uid, nom: s.nom || s.email || s.role, role: s.role };
+        }
+
         function indexConserve(val) {
             return window.Billing.indexConserve(val);   // logique centralisée (billing.js)
         }
@@ -542,12 +557,8 @@
                                     <small style="color:var(--text-dim)">Nouvel Index</small><br>
                                     <input type="number" id="idx_${safeKey}" value="${nouvelIdx}" min="${ancienIdx}" data-ancien="${ancienIdx}">
                                 </div>
-                                <div style="grid-column: span 2;">
-                                    <small style="color:var(--text-dim)">Statut du paiement</small><br>
-                                    <select id="stat_${safeKey}">
-                                        <option value="impaye" selected>🔴 Impayé</option>
-                                        <option value="paye">🟢 Payé</option>
-                                    </select>
+                                <div style="grid-column: span 2; font-size:.8rem; color:var(--text-dim)">
+                                    Encaissement : depuis Statistiques → Encaisser (paiement tracé, reçu).
                                 </div>
                             </div>
                             <button class="btn-save-item" onclick="saveMeterEdit('${safeKey}')">💾 Corriger l'archive ${esc(prevCycleKey)}</button>
@@ -572,7 +583,6 @@
             const originalText = btnSave.innerHTML;
 
             const idxInput = document.getElementById(`idx_${key}`);
-            const newStat = document.getElementById(`stat_${key}`).value;
 
             // ✅ FIX : anti-régression — l'index saisi ne peut pas être inférieur à l'ancien.
             const ancien = parseFloat(idxInput.dataset.ancien) || 0;
@@ -596,47 +606,39 @@
 
             try {
                 const updates = {};
-                // 1. Mise à jour dans le backup du mois précédent
+                // 1. Correction de l'index dans l'archive du mois précédent (le statut de paiement
+                //    n'est plus modifié ici : un encaissement passe toujours par « paiements »).
                 updates[`${P.backup}/${prevCycleKey}/donnees/${key}/new_index`] = Number(newIdx);
-                updates[`${P.backup}/${prevCycleKey}/donnees/${key}/status`] = newStat;
-                updates[`${P.backup}/${prevCycleKey}/donnees/${key}/statut`] = newStat === 'paye' ? true : false; // Booléen corrigé
-
-                // Marquer « payé » règle aussi les mois antérieurs encore impayés de ce
-                // client (comme le bouton Encaisser de Statistiques) — sinon leurs arriérés
-                // disparaîtraient du calcul sans avoir été payés.
-                let anomaliesIgnorees = 0;
-                if (newStat === 'paye') {
-                    const bsnap = await get(ref(db, P.backup));
-                    const settle = window.Billing.buildArchiveSettleUpdates({
-                        backupPath: P.backup,
-                        key: key,
-                        uptoCycle: prevCycleKey,
-                        indexedBackups: window.Billing.indexBackups(bsnap.exists() ? bsnap.val() : {}),
-                        by: (JSON.parse(localStorage.getItem('asufor_session') || '{}').role) || 'président'
-                    });
-                    Object.assign(updates, settle.updates);
-                    anomaliesIgnorees = settle.cyclesIgnores.length;   // jamais réglés automatiquement
-                }
-
-                // 2. Synchronisation: On met à jour le last_index de la base active pour éviter un saut d'index ce mois-ci
+                // 2. Synchronisation : last_index de la base active (pas de saut d'index ce mois-ci)
                 updates[`${P.compteurs}/${key}/last_index`] = String(newIdx);
 
+                // 3. v7 : la facture figée de ce mois n'est jamais réécrite → ajustement « correction »
+                //    validé (ou facture « correction_releve » si le relevé était en anomalie), dans la
+                //    MÊME écriture atomique (compta.js).
+                let note = '';
+                const migSnap = await get(ref(db, CP.migration + '/v1'));
+                if (migSnap.exists()) {
+                    const st = await readLedger();
+                    const row = (await get(ref(db, `${P.backup}/${prevCycleKey}/donnees/${key}`))).val() || {};
+                    const c = window.Compta.buildArchiveCorrectionOps(st, {
+                        paths: CP, cycle: prevCycleKey, compteurId: key, newRecord: Object.assign({}, row, { new_index: Number(newIdx) }),
+                        motif: `Correction du relevé ${prevCycleKey} depuis la maintenance (index → ${newIdx})`,
+                        user: currentUser(), now: new Date().toISOString(), newId: () => push(ref(db, CP.audit)).key
+                    });
+                    Object.assign(updates, c.updates);
+                    if (c.action === 'ajustement') note = ` Facture corrigée (${c.ecart > 0 ? '+' : ''}${c.ecart} F).`;
+                    if (c.action === 'facture') note = ` Facture créée (${c.ecart} F).`;
+                }
+
                 await update(ref(db), updates);
-                
-                if (anomaliesIgnorees > 0) {
-                    alert(`${anomaliesIgnorees} mois plus ancien(s) en anomalie d'index n'ont pas été réglés automatiquement : corrigez-les d'abord.`);
-                }
-                if(newStat === 'paye') {
-                    document.getElementById(`item_${key}`).remove();
-                } else {
-                    btnSave.innerHTML = "✅ Archivé";
-                    btnSave.style.background = "var(--success)";
-                    setTimeout(() => {
-                        btnSave.innerHTML = originalText;
-                        btnSave.style.background = "var(--primary)";
-                        btnSave.disabled = false;
-                    }, 2000);
-                }
+
+                btnSave.innerHTML = "✅ Corrigé" + note;
+                btnSave.style.background = "var(--success)";
+                setTimeout(() => {
+                    btnSave.innerHTML = originalText;
+                    btnSave.style.background = "var(--primary)";
+                    btnSave.disabled = false;
+                }, 2500);
             } catch(e) {
                 alert("Erreur lors de la mise à jour : " + e.message);
                 btnSave.innerHTML = "❌ Erreur";
@@ -738,12 +740,18 @@
                 //    d'une archive de cycle qu'une seule fois : si un autre président a clôturé
                 //    le même cycle entre-temps, TOUT est refusé — l'archive n'est jamais écrasée
                 //    par des compteurs déjà remis à zéro, et rien n'est réinitialisé deux fois.
-                const { updates, keys } = window.Billing.buildClosureUpdates({
-                    compteursPath: P.compteurs,
-                    backupPath:    P.backup,
-                    cycleKey:      cycleKey,
-                    data:          data,
-                    dateLabel:     now.toLocaleString('fr-FR')
+                // ✅ v7 : la clôture crée aussi UNE FACTURE FIGÉE par relevé valide (anomalies d'index :
+                //    aucune facture), affecte automatiquement les avances disponibles, met à jour les
+                //    soldes et trace l'audit — toujours dans le même update atomique (compta.js).
+                const migSnap = await get(ref(db, CP.migration + '/v1'));
+                if (!migSnap.exists()) {
+                    throw new Error("Migration comptable requise : ouvrez Statistiques et lancez « Migrer » (président) avant la première clôture.");
+                }
+                const ledger = await readLedger();
+                const { updates, keys, resume } = window.Compta.buildClosureOps(ledger, {
+                    paths: CP, cycleKey: cycleKey, compteurs: data,
+                    now: new Date().toISOString(), dateLabel: now.toLocaleString('fr-FR'),
+                    user: currentUser(), newId: () => push(ref(db, CP.audit)).key
                 });
 
                 // Anti-concurrence : si un paiement / un relevé a modifié les compteurs pendant la
@@ -792,7 +800,9 @@
                     console.warn('Export local de l\'archive impossible :', exportErr);
                 }
 
-                log.textContent = `✅ MAINTENANCE RÉUSSIE — ${keys.length} entrée(s) archivée(s) — archive JSON téléchargée (conservez-la en lieu sûr)`;
+                log.textContent = `✅ MAINTENANCE RÉUSSIE — ${keys.length} entrée(s) archivée(s), ${resume.nb_factures} facture(s) émise(s) (${resume.total_facture} F)` +
+                    (resume.anomalies.length ? `, ${resume.anomalies.length} relevé(s) en anomalie ou non relevé(s) sans facture` : '') +
+                    ` — archive JSON téléchargée (conservez-la en lieu sûr)`;
                 log.style.color = "var(--success)";
                 btn.textContent = `✓ Cycle ${cycleKey} Clôturé`;
                 btn.style.background = "var(--success)";
