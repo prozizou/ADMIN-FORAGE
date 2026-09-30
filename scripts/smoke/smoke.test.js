@@ -529,6 +529,50 @@ async function main() {
         await ctx.close();
     }
 
+    // ══════════ STATISTIQUES v8 : encaisser / annuler DEPUIS UNE ARCHIVE (mois passé) ══════════
+    console.log('Statistiques — encaissement et annulation depuis une archive');
+    {
+        const { page, errors, ctx } = await newPage(browser, 'président', migratedSeed());
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#month-filter option')].some(o => o.value === '2026-06'), null, { timeout: 8000 });
+        await page.selectOption('#month-filter', '2026-06');
+        await page.waitForSelector('.archive-lock, .item', { timeout: 8000 });
+        await page.waitForFunction(() => document.getElementById('archive-banner').classList.contains('visible'));
+        let paiementId2;
+        await check("encaisser depuis l'archive de juin : le montant par défaut (7 500) vient du relevé RÉELLEMENT en cours (compteur en vigueur), pas de l'archive affichée", async () => {
+            // Piège corrigé : si le relevé de l'archive de juin (index 0→20, 5 000 F) était utilisé pour la
+            // facture provisoire au lieu du relevé courant (index 24→30, 1 500 F), le montant par défaut
+            // serait faux (arriérés 6 000 + 5 000 au lieu de 6 000 + 1 500 = 7 500).
+            await page.evaluate(() => window.encaisser('c1'));
+            await page.waitForSelector('#cui-montant', { timeout: 8000 });
+            assert.strictEqual(await page.inputValue('#cui-montant'), '7500');
+            await page.click('#cui-ok');
+            await page.waitForFunction(() => /Encaissement enregistré/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
+            const F = (await db(page)).Asufor[FA];
+            paiementId2 = Object.values(F.paiements)[0].paiement_id;
+            // Le paiement solde tout l'historique (juin + juillet + mois courant) : le compteur EN VIGUEUR
+            // (pas l'archive) passe « payé », calculé sur son propre relevé (24 → 30), pas celui de juin.
+            assert.strictEqual(F.compteurs.c1.status, 'paye');
+            assert.strictEqual(F.soldes.c1.arrieres, 0);
+            await page.click('#cui-close');
+        });
+        await check("annuler ce paiement depuis la même archive : arriérés et statut du compteur EN VIGUEUR recalculés correctement", async () => {
+            await page.waitForFunction(() => document.querySelectorAll('#releves-list .btn-cancel-pay').length > 0, null, { timeout: 8000 });
+            await page.evaluate(() => window.annulerEncaissement('c1'));
+            await page.waitForSelector('#cui-yes', { timeout: 8000 });
+            await page.fill('#cui-motif', 'Test : annulation depuis une archive');
+            await page.click('#cui-yes');
+            await page.waitForFunction(() => /Paiement annulé/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
+            const F = (await db(page)).Asufor[FA];
+            assert.strictEqual(F.paiements[paiementId2].statut, 'annule');
+            assert.strictEqual(F.soldes.c1.arrieres, 6000);
+            assert.strictEqual(F.compteurs.c1.status, 'impaye');   // redevient impayé sur son propre relevé (1 500 dus ce mois)
+        });
+        await check('aucune erreur JavaScript (encaissement/annulation depuis une archive)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
+        await ctx.close();
+    }
+
     // ══════════ RELEVÉ DE COMPTE + REÇU ══════════
     console.log('Relevé de compte et reçu');
     {

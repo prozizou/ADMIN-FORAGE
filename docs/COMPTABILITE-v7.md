@@ -87,6 +87,22 @@ de compte que depuis un bouton dédié dans Statistiques, sur la carte du client
 appellent `Compta.buildPaymentCancelOps` et n'affichent le bouton que s'il existe au moins un paiement
 valide à annuler.
 
+### Corriger un mois archivé
+
+Un mois clôturé reste modifiable, chaque correction restant tracée :
+
+- **Index / facteur** : le crayon (« Modifier ») ouvre le même formulaire que pour le mois en cours.
+  La facture déjà figée n'est jamais réécrite ; l'écart devient un ajustement `correction`, validé
+  automatiquement (`Compta.buildArchiveCorrectionOps`), avec l'ancien et le nouvel index dans le motif.
+- **Encaisser / annuler un encaissement** : disponibles depuis n'importe quel mois affiché dans
+  Statistiques, y compris une archive — régler une vieille dette ou corriger un paiement mal saisi ne
+  dépend pas du mois consulté à l'écran. Le paiement reste daté d'aujourd'hui et réglé en FIFO sur les
+  factures ouvertes les plus anciennes. Le relevé utilisé pour la facture provisoire du mois en cours et
+  pour le statut payé/impayé du compteur est toujours le relevé RÉELLEMENT en cours (relu depuis
+  `compteurs/{id}` si une archive est affichée), jamais celui de l'archive à l'écran.
+- **Remise, majoration, annulation d'une facture** : depuis le relevé de compte (bouton Ajustement),
+  qui liste les factures de tous les mois, archivés compris.
+
 Les règles Firebase imposent ces droits en plus de l'interface :
 - création seule (`!data.exists()`) sur les paiements, les affectations et l'audit ;
 - champs immuables sur les factures et les paiements ;
