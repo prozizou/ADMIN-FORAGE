@@ -197,6 +197,23 @@ async function main() {
             const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
             assert.ok(over <= 0, 'scroll horizontal de ' + over + 'px');
         });
+        await check(`mobile ${width}px : tableau de bord compact (en-tête, filtres, bilan, onglets sur une ligne)`, async () => {
+            const rows = await page.evaluate(() => {
+                const top = (sel) => [...document.querySelectorAll(sel)].map(e => Math.round(e.getBoundingClientRect().top));
+                const same = (a) => new Set(a).size === 1;
+                const inView = [...document.querySelectorAll('.header, .filters-line, .recap-card, .tabs, .recap-grid > *')].every(e => e.getBoundingClientRect().right <= window.innerWidth + 0.5);
+                return {
+                    header: document.querySelector('.header').getBoundingClientRect().height < 56, filtres: same(top('.filters-line select')), onglets: same(top('.tab-btn')),
+                    kpi: document.querySelectorAll('.recap-grid > *').length, inView, pct: document.getElementById('recap-pct').textContent
+                };
+            });
+            assert.ok(rows.header, 'en-tête sur plusieurs lignes');
+            assert.ok(rows.filtres, 'Agent et Mois pas sur la même ligne');
+            assert.ok(rows.onglets, 'onglets sur plusieurs lignes');
+            assert.strictEqual(rows.kpi, 5);
+            assert.ok(rows.inView, 'élément hors écran');
+            assert.match(rows.pct, /^\d+,\d % encaissé$/);
+        });
         await check(`mobile ${width}px : actions sur une seule ligne, sans débordement de la carte`, async () => {
             await page.click('#chip-non-releves');
             await page.waitForFunction(() => document.querySelectorAll('#releves-list .bg-non-releve').length > 0);
@@ -217,6 +234,7 @@ async function main() {
             assert.ok(labels.includes('Relever') && labels.includes('Relevé'), labels.join('|'));
         });
         if (width === 360) await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + '/liste-360.png' : '/tmp/liste-360.png' });
+        if (width === 360) { await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: (process.env.SHOT_DIR || '/tmp') + '/haut-360.png' }); }
         await check(`mobile ${width}px : aucune erreur JavaScript`, () => assert.deepStrictEqual(errors, []));
         await ctx.close();
     }

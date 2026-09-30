@@ -429,3 +429,62 @@ body {
     .citem-actions button, .citem-actions a { font-size: .72rem; }
 }
 .citem-note { font-size: .74rem; }
+
+/* ═════════ v8 : tableau de bord mobile premium, compact ═════════ */
+.container { padding: 10px 12px 4px; }
+
+/* En-tête : retour + logo + titre + PDF/CSV sur une seule ligne */
+.header { padding: 2px 0 10px; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.header .btn-back { flex: none; width: 34px; height: 34px; padding: 0; margin: 0; justify-content: center; border-radius: 12px; }
+.header-logo { width: 30px; height: 30px; flex: none; }
+.header-titles { flex: 1 1 auto; min-width: 0; line-height: 1.15; }
+.header-titles small { display: block; color: var(--text-sub); font-weight: 600; font-size: .68rem; }
+.header-titles h2 { margin: 0; font-size: 1.02rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-actions { flex: none; gap: 6px; flex-wrap: nowrap; }
+.btn-export { padding: 7px 10px; border-radius: 12px; font-size: .74rem; white-space: nowrap; }
+.btn-export i { margin-right: 3px; }
+@media (max-width: 340px) { .btn-export i { display: none; } .header-logo { display: none; } }
+
+/* Agent + Mois sur une ligne */
+.filters-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 10px; }
+.filters-line .select-wrapper { margin: 0; min-width: 0; }
+.filters-line #agent-spinner, .filters-line select { appearance: none; -webkit-appearance: none; width: 100%; min-width: 0; padding: 10px 30px 10px 12px; font-size: .84rem; font-weight: 600; color: var(--text-main); background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, .05); outline: none; text-overflow: ellipsis; }
+.filters-line .select-wrapper::after { right: 12px; font-size: .75rem; }
+
+/* Bandeau Archive fin */
+#archive-banner { padding: 6px 12px; margin-bottom: 10px; border-radius: 12px; font-size: .74rem; gap: 8px; }
+
+/* Carte Bilan */
+.recap-card { padding: 12px 14px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); }
+.recap-title { font-size: .72rem; margin-bottom: 6px; }
+.recap-row { gap: 10px; }
+.recap-lbl { font-size: .62rem; }
+.recap-val { font-size: 1.12rem; margin-top: 1px; line-height: 1.15; }
+.trend-indicator { font-size: .7rem; margin-top: 2px; }
+.recap-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 10px; padding-top: 8px; }
+.recap-mini-val { font-size: .74rem; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
+.recap-mini .recap-lbl { font-size: .62rem; letter-spacing: 0; text-transform: none; line-height: 1.15; }
+@media (max-width: 419px) { .recap-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; } .recap-mini-val { font-size: .8rem; } .recap-mini .recap-lbl { font-size: .64rem; } }
+.recap-source { font-size: .64rem; margin-top: 4px; }
+.recap-barline { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.recap-barline .recap-bar-bg { flex: 1; min-width: 0; height: 8px; margin: 0; }
+.recap-barline .recap-pct { flex: none; font-size: .74rem; font-weight: 800; color: var(--text-main); }
+.recap-story { font-size: .8rem; margin: 6px 0 0; }
+
+/* Classement consommation compact */
+.quartiers-card { padding: 10px 14px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); }
+.card-title-soft { font-size: .8rem; margin-bottom: 4px; }
+.quartier-row { gap: 10px; padding: 4px 0; }
+.quartier-name { font-size: .8rem; margin-bottom: 3px; }
+.quartier-bar-bg { height: 5px; }
+.quartier-val { font-size: .76rem; }
+#top-quartiers .quartier-rank { width: 22px; height: 22px; font-size: .68rem; flex: none; }
+
+/* Navigation secondaire : segmented control */
+.tabs { display: flex; flex-wrap: nowrap; gap: 2px; padding: 3px; margin-bottom: 10px; border-radius: 14px; background: rgba(100, 116, 139, .12); border: 0; }
+.tab-btn { flex: 1 1 0; min-width: 0; padding: 8px 2px; border-radius: 11px; font-size: .74rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-btn i { margin-right: 3px; font-size: .72rem; }
+.tab-btn.active { box-shadow: 0 1px 4px rgba(0, 82, 254, .3); }
+@media (max-width: 340px) { .tab-btn i { display: none; } }
+
+#releves-progress-card { padding: 10px 14px !important; margin-bottom: 10px !important; border-radius: 16px !important; }

@@ -601,7 +601,7 @@ window.applyFilter = function() {
     document.getElementById('total-money').innerText = F(fig.encaisse);
     document.getElementById('total-debt').innerText = F(aReclamer);
     setTxt('rc-facture', F(fig.facture));
-    setTxt('rc-facture-lbl', fig.previsionnel ? 'Facturé (prévisionnel)' : 'Facturé');
+    setTxt('rc-facture-lbl', fig.previsionnel ? 'Facturé (prév.)' : 'Facturé');
     setTxt('rc-arrieres', F(fig.arrieres));
     setTxt('rc-avances', F(fig.avances));
     setTxt('rc-ajust', (fig.ajustements > 0 ? '+' : '') + F(fig.ajustements));
@@ -624,7 +624,7 @@ window.applyFilter = function() {
             : '🎉 Rien à réclamer !';
     }
     const recapPctEl = document.getElementById('recap-pct');
-    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1) + ' % encaissé';
+    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1).replace('.', ',') + ' % encaissé';
 
     // Tendances : même définition pour la période précédente (sinon comparaison trompeuse).
     const calcTrend = (current, prev, elId, goodWhenUp) => {
