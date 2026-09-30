@@ -98,7 +98,7 @@ async function newPage(browser, role, tree, opts) {
     await page.addInitScript((t) => { window.__DB = { tree: t, reads: [], writes: [], listeners: [], delays: {}, failReads: [], denyWrites: false }; }, tree);
     await page.route('**/*', async (route) => {
         const url = route.request().url();
-        if (url.startsWith('http://127.0.0.1')) return route.continue();
+        if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return route.continue();
         if (/firebase-app\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_APP });
         if (/firebase-auth\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_AUTH });
         if (/firebase-database\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_DB });
@@ -363,6 +363,190 @@ async function main() {
                 assert.strictEqual(B['2026-05'].donnees.c1.status, 'impaye', 'anomalie jamais réglée automatiquement');
             });
             await page.context().close();
+        }
+    }
+
+
+    // ══════════ VERROUILLAGE BIOMÉTRIQUE (WebAuthn, authentificateur virtuel Chromium) ══════════
+    console.log('Verrouillage biométrique');
+    {
+        const local = base.replace('127.0.0.1', 'localhost');     // un rpId WebAuthn ne peut pas être une adresse IP
+        const openHome = async (opts) => {
+            opts = opts || {};
+            const r = await newPage(browser, 'président', seed());
+            let cdp = null, authId = null;
+            if (opts.authenticator !== false) {
+                cdp = await r.ctx.newCDPSession(r.page);
+                await cdp.send('WebAuthn.enable');
+                const a = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+                    protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+                    isUserVerified: true, automaticPresenceSimulation: true } });
+                authId = a.authenticatorId;
+            }
+            await r.page.addInitScript(() => {
+                try {
+                    if (sessionStorage.getItem('__force_stale')) {
+                        sessionStorage.setItem('asufor_bio_active', String(Date.now() - 10 * 60 * 1000));
+                        sessionStorage.removeItem('__force_stale');
+                    }
+                } catch (e) { /* ignoré */ }
+            });
+            await r.page.goto(local + '/home/accueil.html');
+            return Object.assign(r, { cdp, authId });
+        };
+        const setVerified = (r, v) => r.cdp.send('WebAuthn.setUserVerified', { authenticatorId: r.authId, isUserVerified: v });
+        const lsHas = (page, k) => page.evaluate((key) => localStorage.getItem(key) !== null, k);
+        // Absence prolongée simulée AU PROCHAIN chargement (au déchargement, pagehide rafraîchit l'activité :
+        // c'est voulu — naviguer entre pages ne reverrouille pas — donc on impose la péremption après coup).
+        const makeStale = (page) => page.evaluate(() => sessionStorage.setItem('__force_stale', '1'));
+
+        {
+            const r = await openHome();
+            const { page, errors } = r;
+            await check('appareil compatible : proposition d\'activation à la première visite', async () => {
+                await page.waitForSelector('#asufor-bio-offer', { timeout: 8000 });
+                assert.match(await page.textContent('#asufor-bio-offer'), /Protéger l'application/);
+            });
+            await check('activer : identifiant créé, contrôle réussi, ligne « Activé »', async () => {
+                await page.click('#asufor-bio-offer .bo-yes');
+                await page.waitForFunction(() => !document.getElementById('asufor-bio-offer'), null, { timeout: 8000 });
+                assert.ok(await lsHas(page, 'asufor_bio_v1'));
+                const rec = JSON.parse(await page.evaluate(() => localStorage.getItem('asufor_bio_v1')));
+                assert.strictEqual(rec.rpId, 'localhost');
+                assert.ok([-7, -257].includes(rec.alg));
+                assert.strictEqual(rec.email, 'x@asufor.local');
+                assert.strictEqual(await page.textContent('#bio-state'), 'Activé');
+                assert.ok(await page.isVisible('#btn-biometric'));
+            });
+            await check('rechargement juste après usage : pas de verrou (utilisateur actif)', async () => {
+                await page.reload();
+                await page.waitForSelector('#btn-biometric');
+                assert.strictEqual(await page.$('#asufor-lock'), null);
+            });
+            await check('absence prolongée : page masquée + écran de verrouillage ; déverrouillage automatique par biométrie', async () => {
+                await makeStale(page);
+                await page.reload();
+                // au premier instant : verrouillé et contenu masqué
+                await page.waitForSelector('#asufor-lock', { state: 'attached', timeout: 8000 });
+                // l'invite biométrique (virtuelle, vérifiée) se déclenche seule → verrou levé
+                await page.waitForFunction(() => !document.getElementById('asufor-lock') && !document.documentElement.classList.contains('asufor-locked'), null, { timeout: 8000 });
+                assert.strictEqual(await page.evaluate(() => document.body.inert), false);
+            });
+            await check('biométrie REFUSÉE (utilisateur non vérifié) : la page reste verrouillée et masquée', async () => {
+                await setVerified(r, false);
+                await makeStale(page);
+                await page.reload();
+                await page.waitForSelector('#asufor-lock', { timeout: 8000 });
+                await page.waitForFunction(() => document.querySelector('#asufor-lock .msg').textContent.length > 0, null, { timeout: 8000 });
+                assert.ok(await page.evaluate(() => document.documentElement.classList.contains('asufor-locked')));
+                assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).visibility), 'hidden');
+                assert.strictEqual(await page.evaluate(() => document.body.inert), true);
+                assert.ok(await page.isVisible('#asufor-lock'));
+            });
+            await check('bouton « Déverrouiller » : réussit dès que l\'utilisateur est vérifié', async () => {
+                await setVerified(r, true);
+                await page.click('#asufor-lock .primary');
+                await page.waitForFunction(() => !document.getElementById('asufor-lock'), null, { timeout: 8000 });
+                assert.ok(await page.isVisible('#btn-biometric'));
+            });
+            await check('clé publique enregistrée remplacée (falsification) : signature refusée, reste verrouillé', async () => {
+                await page.evaluate(async () => {
+                    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+                    const spki = new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey));
+                    let s = ''; spki.forEach(b => s += String.fromCharCode(b));
+                    const rec = JSON.parse(localStorage.getItem('asufor_bio_v1'));
+                    rec.publicKey = btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    rec.alg = -7;
+                    localStorage.setItem('asufor_bio_v1', JSON.stringify(rec));
+                    sessionStorage.setItem('__force_stale', '1');
+                });
+                await page.reload();
+                await page.waitForSelector('#asufor-lock', { timeout: 8000 });
+                await page.waitForFunction(() => /refusée|Réessayez/.test(document.querySelector('#asufor-lock .msg').textContent), null, { timeout: 8000 });
+                assert.ok(await page.evaluate(() => document.documentElement.classList.contains('asufor-locked')));
+            });
+            await check('« Se déconnecter » depuis l\'écran de verrouillage : session effacée, retour à la connexion', async () => {
+                // (le script d'initialisation du test recrée la session à chaque page : on observe donc l'effacement lui-même)
+                await page.evaluate(() => {
+                    const orig = Storage.prototype.removeItem;
+                    Storage.prototype.removeItem = function (k) { if (k === 'asufor_session') sessionStorage.setItem('__session_removed', '1'); return orig.apply(this, arguments); };
+                });
+                await page.click('#asufor-lock .link');
+                await page.waitForURL(/index\.html/, { timeout: 8000 });
+                assert.strictEqual(await page.evaluate(() => sessionStorage.getItem('__session_removed')), '1');
+            });
+            await check('aucune erreur JavaScript (biométrie)', () => assert.deepStrictEqual(errors.filter(e => !/NotAllowed|Verification|Vérification|firebase-config/i.test(e)), []));
+            await page.context().close();
+        }
+        {
+            const r = await openHome();
+            const { page } = r;
+            await page.waitForSelector('#asufor-bio-offer', { timeout: 8000 });
+            await page.click('#asufor-bio-offer .bo-yes');
+            await page.waitForFunction(() => !document.getElementById('asufor-bio-offer'), null, { timeout: 8000 });
+            await check('désactiver : exige une vérification réussie puis retire le verrou', async () => {
+                await page.click('#btn-biometric');
+                await page.waitForFunction(() => document.getElementById('bio-state').textContent === 'Désactivé', null, { timeout: 8000 });
+                assert.strictEqual(await lsHas(page, 'asufor_bio_v1'), false);
+            });
+            await check('désactiver avec biométrie refusée : le verrou reste actif', async () => {
+                await page.click('#btn-biometric');                    // réactive (proposition « Activer » manuelle)
+                await page.waitForFunction(() => document.getElementById('bio-state').textContent === 'Activé', null, { timeout: 8000 });
+                await setVerified(r, false);
+                await page.click('#btn-biometric');                    // demande de désactivation → vérification échoue
+                await page.waitForTimeout(1500);
+                assert.strictEqual(await lsHas(page, 'asufor_bio_v1'), true);
+                assert.strictEqual(await page.textContent('#bio-state'), 'Activé');
+            });
+            await check('identifiant d\'un AUTRE compte : effacé, aucun verrou étranger', async () => {
+                await page.evaluate(() => {
+                    const rec = JSON.parse(localStorage.getItem('asufor_bio_v1')); rec.email = 'autre@asufor.local';
+                    localStorage.setItem('asufor_bio_v1', JSON.stringify(rec));
+                    sessionStorage.setItem('__force_stale', '1');
+                });
+                await page.reload();
+                await page.waitForSelector('#btn-biometric', { state: 'attached' });
+                assert.strictEqual(await page.$('#asufor-lock'), null);
+                assert.strictEqual(await lsHas(page, 'asufor_bio_v1'), false);
+            });
+            await page.context().close();
+        }
+        {
+            const r = await openHome();
+            await r.page.waitForSelector('#asufor-bio-offer', { timeout: 8000 });
+            await r.page.click('#asufor-bio-offer .bo-never');
+            await check('« Ne plus demander » : la proposition ne réapparaît plus', async () => {
+                await r.page.reload();
+                await r.page.waitForSelector('#btn-biometric', { state: 'attached' });
+                await r.page.waitForTimeout(800);
+                assert.strictEqual(await r.page.$('#asufor-bio-offer'), null);
+            });
+            await r.page.context().close();
+        }
+        {
+            const r = await openHome({ authenticator: false });
+            await r.page.waitForTimeout(800);
+            await check('appareil sans biométrie/verrouillage d\'écran : ni proposition ni ligne de réglage', async () => {
+                assert.strictEqual(await r.page.$('#asufor-bio-offer'), null);
+                assert.strictEqual(await r.page.isVisible('#btn-biometric'), false);
+                assert.strictEqual(await r.page.$('#asufor-lock'), null);
+            });
+            await r.page.context().close();
+        }
+        {
+            // le verrou protège TOUTES les pages protégées (via checkAccess), pas seulement l'accueil
+            const r = await openHome();
+            await r.page.waitForSelector('#asufor-bio-offer', { timeout: 8000 });
+            await r.page.click('#asufor-bio-offer .bo-yes');
+            await r.page.waitForFunction(() => !document.getElementById('asufor-bio-offer'), null, { timeout: 8000 });
+            await setVerified(r, false);
+            await makeStale(r.page);
+            await check('page Statistiques : verrouillée aussi après une absence prolongée', async () => {
+                await r.page.goto(local + '/statistiques/stats.html');
+                await r.page.waitForSelector('#asufor-lock', { state: 'attached', timeout: 8000 });
+                assert.ok(await r.page.evaluate(() => document.documentElement.classList.contains('asufor-locked')));
+            });
+            await r.page.context().close();
         }
     }
 

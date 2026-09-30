@@ -27,6 +27,7 @@
     <script src="admin-config.js"></script>
     <script src="forage-context.js"></script>
     <!-- ✅ window.clearAppCacheAndReload : filet de secours si la connexion reste bloquée -->
+    <script src="biometric.js"></script>
     <script src="security.js"></script>
 
     <style>
@@ -789,6 +790,8 @@
                 } catch(e) {
                     console.error('Impossible de sauvegarder la session :', e);
                 }
+                // Le PIN vient d'être vérifié : pas de verrou biométrique immédiat sur la page suivante.
+                if (window.AsuforBio) { try { window.AsuforBio.markUnlocked(); } catch (_) {} }
                 spinnerEl.hidden = true;
                 statusEl.textContent = "Accès autorisé ✓";
                 statusEl.className = "status-success";
