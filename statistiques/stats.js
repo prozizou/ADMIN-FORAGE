@@ -199,6 +199,62 @@ window.annulerEncaissement = async function(key) {
     });
 };
 
+// Remet un mois ARCHIVÉ « Payé » en « Non payé » (président). Deux cas :
+//  • le mois est marqué payé dans l'archive mais n'a aucun encaissement enregistré : le statut de l'archive
+//    repasse à « impaye » ET la facture correspondante est créée dans le grand livre (Compta.buildArchiveCorrectionOps,
+//    source « correction_releve », audit FACTURE_CREEE), dans UNE écriture atomique ;
+//  • la facture a été réglée par un vrai encaissement : on ne peut pas la « dé-payer » isolément, on ouvre
+//    « Annuler encaissement » (contre-écriture tracée du paiement concerné).
+window.marquerNonPaye = function(key) {
+    if (!isArchiveView || !ComptaUI.isPresident()) return;
+    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    if (!ComptaUI.isMigrated()) { showToast("⚠️ Migration comptable requise (président).", true); return; }
+    const cycle = currentSelection;
+    const row = storeReleves[key] || {};
+    const St = ComptaUI.getState();
+    const f = St.factures[Compta.factureId(cycle, key)];
+    if (f) {
+        const fs = Compta.factureState(St, f);
+        if (fs.annulee) { showToast("Cette facture est annulée : rien à remettre en non payé.", true); return; }
+        if (fs.montant_paye > 0) {
+            showToast("Ce mois a été réglé par un encaissement enregistré : utilisez « Annuler encaissement ».", true);
+            window.annulerEncaissement(key);
+            return;
+        }
+    }
+    const m = ComptaUI.modal(`<h3>Remettre en « non payé »</h3>
+        <p class="cui-sub">${escHtml(row.name || '')} — ${monthLabelFR(cycle)}. Le mois sera marqué impayé et la facture correspondante sera créée dans la comptabilité (dette due, tracée).</p>
+        <label for="cui-np-motif">Motif (obligatoire)</label>
+        <textarea id="cui-np-motif" rows="2" maxlength="300" placeholder="ex. paiement jamais reçu"></textarea>
+        <div class="cui-err" id="cui-np-err" role="alert"></div>
+        <div class="cui-act"><button type="button" class="cui-ghost" id="cui-np-no">Retour</button><button type="button" class="cui-primary" id="cui-np-yes">Marquer non payé</button></div>`);
+    m.q('#cui-np-no').addEventListener('click', m.close);
+    m.q('#cui-np-yes').addEventListener('click', () => {
+        const motif = m.q('#cui-np-motif').value.trim();
+        if (motif.length < 3) { m.q('#cui-np-err').textContent = 'Le motif est obligatoire (3 caractères minimum).'; return; }
+        const btn = m.q('#cui-np-yes'); btn.disabled = true; m.q('#cui-np-err').textContent = '';
+        const rowPath = `${P.backup}/${cycle}/donnees/${key}`;
+        const newRecord = { ...row, status: 'impaye', statut: false, date_paiement: null };
+        ComptaUI.run((S2, base) => {
+            const c = Compta.buildArchiveCorrectionOps(S2, { ...base, cycle, compteurId: key, newRecord, motif });
+            const upd = {
+                [`${rowPath}/status`]: 'impaye', [`${rowPath}/statut`]: false, [`${rowPath}/date_paiement`]: null,
+                [`${rowPath}/last_modified_by`]: currentUser, [`${rowPath}/last_modified_at`]: base.now,
+                [`${rowPath}/correction_motif`]: motif
+            };
+            return { updates: Object.assign({}, upd, c.updates), correction: c };
+        }).then((r) => {
+            patchBackupCache(cycle, key, { status: 'impaye', statut: false, date_paiement: null });
+            // affichage immédiat (les écoutes Firebase confirment ensuite : opération idempotente)
+            if (storeReleves[key]) { storeReleves[key] = { ...storeReleves[key], status: 'impaye', statut: false }; delete storeReleves[key].date_paiement; }
+            const c = r && r.correction;
+            m.close();
+            showToast('✅ Mois remis en non payé' + (c && c.action === 'facture' ? ` — dette de ${c.ecart.toLocaleString()} F créée.` : '.'));
+            window.applyFilter();
+        }, (err) => { btn.disabled = false; m.q('#cui-np-err').textContent = err.message || String(err); });
+    });
+};
+
 window.openReleve = function(key) {
     window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}`;
 };
@@ -880,7 +936,7 @@ function updateRelevesProgress() {
 function comptaButtons(item, due) {
     // ✅ v8 : Encaisser et Annuler restent disponibles en archive (mois passé) — payer une vieille dette
     // ou corriger un paiement mal saisi ne dépend pas du mois affiché à l'écran.
-    const canPay = ComptaUI.canCollect() && due > 0;
+    const canPay = ComptaUI.canCollect() && due > 0 && !item.estSolde;
     const ready = ledgerReady && backupsLoaded && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
@@ -890,7 +946,11 @@ function comptaButtons(item, due) {
     // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
     const canCancelPay = ComptaUI.isPresident() && item.hasValidPayment;
     const cancel = canCancelPay ? `<button class="btn-cancel-pay" onclick="annulerEncaissement('${item.key}')" ${lock} title="Annuler un encaissement saisi par erreur (président)"><i class="fa-solid fa-rotate-left"></i><span>Annuler</span></button>` : '';
-    return pay + rel + cancel;
+    // ✅ v8 : une archive marquée « Payé » (ancien statut, sans encaissement enregistré) peut être remise
+    // « Non payé » par le président : la dette réapparaît dans le grand livre (facture tracée).
+    const canUnpay = isArchiveView && ComptaUI.isPresident() && item.estSolde && item.factureStatut !== 'annulee';
+    const unpay = canUnpay ? `<button class="btn-unpay" onclick="marquerNonPaye('${item.key}')" ${lock} title="Remettre ce mois en « non payé » (président)"><i class="fa-solid fa-rotate-left"></i><span>Non payé</span></button>` : '';
+    return pay + rel + cancel + unpay;
 }
 
 function renderList() {

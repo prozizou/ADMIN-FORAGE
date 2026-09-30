@@ -100,6 +100,12 @@ Un mois clôturé reste modifiable, chaque correction restant tracée :
   factures ouvertes les plus anciennes. Le relevé utilisé pour la facture provisoire du mois en cours et
   pour le statut payé/impayé du compteur est toujours le relevé RÉELLEMENT en cours (relu depuis
   `compteurs/{id}` si une archive est affichée), jamais celui de l'archive à l'écran.
+- **Mois archivé marqué « Payé » à remettre en « Non payé »** (président) : bouton « Non payé » sur la
+  carte d'archive. Si le mois n'a aucun encaissement enregistré (ancien statut), l'archive repasse à
+  `impaye` et la facture correspondante est créée dans le grand livre (`Compta.buildArchiveCorrectionOps`,
+  source `correction_releve`, audit `FACTURE_CREEE`, motif obligatoire), en une seule écriture atomique :
+  la dette réapparaît dans les arriérés. Si la facture a été réglée par un vrai encaissement, on ne la
+  « dé-paie » pas isolément : « Annuler encaissement » s'ouvre (contre-écriture tracée du paiement).
 - **Remise, majoration, annulation d'une facture** : depuis le relevé de compte (bouton Ajustement),
   qui liste les factures de tous les mois, archivés compris.
 
