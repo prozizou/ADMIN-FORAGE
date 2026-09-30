@@ -5,7 +5,7 @@
   "description": "Scripts de maintenance ASUFOR (migration des arriérés, migration multi-forage)",
   "type": "commonjs",
   "scripts": {
-    "test": "node billing.test.js && node crypto.test.js && node integration.test.js && node v5.test.js",
+    "test": "node billing.test.js && node biometric.test.js && node crypto.test.js && node integration.test.js && node v5.test.js",
     "migrate-passcodes": "node migrate-passcodes.js --dry-run --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com",
     "migrate-passcodes-apply": "node migrate-passcodes.js --apply --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com",
     "migrate-auth": "node migrate-auth-passwords.js --dry-run --service-account ./serviceAccountKey.json --db-url https://asufor-67a06-default-rtdb.firebaseio.com --pins ./pins.json",

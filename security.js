@@ -171,6 +171,9 @@ window.clearAppCacheAndReload = async function (targetPath) {
     } finally {
         safeRemoveItem('asufor_session');
         safeRemoveItem('asufor_superadmin_forageKey');
+        // Réinitialisation complète : le verrouillage biométrique repart de zéro aussi.
+        safeRemoveItem('asufor_bio_v1');
+        safeRemoveItem('asufor_bio_declined');
         const dest = targetPath || getIndexPath();
         window.location.href = dest + (dest.indexOf('?') === -1 ? '?' : '&') + 'cachebust=' + Date.now();
     }
@@ -257,6 +260,12 @@ window.checkAccess = function (authorizedRoles = []) {
         const homePath = getIndexPath().replace('index.html', 'home/accueil.html');
         window.location.replace(homePath);
         return null;
+    }
+
+    // ✅ Verrouillage biométrique (biometric.js, si chargé et activé sur cet appareil) : la page reste
+    // masquée derrière un écran de verrouillage tant que l'utilisateur n'a pas été vérifié.
+    if (window.AsuforBio && typeof window.AsuforBio.guard === 'function') {
+        try { window.AsuforBio.guard(session); } catch (e) { console.warn('[ASUFOR] Verrou biométrique :', e); }
     }
 
     return session;

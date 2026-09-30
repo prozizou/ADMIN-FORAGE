@@ -41,7 +41,7 @@ Les règles et le site sont compatibles dans les deux sens sauf : sans les nouve
 ```bash
 cd scripts && node billing.test.js            # moteur de calcul (44 tests)
 cd scripts/rules-test && npm install && npm test   # règles sur le Firebase Emulator (34 tests)
-cd scripts/smoke && npm install && npm test        # pages dans Chromium, Firebase simulé (21 vérifications)
+cd scripts/smoke && npm install && npm test        # pages dans Chromium, Firebase simulé (36 vérifications)
 ```
 
 `RULES_FILE=/chemin/ancien.rules.json` rejoue la suite de règles contre une autre version (sur les règles d'avant, 15 tests échouent : ils détectent bien les défauts corrigés).
