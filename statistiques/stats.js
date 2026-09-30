@@ -118,6 +118,24 @@ window.setReleveFilter = function(value) {
     window.applyFilter();
 };
 
+// Puces de filtre (Tous / À relever / Relevés) : mêmes valeurs que l'ancien sélecteur, aucune logique changée.
+window.setReleveChip = function(value) {
+    ['all', 'non-releves', 'releves'].forEach(v => {
+        const el = document.getElementById('chip-' + v);
+        if (el) el.classList.toggle('active', v === value);
+    });
+    window.setReleveFilter(value);
+};
+
+window.toggleSort = function() {
+    const sel = document.getElementById('sort-spinner');
+    const btn = document.getElementById('chip-sort');
+    const open = sel.style.display === 'none';
+    sel.style.display = open ? 'block' : 'none';
+    btn.classList.toggle('active', open);
+    btn.setAttribute('aria-expanded', String(open));
+};
+
 window.loadMore = function() {
     displayLimit += 100;
     renderList();
@@ -755,8 +773,8 @@ function comptaButtons(item, due) {
     const canPay = !isArchiveView && ComptaUI.canCollect() && due > 0;
     const ready = ledgerReady && backupsLoaded && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
-    const pay = canPay ? `<button class="btn-paye" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i> Encaisser</button>` : '';
-    const rel = `<button class="btn-edit" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i> Relevé</button>`;
+    const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
+    const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
     return pay + rel;
 }
 
@@ -800,9 +818,9 @@ function renderList() {
         if (isNotRead) {
             const arriere = item.arriere || 0;
             const arriereNote = (arriere > 0
-                ? `<div style="color:var(--danger);font-weight:700;">Arriérés dus : ${arriere.toLocaleString()} F</div>`
+                ? `<div class="citem-band band-danger"><i class="fa-solid fa-circle-exclamation"></i>Arriérés : <b>${arriere.toLocaleString()} F</b></div>`
                 : '') + ((item.avance || 0) > 0
-                ? `<div style="color:var(--success);font-weight:700;">Avance disponible : ${item.avance.toLocaleString()} F</div>`
+                ? `<div class="citem-band band-ok"><i class="fa-solid fa-circle-check"></i>Avance : <b>${item.avance.toLocaleString()} F</b></div>`
                 : '');
             // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
             // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
@@ -810,7 +828,7 @@ function renderList() {
             // archive ; on ne retire pas cette possibilité, on la met juste
             // en avant plutôt que l'appel, qui n'est qu'un moyen d'y arriver.
             const editOrLock = isPresident()
-                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i> Saisir le relevé</button>`
+                ? `<button class="btn-relever" onclick="openEditModal('${item.key}')" title="Saisir le relevé"><i class="fa-solid fa-pen-to-square"></i><span>Relever</span></button>`
                 : (isArchiveView ? `<span class="archive-lock" title="Archive : lecture seule"><i class="fa-solid fa-lock"></i></span>` : '');
             // ✅ Appel de l'agent en charge, en action SECONDAIRE (contour,
             // pas un pavé plein) : numéro figé sur le relevé en priorité
@@ -826,10 +844,10 @@ function renderList() {
             const agentTel = agentTelRaw.replace(/[^0-9+]/g, '');
             const agentName = String(item.agent_name || agentInfo.agent || '').trim();
             const agentLine = agentName
-                ? `<div class="citem-agent"><i class="fa-solid fa-user"></i>Agent : ${esc(agentName)}</div>`
+                ? `<span class="citem-agent"><i class="fa-solid fa-user"></i>${esc(agentName)}</span>`
                 : '';
             const callBtn = agentTel
-                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i> Appeler</a>`
+                ? `<a class="btn-call" href="tel:${esc(agentTel)}" title="Appeler ${esc(agentName || "l'agent")} pour ce compteur non relevé"><i class="fa-solid fa-phone"></i><span>Appeler</span></a>`
                 : '';
             div.className = 'item bg-non-releve';
             div.innerHTML = `
@@ -839,12 +857,12 @@ function renderList() {
                 </div>
                 <div class="citem-sub">
                     <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
-                    <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
-                    <span><i class="fa-solid fa-droplet"></i>Dernier index : ${lIdx} m³</span>
+                    <span><i class="fa-solid fa-gauge"></i>n°${esc(item.numero_compteur || 'N/A')}</span>
+                    <span><i class="fa-solid fa-droplet"></i>Index ${lIdx} m³</span>
+                    ${agentLine}
                 </div>
                 ${arriereNote}
                 ${noteHtml}
-                ${agentLine}
                 <div class="citem-actions">${editOrLock}${callBtn}${comptaButtons(item, item.totalDu || 0)}</div>
             `;
             listDiv.appendChild(div);
