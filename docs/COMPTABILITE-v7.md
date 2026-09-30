@@ -82,6 +82,11 @@ indicateur d'affichage : le moteur l'écrit après chaque opération.
 | Clôture, migration | ✔ | ✘ | ✘ |
 | Supprimer quoi que ce soit | ✘ | ✘ | ✘ |
 
+L'annulation d'un paiement (correction d'une saisie erronée) est accessible aussi bien depuis le relevé
+de compte que depuis un bouton dédié dans Statistiques, sur la carte du client concerné — les deux
+appellent `Compta.buildPaymentCancelOps` et n'affichent le bouton que s'il existe au moins un paiement
+valide à annuler.
+
 Les règles Firebase imposent ces droits en plus de l'interface :
 - création seule (`!data.exists()`) sur les paiements, les affectations et l'audit ;
 - champs immuables sur les factures et les paiements ;

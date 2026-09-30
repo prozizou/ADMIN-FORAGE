@@ -307,6 +307,69 @@
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Annulation d'un encaissement (correction, président uniquement)
+    // ─────────────────────────────────────────────────────────────
+    /**
+     * @param {object} o - { compteurId, client, numero, onDone(result) }
+     * Réutilise Compta.buildPaymentCancelOps() : aucune logique comptable propre à l'UI.
+     * Le paiement n'est jamais supprimé (statut « annule » + motif tracé, audit PAIEMENT_ANNULE).
+     */
+    function openPaymentCancelDialog(o) {
+        if (!isPresident()) { alert("Seul le président peut annuler un encaissement."); return; }
+        var S0 = getState();
+        var list = Object.keys(S0.paiements || {})
+            .map(function (id) { return S0.paiements[id]; })
+            .filter(function (p) { return p.compteur_id === o.compteurId && p.statut === 'valide'; })
+            .sort(function (a, b) { return String(b.date_paiement).localeCompare(String(a.date_paiement)); });
+        if (!list.length) { alert("Aucun paiement valide à annuler pour ce client."); return; }
+        var dt = function (iso) { return iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'; };
+        var rows = list.map(function (p, i) {
+            return '<label class="cui-cancel-row" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;' + (i ? 'border-top:1px solid var(--border,#e2e8f0)' : '') + '">' +
+                '<input type="radio" name="cui-pid" value="' + esc(p.paiement_id) + '" style="width:auto;margin-top:3px"' + (list.length === 1 ? ' checked' : '') + '>' +
+                '<span style="flex:1;font-size:.86rem">' +
+                '<b>' + fcfa(p.montant) + '</b> — ' + esc(C.MODES_LABEL[p.mode] || p.mode) + '<br>' +
+                '<span style="color:var(--text-sub,#64748b)">' + dt(p.date_paiement) + ' · reçu n°' + esc(p.numero_recu) + (p.reference ? ' · réf. ' + esc(p.reference) : '') + '</span>' +
+                '</span></label>';
+        }).join('');
+        var m = modal(
+            '<h3>Annuler un encaissement</h3>' +
+            '<p class="cui-sub">' + esc(o.client || '') + (o.numero ? ' — compteur n°' + esc(o.numero) : '') + '. Le paiement n\'est jamais supprimé : il est marqué annulé, ses factures rouvrent et l\'écart est tracé.</p>' +
+            '<div id="cui-cancel-list">' + rows + '</div>' +
+            '<label for="cui-motif">Motif de l\'annulation (obligatoire)</label>' +
+            '<textarea id="cui-motif" rows="2" maxlength="300" placeholder="ex. montant saisi par erreur"></textarea>' +
+            '<div class="cui-err" id="cui-err" role="alert"></div>' +
+            '<div class="cui-act"><button type="button" class="cui-ghost" id="cui-no">Retour</button>' +
+            '<button type="button" class="cui-primary" id="cui-yes" style="background:#b91c1c">Annuler ce paiement</button></div>'
+        );
+        m.q('#cui-no').addEventListener('click', m.close);
+        m.q('#cui-yes').addEventListener('click', function () {
+            var sel = m.el.querySelector('input[name="cui-pid"]:checked');
+            var motif = m.q('#cui-motif').value.trim();
+            m.q('#cui-err').textContent = '';
+            if (!sel) { m.q('#cui-err').textContent = 'Choisissez le paiement à annuler.'; return; }
+            if (motif.length < 3) { m.q('#cui-err').textContent = "Le motif est obligatoire (3 caractères minimum)."; return; }
+            var p = list.filter(function (x) { return x.paiement_id === sel.value; })[0];
+            if (!confirm('Confirmer l\'annulation du paiement de ' + fcfa(p.montant) + ' du ' + dt(p.date_paiement) + ' ?\n\nCette action est tracée mais ne peut pas être répétée sur ce même paiement.')) return;
+            var btn = m.q('#cui-yes');
+            btn.disabled = true;
+            run(function (S, base) {
+                return C.buildPaymentCancelOps(S, Object.assign({}, base, { paiementId: sel.value, motif: motif, releve: o.releve }));
+            }).then(function (r) {
+                var box = m.el.querySelector('.cui-box');
+                box.innerHTML = '<h3>✅ Paiement annulé</h3>' +
+                    '<p class="cui-sub">' + fcfa(p.montant) + ' — reçu n°' + esc(p.numero_recu) + '</p>' +
+                    '<p>Arriérés désormais dus : <b>' + fcfa(r.apres.arrieres) + '</b></p>' +
+                    '<div class="cui-act"><button type="button" class="cui-primary" id="cui-close2">Fermer</button></div>';
+                box.querySelector('#cui-close2').addEventListener('click', m.close);
+                if (o.onDone) o.onDone(r);
+            }, function (err) {
+                btn.disabled = false;
+                m.q('#cui-err').textContent = err.message || String(err);
+            });
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Migration comptable (président)
     // ─────────────────────────────────────────────────────────────
     function downloadJson(obj, name) {
@@ -382,7 +445,7 @@
         init: init, reload: reload, subscribe: subscribe, run: run, retry: retry, restart: restart, getStatus: getStatus,
         getState: getState, isReady: isReady, getMigration: getMigration, isMigrated: isMigrated,
         canCollect: canCollect, isPresident: isPresident, user: user, newId: newId,
-        openPaymentDialog: openPaymentDialog, openMigrationDialog: openMigrationDialog, migrationBanner: migrationBanner,
+        openPaymentDialog: openPaymentDialog, openPaymentCancelDialog: openPaymentCancelDialog, openMigrationDialog: openMigrationDialog, migrationBanner: migrationBanner,
         modal: modal, fcfa: fcfa, esc: esc, cycleLabel: cycleLabel, paths: function () { return paths; }
     };
 })(typeof window !== 'undefined' ? window : this);

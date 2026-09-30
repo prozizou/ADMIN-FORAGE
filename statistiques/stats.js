@@ -168,6 +168,19 @@ window.encaisser = function(key) {
     });
 };
 
+window.annulerEncaissement = function(key) {
+    if (isArchiveView) { showToast("🔒 Archive : les corrections de paiement se font depuis « Données actuelles ».", true); return; }
+    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    const item = storeReleves[key] || {};
+    ComptaUI.openPaymentCancelDialog({
+        compteurId: key,
+        releve: item,
+        client: item.name || '',
+        numero: item.numero_compteur || '',
+        onDone: () => { showToast("✅ Paiement annulé : arriérés et statistiques mis à jour."); window.applyFilter(); }
+    });
+};
+
 window.openReleve = function(key) {
     window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}`;
 };
@@ -585,6 +598,14 @@ window.applyFilter = function() {
         return isNameMatch || isCompteurMatch;
     });
 
+    // Compteurs ayant au moins un paiement valide (une seule passe, pas par carte) : conditionne le
+    // bouton « Annuler encaissement » (président uniquement, voir comptaButtons).
+    let compteursAvecPaiement = null;
+    if (ledgerMode) {
+        compteursAvecPaiement = new Set();
+        Object.values(S.paiements || {}).forEach(p => { if (p.statut === 'valide') compteursAvecPaiement.add(p.compteur_id); });
+    }
+
     // Montants de chaque carte : TOUJOURS via billing.js / compta.js (aucun calcul métier ici).
     filteredBase.forEach(item => {
         const cur = window.Billing.computeCurrent(item);
@@ -622,6 +643,7 @@ window.applyFilter = function() {
             item.estSolde = window.Billing.isPaid(item);
         }
         item.hasAnomalie = (parseFloat(item.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(item);
+        item.hasValidPayment = !!(compteursAvecPaiement && compteursAvecPaiement.has(item.key));
     });
 
     currentFilteredData = filteredBase.filter(item => {
@@ -842,7 +864,12 @@ function comptaButtons(item, due) {
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
     const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
-    return pay + rel;
+    // ✅ v8 : correction d'un paiement saisi par erreur — réservé au président, visible seulement si
+    // ce client a au moins un paiement valide. Toute la logique (contre-écriture, FIFO, audit) est
+    // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
+    const canCancelPay = !isArchiveView && ComptaUI.isPresident() && item.hasValidPayment;
+    const cancel = canCancelPay ? `<button class="btn-cancel-pay" onclick="annulerEncaissement('${item.key}')" ${lock} title="Annuler un encaissement saisi par erreur (président)"><i class="fa-solid fa-rotate-left"></i></button>` : '';
+    return pay + rel + cancel;
 }
 
 function renderList() {
