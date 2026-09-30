@@ -380,3 +380,111 @@ body {
     border-radius: 20px;
     margin-left: 6px;
 }
+
+/* ═════════ v8 : liste des relevés — mobile premium, compacte ═════════ */
+.list-section { padding: 16px 12px 20px; border-radius: 24px 24px 0 0; overflow-x: hidden; }
+.list-title { margin: 0 2px 10px; font-size: 1.15rem; font-weight: 800; color: var(--text-main); letter-spacing: -.01em; }
+
+.search-box { position: relative; display: flex; align-items: center; margin-bottom: 10px; }
+.search-box input { width: 100%; min-width: 0; padding: 11px 42px 11px 38px; border: 1px solid var(--border-color); border-radius: 16px; font-size: .9rem; outline: none; background: var(--bg); color: var(--text-main); }
+.search-box input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 82, 254, .12); }
+.search-ico { position: absolute; left: 13px; color: var(--text-sub); font-size: .85rem; pointer-events: none; }
+.search-mic { position: absolute; right: 6px; width: 34px; height: 34px; border: 0; background: none; border-radius: 50%; font-size: 1rem; cursor: pointer; color: var(--text-sub); }
+
+.chips { display: flex; gap: 6px; margin-bottom: 10px; }
+.chip { flex: 1 1 0; min-width: 0; padding: 8px 6px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-sub); border-radius: 999px; font-size: .8rem; font-weight: 700; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s, color .15s; }
+.chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.chip-sort i { margin-right: 4px; font-size: .75rem; }
+.sort-select { width: 100%; margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 14px; font-size: .85rem; background: var(--card-bg); color: var(--text-main); }
+
+.item { gap: 5px; padding: 10px 12px; border-radius: 16px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06); min-width: 0; max-width: 100%; }
+.citem-main { align-items: center; gap: 8px; }
+.citem-name { min-width: 0; font-size: .98rem; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.citem-main { align-items: flex-start; }
+.citem-amt { font-size: 1.05rem; }
+.status-pill { flex: none; font-size: .68rem; padding: 3px 9px; }
+.citem-sub { gap: 2px 12px; font-size: .78rem; line-height: 1.35; min-width: 0; }
+.citem-sub > span { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.citem-sub i, .citem-agent i { width: 13px; margin-right: 4px; font-size: .72rem; }
+.citem-agent { font-size: inherit; display: inline-flex; align-items: center; gap: 0; }
+
+.citem-band { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 10px; font-size: .8rem; font-weight: 600; }
+.citem-band i { font-size: .8rem; }
+.citem-band b { font-weight: 800; }
+.band-danger { background: rgba(239, 68, 68, .1); color: #b91c1c; }
+.band-ok { background: rgba(34, 197, 94, .12); color: #15803d; }
+
+/* Actions : une seule ligne, jamais de débordement */
+.citem-actions { flex-wrap: nowrap; gap: 6px; margin-top: 2px; min-width: 0; }
+.citem-actions > * { flex: 1 1 0; min-width: 0; }
+.citem-actions button, .citem-actions a { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 9px 4px; border-radius: 12px; font-size: .76rem; font-weight: 700; line-height: 1; white-space: nowrap; overflow: hidden; }
+.citem-actions button span, .citem-actions a span { overflow: hidden; text-overflow: ellipsis; }
+.citem-actions i { font-size: .78rem; flex: none; }
+.citem-actions .btn-relever, .citem-actions .btn-paye:not(.btn-sec) { background: var(--primary); color: #fff; border: 1px solid var(--primary); box-shadow: 0 2px 6px rgba(0, 82, 254, .25); }
+.citem-actions .btn-call { background: transparent; color: #15803d; border: 1px solid rgba(34, 197, 94, .55); }
+.citem-actions .btn-sec { background: rgba(0, 82, 254, .1); color: var(--primary); border: 1px solid rgba(0, 82, 254, .2); box-shadow: none; }
+.citem-actions .btn-ghost { background: transparent; color: var(--text-sub); border: 1px solid var(--border-color); font-weight: 600; }
+@media (max-width: 359px) {
+    .citem-actions button i, .citem-actions a i { display: none; }
+    .citem-actions button, .citem-actions a { font-size: .72rem; }
+}
+.citem-note { font-size: .74rem; }
+
+/* ═════════ v8 : tableau de bord mobile premium, compact ═════════ */
+.container { padding: 10px 12px 4px; }
+
+/* En-tête : retour + logo + titre + PDF/CSV sur une seule ligne */
+.header { padding: 2px 0 10px; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; }
+.header .btn-back { flex: none; width: 34px; height: 34px; padding: 0; margin: 0; justify-content: center; border-radius: 12px; }
+.header-logo { width: 30px; height: 30px; flex: none; }
+.header-titles { flex: 1 1 auto; min-width: 0; line-height: 1.15; }
+.header-titles small { display: block; color: var(--text-sub); font-weight: 600; font-size: .68rem; }
+.header-titles h2 { margin: 0; font-size: 1.02rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-actions { flex: none; gap: 6px; flex-wrap: nowrap; }
+.btn-export { padding: 7px 10px; border-radius: 12px; font-size: .74rem; white-space: nowrap; }
+.btn-export i { margin-right: 3px; }
+@media (max-width: 340px) { .btn-export i { display: none; } .header-logo { display: none; } }
+
+/* Agent + Mois sur une ligne */
+.filters-line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 10px; }
+.filters-line .select-wrapper { margin: 0; min-width: 0; }
+.filters-line #agent-spinner, .filters-line select { appearance: none; -webkit-appearance: none; width: 100%; min-width: 0; padding: 10px 30px 10px 12px; font-size: .84rem; font-weight: 600; color: var(--text-main); background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, .05); outline: none; text-overflow: ellipsis; }
+.filters-line .select-wrapper::after { right: 12px; font-size: .75rem; }
+
+/* Bandeau Archive fin */
+#archive-banner { padding: 6px 12px; margin-bottom: 10px; border-radius: 12px; font-size: .74rem; gap: 8px; }
+
+/* Carte Bilan */
+.recap-card { padding: 12px 14px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); }
+.recap-title { font-size: .72rem; margin-bottom: 6px; }
+.recap-row { gap: 10px; }
+.recap-lbl { font-size: .62rem; }
+.recap-val { font-size: 1.12rem; margin-top: 1px; line-height: 1.15; }
+.trend-indicator { font-size: .7rem; margin-top: 2px; }
+.recap-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin-top: 10px; padding-top: 8px; }
+.recap-mini-val { font-size: .74rem; margin-top: 1px; overflow-wrap: anywhere; line-height: 1.2; }
+.recap-mini .recap-lbl { font-size: .62rem; letter-spacing: 0; text-transform: none; line-height: 1.15; }
+@media (max-width: 419px) { .recap-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; } .recap-mini-val { font-size: .8rem; } .recap-mini .recap-lbl { font-size: .64rem; } }
+.recap-source { font-size: .64rem; margin-top: 4px; }
+.recap-barline { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.recap-barline .recap-bar-bg { flex: 1; min-width: 0; height: 8px; margin: 0; }
+.recap-barline .recap-pct { flex: none; font-size: .74rem; font-weight: 800; color: var(--text-main); }
+.recap-story { font-size: .8rem; margin: 6px 0 0; }
+
+/* Classement consommation compact */
+.quartiers-card { padding: 10px 14px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(15, 23, 42, .06); }
+.card-title-soft { font-size: .8rem; margin-bottom: 4px; }
+.quartier-row { gap: 10px; padding: 4px 0; }
+.quartier-name { font-size: .8rem; margin-bottom: 3px; }
+.quartier-bar-bg { height: 5px; }
+.quartier-val { font-size: .76rem; }
+#top-quartiers .quartier-rank { width: 22px; height: 22px; font-size: .68rem; flex: none; }
+
+/* Navigation secondaire : segmented control */
+.tabs { display: flex; flex-wrap: nowrap; gap: 2px; padding: 3px; margin-bottom: 10px; border-radius: 14px; background: rgba(100, 116, 139, .12); border: 0; }
+.tab-btn { flex: 1 1 0; min-width: 0; padding: 8px 2px; border-radius: 11px; font-size: .74rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-btn i { margin-right: 3px; font-size: .72rem; }
+.tab-btn.active { box-shadow: 0 1px 4px rgba(0, 82, 254, .3); }
+@media (max-width: 340px) { .tab-btn i { display: none; } }
+
+#releves-progress-card { padding: 10px 14px !important; margin-bottom: 10px !important; border-radius: 16px !important; }

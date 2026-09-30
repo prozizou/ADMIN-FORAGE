@@ -59,33 +59,33 @@
 
 <div class="main-layout">
     <div class="container">
-        <a href="../home/accueil.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Accueil</a>
         <div class="header">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <img src="../icons/logo.png" alt="" style="width:34px; height:34px; flex:none;">
-                <div>
-                    <small style="color: var(--text-sub); font-weight: 600;">Tableau de bord</small>
-                    <h2 id="forage-title" style="margin:0; font-size: 1.2rem;">Satigué Eau</h2>
-                </div>
+            <a href="../home/accueil.html" class="btn-back" aria-label="Retour à l'accueil" title="Accueil"><i class="fa-solid fa-arrow-left"></i></a>
+            <img src="../icons/logo.png" alt="" class="header-logo">
+            <div class="header-titles">
+                <small>Tableau de bord</small>
+                <h2 id="forage-title">Satigué Eau</h2>
             </div>
             <div class="header-actions">
-                <button class="btn-export" onclick="exportPDFImpayes()">
-                    <i class="fa-solid fa-file-pdf"></i> PDF Impayés
+                <button class="btn-export" onclick="exportPDFImpayes()" title="Exporter les impayés en PDF">
+                    <i class="fa-solid fa-file-pdf"></i> PDF
                 </button>
-                <button class="btn-export" onclick="exportCSV()">
+                <button class="btn-export" onclick="exportCSV()" title="Exporter en CSV">
                     <i class="fa-solid fa-file-excel"></i> CSV
                 </button>
             </div>
         </div>
 
-        <div class="select-wrapper">
-            <select id="agent-spinner" onchange="applyFilter()"></select>
-        </div>
+        <div class="filters-line">
+            <div class="select-wrapper">
+                <select id="agent-spinner" onchange="applyFilter()" title="Agent"></select>
+            </div>
 
-        <div class="filter-row">
-            <select id="month-filter" onchange="changeMonth()" title="Sélectionner la période">
-                <option value="actuel">Chargement des périodes...</option>
-            </select>
+            <div class="select-wrapper">
+                <select id="month-filter" onchange="changeMonth()" title="Sélectionner la période">
+                    <option value="actuel">Chargement des périodes...</option>
+                </select>
+            </div>
         </div>
 
         <!-- ✅ v2 : bandeau visible uniquement sur une période archivée —
@@ -126,9 +126,11 @@
                 <div class="recap-mini"><span class="recap-lbl">Problèmes</span><span class="recap-mini-val" id="rc-problemes">—</span></div>
             </div>
             <p class="recap-source" id="rc-source"></p>
-            <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
+            <div class="recap-barline">
+                <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
+                <div class="recap-pct" id="recap-pct">0 % encaissé</div>
+            </div>
             <p class="recap-story" id="recap-story">—</p>
-            <div class="recap-pct" id="recap-pct">0 % encaissé</div>
         </div>
 
         <!-- ✅ v4 : remplace le graphique en barres (noms de quartiers
@@ -164,43 +166,32 @@
     </div>
 
     <div class="list-section" id="scrollable-list">
-        <div class="filter-row">
-            <div style="position: relative; display: flex; flex: 1;">
-                <input
-                    type="text"
-                    id="search-client"
-                    placeholder="🔍 Rechercher client ou compteur..."
-                    oninput="applyFilter()"
-                    style="padding-right: 45px; width: 100%;"
-                >
-                <button
-                    id="btn-mic"
-                    onclick="startVoiceSearch()"
-                    title="Recherche vocale"
-                    style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text-sub);transition:0.3s;"
-                >
-                    <i class="fa-solid fa-microphone"></i>
-                </button>
-            </div>
+        <h3 class="list-title">Relevés de compteurs</h3>
+
+        <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass search-ico"></i>
+            <input type="text" id="search-client" placeholder="Rechercher un client ou un compteur" oninput="applyFilter()" autocomplete="off">
+            <button id="btn-mic" class="search-mic" onclick="startVoiceSearch()" title="Recherche vocale" aria-label="Recherche vocale">
+                <i class="fa-solid fa-microphone"></i>
+            </button>
         </div>
 
-        <div class="filter-row" style="margin-bottom: 20px;">
-            <select id="releve-filter" onchange="setReleveFilter(this.value)" title="Filtrer par statut de relevé">
-                <option value="all">Tous les relevés</option>
-                <option value="releves">Relevés uniquement</option>
-                <option value="non-releves">Non relevés uniquement</option>
-            </select>
-            <select id="sort-spinner" onchange="applyFilter()">
-                <option value="recent">Plus récent</option>
-                <option value="max_amount">Plus grand montant</option>
-                <option value="min_amount">Plus petit montant</option>
-                <option value="zone">Par Zone (A-Z)</option>
-                <option value="name">Par Nom (A-Z)</option>
-                <option value="compteur">Par N° Compteur</option>
-            </select>
+        <div class="chips" role="tablist" aria-label="Filtrer les relevés">
+            <button class="chip active" id="chip-all" onclick="setReleveChip('all')">Tous</button>
+            <button class="chip" id="chip-non-releves" onclick="setReleveChip('non-releves')">À relever</button>
+            <button class="chip" id="chip-releves" onclick="setReleveChip('releves')">Relevés</button>
+            <button class="chip chip-sort" id="chip-sort" onclick="toggleSort()" aria-expanded="false"><i class="fa-solid fa-arrow-down-wide-short"></i> Trier</button>
         </div>
+        <select id="sort-spinner" class="sort-select" onchange="applyFilter()" style="display:none;" title="Trier la liste">
+            <option value="recent">Plus récent</option>
+            <option value="max_amount">Plus grand montant</option>
+            <option value="min_amount">Plus petit montant</option>
+            <option value="zone">Par Zone (A-Z)</option>
+            <option value="name">Par Nom (A-Z)</option>
+            <option value="compteur">Par N° Compteur</option>
+        </select>
 
-        <div id="item-count" style="font-size:0.85rem;font-weight:bold;color:var(--text-sub);margin-bottom:10px;text-align:right;">
+        <div id="item-count" style="font-size:0.75rem;font-weight:700;color:var(--text-sub);margin:0 2px 8px;text-align:right;">
             0 élément(s)
         </div>
 

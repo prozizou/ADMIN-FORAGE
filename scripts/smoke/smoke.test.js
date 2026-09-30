@@ -180,6 +180,65 @@ async function main() {
         await page.context().close();
     }
 
+    // ══════════ STATISTIQUES v8 : liste des relevés, mobile strict ══════════
+    console.log('Statistiques — liste mobile');
+    for (const width of [320, 360, 390]) {
+        const t8 = migratedSeed();
+        t8.Asufor[FA].compteurs.c4 = rec({ name: 'Mamadou Abdoulaye Ndiaye Diallo', numero_compteur: '1204', zone: 'Quartier Médina Extension', last_index: '40', new_index: 0 });
+        t8.Asufor[FA].compteurs.c1.new_index = 0;                                          // Aminata : à relever, avec 6 000 F d'arriérés
+        const { page, errors, ctx } = await newPage(browser, 'président', t8);
+        await page.setViewportSize({ width, height: 780 });
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .btn-paye')].every(b => !b.disabled), null, { timeout: 8000 });
+        await check(`mobile ${width}px : titre, recherche, filtres, aucun scroll horizontal`, async () => {
+            assert.match(await page.textContent('.list-title'), /Relevés de compteurs/);
+            assert.deepStrictEqual(await page.$$eval('.chip', c => c.map(x => x.textContent.trim())), ['Tous', 'À relever', 'Relevés', 'Trier']);
+            const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+            assert.ok(over <= 0, 'scroll horizontal de ' + over + 'px');
+        });
+        await check(`mobile ${width}px : tableau de bord compact (en-tête, filtres, bilan, onglets sur une ligne)`, async () => {
+            const rows = await page.evaluate(() => {
+                const top = (sel) => [...document.querySelectorAll(sel)].map(e => Math.round(e.getBoundingClientRect().top));
+                const same = (a) => new Set(a).size === 1;
+                const inView = [...document.querySelectorAll('.header, .filters-line, .recap-card, .tabs, .recap-grid > *')].every(e => e.getBoundingClientRect().right <= window.innerWidth + 0.5);
+                return {
+                    header: document.querySelector('.header').getBoundingClientRect().height < 56, filtres: same(top('.filters-line select')), onglets: same(top('.tab-btn')),
+                    kpi: document.querySelectorAll('.recap-grid > *').length, inView, pct: document.getElementById('recap-pct').textContent
+                };
+            });
+            assert.ok(rows.header, 'en-tête sur plusieurs lignes');
+            assert.ok(rows.filtres, 'Agent et Mois pas sur la même ligne');
+            assert.ok(rows.onglets, 'onglets sur plusieurs lignes');
+            assert.strictEqual(rows.kpi, 5);
+            assert.ok(rows.inView, 'élément hors écran');
+            assert.match(rows.pct, /^\d+,\d % encaissé$/);
+        });
+        await check(`mobile ${width}px : actions sur une seule ligne, sans débordement de la carte`, async () => {
+            await page.click('#chip-non-releves');
+            await page.waitForFunction(() => document.querySelectorAll('#releves-list .bg-non-releve').length > 0);
+            const bad = await page.evaluate(() => [...document.querySelectorAll('#releves-list .item')].flatMap((it) => {
+                const cr = it.getBoundingClientRect(); const out = [];
+                const row = it.querySelector('.citem-actions'); if (!row) return out;
+                const tops = new Set([...row.children].map(b => Math.round(b.getBoundingClientRect().top)));
+                if (tops.size > 1) out.push('actions sur plusieurs lignes');
+                row.querySelectorAll('button,a').forEach((b) => {
+                    const r = b.getBoundingClientRect();
+                    if (r.right > cr.right + 0.5 || r.left < cr.left - 0.5) out.push('bouton hors carte : ' + b.textContent.trim());
+                    if (b.scrollWidth > b.clientWidth + 1) out.push('texte coupé : ' + b.textContent.trim());
+                });
+                return out;
+            }));
+            assert.deepStrictEqual(bad, []);
+            const labels = await page.$$eval('.bg-non-releve .citem-actions > *', b => b.map(x => x.textContent.trim()));
+            assert.ok(labels.includes('Relever') && labels.includes('Relevé'), labels.join('|'));
+        });
+        if (width === 360) await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + '/liste-360.png' : '/tmp/liste-360.png' });
+        if (width === 360) { await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: (process.env.SHOT_DIR || '/tmp') + '/haut-360.png' }); }
+        await check(`mobile ${width}px : aucune erreur JavaScript`, () => assert.deepStrictEqual(errors, []));
+        await ctx.close();
+    }
+
     // ══════════ STATISTIQUES v7 : encaissement partiel, FIFO, avance ══════════
     console.log('Statistiques — encaissement');
     let afterPayment = null, paiementId = null;
