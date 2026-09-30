@@ -588,6 +588,53 @@ async function main() {
         await ctx.close();
     }
 
+    // ══════════ STATISTIQUES v8 : remettre un mois ARCHIVÉ « Payé » en « Non payé » (président) ══════════
+    console.log('Statistiques — archive marquée payée → non payée');
+    {
+        const { page, errors, ctx } = await newPage(browser, 'président', migratedSeed());
+        await page.goto(base + '/statistiques/stats.html');
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#month-filter option')].some(o => o.value === '2026-06'), null, { timeout: 8000 });
+        await page.selectOption('#month-filter', '2026-06');
+        await page.waitForFunction(() => document.getElementById('archive-banner').classList.contains('visible'));
+        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .item')].some(e => e.innerText.includes('Boubacar')), null, { timeout: 8000 });
+        const card = (n) => page.evaluate((n) => {
+            const el = [...document.querySelectorAll('#releves-list .item')].find(e => e.innerText.includes(n));
+            return el ? { paye: /Payé/.test(el.innerText) && !/Impayé/.test(el.innerText), encaisser: !!el.querySelector('.btn-paye'), nonPaye: !!el.querySelector('.btn-unpay') } : null;
+        }, n);
+        await check('carte archivée « Payé » : bouton « Non payé » présent, pas d\'Encaisser ; carte impayée : pas de « Non payé »', async () => {
+            const b = await card('Boubacar'), a = await card('Aminata');
+            assert.deepStrictEqual([b.paye, b.encaisser, b.nonPaye], [true, false, true]);
+            assert.strictEqual(a.nonPaye, false);
+        });
+        await check('« Non payé » : motif obligatoire, puis archive impayée + facture créée (dette) + audit, en UNE écriture', async () => {
+            await page.evaluate(() => window.marquerNonPaye('c2'));
+            await page.waitForSelector('#cui-np-yes', { timeout: 8000 });
+            await page.click('#cui-np-yes');
+            assert.match(await page.textContent('#cui-np-err'), /motif est obligatoire/);
+            await page.fill('#cui-np-motif', 'Paiement jamais reçu');
+            const w0 = await page.evaluate(() => window.__DB.writes.length);
+            await page.click('#cui-np-yes');
+            await page.waitForFunction(() => !document.getElementById('cui-np-yes'), null, { timeout: 8000 });
+            assert.strictEqual(await page.evaluate(() => window.__DB.writes.length), w0 + 1);
+            const F = (await db(page)).Asufor[FA];
+            const row = F.backup['2026-06'].donnees.c2;
+            assert.deepStrictEqual([row.status, row.statut, row.date_paiement === undefined, row.correction_motif], ['impaye', false, true, 'Paiement jamais reçu']);
+            const f = F.factures['2026-06_c2'];
+            assert.deepStrictEqual([f.montant_initial, f.source, f.statut, f.reste_a_payer], [1000, 'correction_releve', 'ouverte', 1000]);
+            assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'FACTURE_CREEE' && e.entite_id === '2026-06_c2'));
+            assert.strictEqual(F.soldes.c2.arrieres, 2500);                   // 1 500 (juillet) + 1 000 (juin remis en impayé)
+            assert.strictEqual(F.paiements, undefined);                        // aucun paiement inventé ni supprimé
+        });
+        await check('carte rafraîchie : « Impayé », plus de « Non payé », Encaisser disponible', async () => {
+            await page.waitForFunction(() => { const el = [...document.querySelectorAll('#releves-list .item')].find(e => e.innerText.includes('Boubacar')); return el && /Impayé/.test(el.innerText); }, null, { timeout: 8000 });
+            const b = await card('Boubacar');
+            assert.deepStrictEqual([b.paye, b.nonPaye], [false, false]);
+        });
+        await check('aucune erreur JavaScript (archive non payée)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
+        await ctx.close();
+    }
+
     // ══════════ RELEVÉ DE COMPTE + REÇU ══════════
     console.log('Relevé de compte et reçu');
     {
