@@ -494,5 +494,6 @@ body {
 .compta-status button { flex: none; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 10px; padding: 5px 10px; font-size: .74rem; font-weight: 700; cursor: pointer; }
 
 /* Annuler un encaissement (président) : icône seule, discrète, ne s'étend pas dans la ligne d'actions */
-.citem-actions .btn-cancel-pay { flex: 0 0 auto; width: 38px; padding: 0; background: transparent; color: #b91c1c; border: 1px solid rgba(185, 28, 28, .35); }
-.citem-actions .btn-cancel-pay:active { transform: scale(.94); }
+/* « Annuler encaissement » (président) : bouton libellé, contour rouge, comme les autres actions */
+.citem-actions .btn-cancel-pay { background: rgba(185, 28, 28, .08); color: #b91c1c; border: 1px solid rgba(185, 28, 28, .4); }
+.citem-actions .btn-cancel-pay:active { transform: scale(.97); }
