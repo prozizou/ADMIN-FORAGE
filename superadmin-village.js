@@ -66,7 +66,7 @@
         document.body.insertBefore(bar, document.body.firstChild);
         var select = document.getElementById('sv-select');
 
-        get(ref(db, 'Asufor')).then(function (snap) {
+        (window.AsuforSync ? window.AsuforSync.safeGet(get, ref(db, 'Asufor')) : get(ref(db, 'Asufor'))).then(function (snap) {
             var forages = snap.exists() ? snap.val() : {};
             var keys = Object.keys(forages);
             if (keys.length === 0) {

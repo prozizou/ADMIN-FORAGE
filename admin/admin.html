@@ -21,6 +21,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins + constantes (super-admin, forage par défaut) -->
@@ -244,6 +245,8 @@
     if (!session) throw new Error('Accès refusé');
 
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+    // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+    const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
@@ -291,8 +294,8 @@
     async function loadForages() {
         try {
             const [forageSnap, usersSnap] = await Promise.all([
-                get(ref(db, 'Asufor')),
-                get(ref(db, 'users'))
+                sget(ref(db, 'Asufor')),
+                sget(ref(db, 'users'))
             ]);
             const forages = forageSnap.val() || {};
             const users   = usersSnap.val() || {};
@@ -350,7 +353,7 @@
         if (window.AsuforLoader) AsuforLoader.show('Création du forage…');
 
         try {
-            const existing = await get(ref(db, 'Asufor/' + fKey));
+            const existing = await sget(ref(db, 'Asufor/' + fKey));
             if (existing.exists()) {
                 markError('f_key');
                 showMsg('Cette clé est déjà utilisée par un autre forage (renseignez un siège différent, ou modifiez la clé).', true);

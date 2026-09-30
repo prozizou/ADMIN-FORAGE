@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="../icons/favicon-32.png">
     <script src="../biometric.js"></script>
     <script src="../security.js"></script>
+    <script src="../sync.js"></script>
     <script src="../firebase-config.js"></script>
     <script src="../admin-config.js"></script>
     <script src="../forage-context.js"></script>
@@ -52,6 +53,10 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+
+const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
+
 const app = initializeApp(window.ASUFOR_FIREBASE_CONFIG);
 const db = getDatabase(app);
 const auth = getAuth(app);
@@ -70,13 +75,13 @@ onAuthStateChanged(auth, async (user) => {
     if (!pid) { out.innerHTML = '<div class="msg">Paiement non précisé.</div>'; return; }
     try {
         const [pSnap, cfgSnap, fSnap, aSnap, jSnap] = await Promise.all([
-            get(ref(db, `${CP.paiements}/${pid}`)), get(ref(db, P.config)), get(ref(db, CP.factures)),
-            get(ref(db, CP.affectations)), get(ref(db, CP.ajustements))
+            sget(ref(db, `${CP.paiements}/${pid}`)), sget(ref(db, P.config)), sget(ref(db, CP.factures)),
+            sget(ref(db, CP.affectations)), sget(ref(db, CP.ajustements))
         ]);
         if (!pSnap.exists()) { out.innerHTML = '<div class="msg">Paiement introuvable.</div>'; return; }
         const p = pSnap.val();
         const cfg = cfgSnap.val() || {};
-        const cpt = (await get(ref(db, `${P.compteurs}/${p.compteur_id}`))).val() || {};
+        const cpt = (await sget(ref(db, `${P.compteurs}/${p.compteur_id}`))).val() || {};
         const S = C.normState({ factures: fSnap.val() || {}, paiements: { [pid]: p }, affectations: aSnap.val() || {}, ajustements: jSnap.val() || {} });
         const affs = Object.entries(S.affectations[pid] || {}).filter(([, a]) => a.statut !== 'annulee').sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0));
         const affecte = affs.reduce((t, [, a]) => t + (Number(a.montant) || 0), 0);

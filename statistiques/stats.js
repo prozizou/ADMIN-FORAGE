@@ -10,6 +10,9 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 // ✅ Chemins Firebase du forage courant, résolus dynamiquement (namespacé Asufor/{forageKey}/…)
 const P = window.ForageContext.paths();
+// ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
+const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
+const Sync = window.AsuforSync || null;
 
 // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
 if (window.SuperadminVillage) {
@@ -59,7 +62,7 @@ let currentUser = 'Trésorier/Admin';
 let forageBranding = 'Satigué Eau';
 async function loadForageBranding() {
     try {
-        const snap = await get(ref(db, P.config));
+        const snap = await sget(ref(db, P.config));
         const cfg = snap.exists() ? snap.val() : {};
         if (cfg.nom) {
             forageBranding = cfg.nom;
@@ -232,9 +235,15 @@ window.initMonthFilter = function() {
 }
 
 // Charge TOUTES les archives (liste des périodes + cache des arriérés). backupsLoaded ne
-// passe à vrai qu'en cas de lecture complète ; sinon nouvel essai automatique.
+// passe à vrai qu'en cas de lecture complète ; sinon nouvel essai automatique (délai croissant, sans limite :
+// jamais besoin de recharger la page). Lors d'une resynchronisation, l'ancien état reste affiché.
+let backupsTimer = null, backupsInFlight = false;
 function loadBackups(monthSelect, attempt) {
-    get(ref(db, P.backup)).then((snapshot) => {
+    if (backupsInFlight && attempt === 0) return;
+    clearTimeout(backupsTimer);
+    backupsInFlight = true;
+    sget(ref(db, P.backup)).then((snapshot) => {
+        backupsInFlight = false;
         let optionsHtml = '<option value="actuel">Données actuelles</option>';
 
         allBackupsCache = snapshot.exists() ? snapshot.val() : {};   // conservé pour billing.js (arriérés + cascade paiement)
@@ -250,10 +259,10 @@ function loadBackups(monthSelect, attempt) {
         // (et déblocage des boutons d'encaissement).
         window.applyFilter();
     }).catch((error) => {
+        backupsInFlight = false;
         console.error("Erreur lors du chargement des périodes:", error);
-        backupsLoaded = false;
-        if (attempt === 0) showToast("⚠️ Archives indisponibles : l'encaissement reste bloqué tant qu'elles ne sont pas chargées.", true);
-        if (attempt < 6) setTimeout(() => loadBackups(monthSelect, attempt + 1), 8000);
+        if (attempt === 0 && !backupsLoaded) showToast("⚠️ Archives indisponibles : l'encaissement reste bloqué tant qu'elles ne sont pas chargées.", true);
+        backupsTimer = setTimeout(() => loadBackups(monthSelect, attempt + 1), Math.min(30000, 4000 * Math.pow(2, Math.min(attempt, 3))) * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
     });
 }
 
@@ -267,16 +276,15 @@ function cacheKeyFor(dbPath) {
     return 'releves:' + dbPath;
 }
 
-async function loadDataForMonth(selection) {
-    storeReleves = {};
-
-    if (unsubCurrentMonth) {
-        unsubCurrentMonth();
-        unsubCurrentMonth = null;
-    }
+let relevesRetryTimer = null;
+async function loadDataForMonth(selection, opts) {
+    // silent = resynchronisation en arrière-plan : on ne vide RIEN (ni données, ni liste, ni écran de chargement).
+    const silent = !!(opts && opts.silent);
+    clearTimeout(relevesRetryTimer);
+    if (!silent) storeReleves = {};
 
     const dbPath = (selection === "actuel") ? P.compteurs : `${P.backup}/${selection}/donnees`;
-
+    const changedPath = dbPath !== currentActivePath;
     currentActivePath = dbPath;
 
     // ✅ v2 : une archive est un état historique figé — on verrouille les
@@ -297,28 +305,30 @@ async function loadDataForMonth(selection) {
     const recapTitle = document.getElementById('recap-title');
     if (recapTitle) recapTitle.textContent = isArchiveView ? `Bilan — ${monthLabelFR(selection)}` : 'Bilan du mois';
 
-    // ✅ Chargement INSTANTANÉ : si une copie locale existe déjà (session
-    // précédente ou dernier chargement), on l'affiche immédiatement, sans
-    // attendre le réseau — le skeleton/l'overlay bloquant ne s'affichent que
-    // si on n'a vraiment rien à montrer tout de suite.
+    // ✅ Chargement INSTANTANÉ : copie locale affichée tout de suite, sans attendre le réseau.
     const cacheKey = cacheKeyFor(dbPath);
     const cached = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
-    if (cached && typeof cached === 'object') {
-        storeReleves = cached;
-        document.getElementById('skeleton-loader').style.display = "none";
-        document.getElementById('releves-list').innerHTML = "";
-        if (window.AsuforLoader) AsuforLoader.hide();
-        window.applyFilter();
-    } else {
-        document.getElementById('skeleton-loader').style.display = "flex";
-        document.getElementById('releves-list').innerHTML = "";
+    const haveData = silent ? Object.keys(storeReleves).length > 0 : false;
+    if (!silent) {
+        if (cached && typeof cached === 'object') {
+            storeReleves = cached;
+            document.getElementById('skeleton-loader').style.display = "none";
+            document.getElementById('releves-list').innerHTML = "";
+            if (window.AsuforLoader) AsuforLoader.hide();
+            window.applyFilter();
+        } else {
+            document.getElementById('skeleton-loader').style.display = "flex";
+            document.getElementById('releves-list').innerHTML = "";
+        }
     }
+    const displayed = silent ? (haveData || !!cached) : !!cached;
 
     const dataRef = ref(db, dbPath);
     const thisPath = dbPath; // capture : ignorer une réponse tardive si le mois a changé entre-temps
+    let failed = false;
 
     try {
-        const snap = await get(dataRef);
+        const snap = await sget(dataRef);
         if (currentActivePath !== thisPath) return; // l'utilisateur a changé de mois pendant le chargement
         storeReleves = snap.val() || {};
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
@@ -326,38 +336,52 @@ async function loadDataForMonth(selection) {
         if (window.AsuforLoader) AsuforLoader.hide();
         window.applyFilter();
     } catch (err) {
+        if (currentActivePath !== thisPath) return;
+        failed = true;
         console.error('Firebase relevés :', err.code, err.message);
-        if (cached) {
-            // ✅ Une copie locale est déjà affichée : on prévient sans bloquer l'écran.
-            showToast('⚠️ Connexion indisponible : données locales affichées (peut-être non à jour).', true);
+        if (displayed) {
+            // ✅ Une copie locale est déjà affichée : on la conserve, le badge indique « Hors ligne — données locales ».
+            document.getElementById('skeleton-loader').style.display = "none";
+            if (window.AsuforLoader) AsuforLoader.hide();
+            if (!silent) showToast('⚠️ Connexion indisponible : données locales affichées (peut-être non à jour).', true);
         } else if (window.AsuforLoader) {
-            AsuforLoader.fail('Impossible de charger les relevés (' + err.code + '). Session peut-être expirée.');
+            AsuforLoader.fail('Impossible de charger les relevés (' + (err.code || 'réseau') + '). Vérifiez la connexion.', { retry: () => loadDataForMonth(currentSelection) });
         }
-        return;
+        // Nouvel essai automatique (jamais bloqué définitivement) ; le retour du réseau relance aussi une synchro.
+        relevesRetryTimer = setTimeout(() => { if (currentActivePath === thisPath) loadDataForMonth(currentSelection, { silent: true }); },
+            15000 * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
     }
 
-    // ✅ Rafraîchissement CIBLÉ : au lieu d'un unique listener sur tout le
-    // nœud (qui renvoyait l'arbre COMPLET au moindre changement, même pour la
-    // modification d'un seul compteur), on écoute désormais les événements
-    // par élément — l'ajout, la modification ou la suppression d'UN compteur
-    // ne transmet et ne retraite plus que CET élément, pas toute la liste.
+    // ✅ Rafraîchissement CIBLÉ par élément (ajout / modification / suppression d'UN compteur). Les listeners sont
+    // enregistrés sous une clé unique : chaque nouvelle mise en place détache d'abord l'ancienne (aucun doublon,
+    // aucun listener zombie), et ils sont attachés MÊME si la première lecture a échoué (ils se remplissent au retour du réseau).
+    const key = 'stats:releves';
     const unsubAdd = onChildAdded(dataRef, (snap) => {
+        if (currentActivePath !== thisPath) return;
         if (Object.prototype.hasOwnProperty.call(storeReleves, snap.key)) return; // déjà connu (chargement initial)
         storeReleves[snap.key] = snap.val();
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
+        if (window.AsuforLoader && failed) AsuforLoader.hide();
+        document.getElementById('skeleton-loader').style.display = "none";
         window.applyFilter();
     });
     const unsubChange = onChildChanged(dataRef, (snap) => {
+        if (currentActivePath !== thisPath) return;
         storeReleves[snap.key] = snap.val();
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         window.applyFilter();
     });
     const unsubRemove = onChildRemoved(dataRef, (snap) => {
+        if (currentActivePath !== thisPath) return;
         delete storeReleves[snap.key];
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         window.applyFilter();
     });
-    unsubCurrentMonth = () => { unsubAdd(); unsubChange(); unsubRemove(); };
+    const detach = () => { unsubAdd(); unsubChange(); unsubRemove(); };
+    if (Sync) Sync.track(key, detach);
+    else { if (unsubCurrentMonth) unsubCurrentMonth(); }
+    unsubCurrentMonth = detach;
+    return !failed;
 }
 
 // --- SYNCHRONISATION INITIALE ---
@@ -376,49 +400,92 @@ function renderAgentSpinner() {
     spinner.value = active;
 }
 
+let agentsRetryTimer = null;
 async function syncAgents() {
+    clearTimeout(agentsRetryTimer);
     const cacheKey = 'agents:' + P.agents;
     const cachedAgents = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
-    if (cachedAgents && typeof cachedAgents === 'object') {
+    if (Object.keys(storeAgents).length === 0 && cachedAgents && typeof cachedAgents === 'object') {
         storeAgents = cachedAgents;
         renderAgentSpinner();
     }
 
     const agentsRef = ref(db, P.agents);
+    let ok = true;
     try {
-        const snap = await get(agentsRef);
+        const snap = await sget(agentsRef);
         storeAgents = snap.val() || {};
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
         renderAgentSpinner();
     } catch (err) {
+        ok = false;
         console.error('Firebase agents :', err.code, err.message);
+        agentsRetryTimer = setTimeout(syncAgents, 15000 * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
     }
 
     // ✅ Rafraîchissement ciblé : un agent ajouté/modifié/supprimé ne renvoie
-    // et ne retraite plus que CET agent, pas la liste complète.
-    onChildAdded(agentsRef, (snap) => {
-        if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
-        storeAgents[snap.key] = snap.val();
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-        renderAgentSpinner();
-    });
-    onChildChanged(agentsRef, (snap) => {
-        storeAgents[snap.key] = snap.val();
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-        renderAgentSpinner();
-    });
-    onChildRemoved(agentsRef, (snap) => {
-        delete storeAgents[snap.key];
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-        renderAgentSpinner();
-    });
+    // et ne retraite plus que CET agent, pas la liste complète. Clé unique : jamais de doublon.
+    const unsubs = [
+        onChildAdded(agentsRef, (snap) => {
+            if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
+            storeAgents[snap.key] = snap.val();
+            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+            renderAgentSpinner();
+        }),
+        onChildChanged(agentsRef, (snap) => {
+            storeAgents[snap.key] = snap.val();
+            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+            renderAgentSpinner();
+        }),
+        onChildRemoved(agentsRef, (snap) => {
+            delete storeAgents[snap.key];
+            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
+            renderAgentSpinner();
+        })
+    ];
+    const detach = () => unsubs.forEach(u => u());
+    if (Sync) Sync.track('stats:agents', detach);
+    return ok;
+}
+
+// Resynchronisation silencieuse (retour d'arrière-plan, réseau rétabli, bouton Réessayer) : rien n'est vidé,
+// les listeners sont détachés puis rattachés, les données locales restent affichées pendant la lecture.
+let syncStarted = false;
+async function resyncAll(reason) {
+    const monthSelect = document.getElementById('month-filter');
+    const results = await Promise.all([
+        loadDataForMonth(currentSelection, { silent: true }),
+        syncAgents(),
+        (async () => { loadBackups(monthSelect, 0); return true; })()
+        // le grand livre (ComptaUI) se resynchronise lui-même : il s'est inscrit à Sync.onResync dans subscribe()
+    ]);
+    if (results.some(r => r === false)) throw new Error('synchronisation incomplète');
+}
+
+// Comptabilité : jamais « en attente » sans explication — message + bouton Réessayer si un nœud du grand livre échoue.
+function renderLedgerStatus(info) {
+    const el = document.getElementById('compta-status');
+    if (!el) return;
+    if (!info || info.status === 'ready' || info.status === 'loading') { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = 'flex';
+    el.innerHTML = (info.status === 'degraded'
+        ? '<span>⚠️ Comptabilité : mise à jour partielle, nouvelle tentative en cours.</span>'
+        : '<span>⚠️ Comptabilité indisponible pour le moment (connexion ?). Nouvelle tentative en cours.</span>')
+        + '<button type="button" onclick="ComptaUI.retry()">Réessayer</button>';
 }
 
 window.startSync = function() {
+    if (syncStarted) return;      // onAuthStateChanged peut se redéclencher : une seule mise en place
+    syncStarted = true;
+    if (Sync) {
+        Sync.init({ db, ref, onValue });
+        Sync.onResync(resyncAll);
+    }
     // ✅ v7 : grand livre comptable (lecture continue ; écritures via compta.js).
     ComptaUI.init({ db, ref, get, update, push, onValue, P, session: JSON.parse(localStorage.getItem('asufor_session') || '{}'), getUid: () => auth.currentUser && auth.currentUser.uid });
-    ComptaUI.subscribe((st, mig, ready) => {
+    ComptaUI.subscribe((st, mig, ready, info) => {
         ledgerReady = ready;
+        renderLedgerStatus(info);
         if (ready) window.applyFilter();
     });
     // ✅ Les agents et les relevés se chargent en PARALLÈLE (l'un n'attend

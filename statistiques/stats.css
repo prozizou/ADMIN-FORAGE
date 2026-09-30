@@ -488,3 +488,7 @@ body {
 @media (max-width: 340px) { .tab-btn i { display: none; } }
 
 #releves-progress-card { padding: 10px 14px !important; margin-bottom: 10px !important; border-radius: 16px !important; }
+
+/* Statut de la comptabilité (grand livre) : erreur / dégradé + Réessayer */
+.compta-status { align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(245, 158, 11, .14); color: #b45309; font-size: .74rem; font-weight: 600; }
+.compta-status button { flex: none; border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 10px; padding: 5px 10px; font-size: .74rem; font-weight: 700; cursor: pointer; }

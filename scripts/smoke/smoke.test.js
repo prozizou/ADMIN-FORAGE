@@ -45,14 +45,18 @@ const snap = (path, val) => ({ key: seg(path).pop() || null, exists: () => val !
   forEach: (cb) => { if (val && typeof val === 'object') for (const k of Object.keys(val)) { if (cb(snap(path + '/' + k, val[k])) === true) return true; } return false; } });
 export const getDatabase = () => ({});
 export const ref = (db, path) => ({ path: path || '' });
-export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(getAt(r.path)))); };
+export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().hangAll || (DB().hang || []).includes(r.path)) return new Promise(() => {}); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(getAt(r.path)))); };
 export const update = async (r, updates) => { if (DB().denyWrites) throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'PERMISSION_DENIED' });
   DB().writes.push(JSON.parse(JSON.stringify(updates))); for (const [k, v] of Object.entries(updates)) setAt((r.path ? r.path + '/' : '') + k, v);
   for (const l of DB().listeners) l(); };
 export const set = async (r, v) => { setAt(r.path, v); for (const l of DB().listeners) l(); };
 export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1), path: r.path + '/-Pid' + DB().pushN });
-export const onValue = (r, cb) => { const fire = () => cb(snap(r.path, getAt(r.path))); DB().listeners.push(fire); setTimeout(fire, 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
-export const onChildAdded = () => () => {}; export const onChildChanged = () => () => {}; export const onChildRemoved = () => () => {};
+export const onValue = (r, cb, errCb) => {
+  if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
+  const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll) return; cb(snap(r.path, getAt(r.path))); };
+  DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
+const childReg = (p) => { DB().child = DB().child || {}; DB().child[p] = (DB().child[p] || 0) + 1; let off = false; return () => { if (!off) { off = true; DB().child[p]--; } }; };
+export const onChildAdded = (r) => childReg(r.path + '#add'); export const onChildChanged = (r) => childReg(r.path + '#chg'); export const onChildRemoved = (r) => childReg(r.path + '#rem');
 export const runTransaction = async () => ({ committed: true });
 `;
 
@@ -237,6 +241,160 @@ async function main() {
         if (width === 360) { await page.evaluate(() => window.scrollTo(0, 0)); await page.screenshot({ path: (process.env.SHOT_DIR || '/tmp') + '/haut-360.png' }); }
         await check(`mobile ${width}px : aucune erreur JavaScript`, () => assert.deepStrictEqual(errors, []));
         await ctx.close();
+    }
+
+    // ══════════ SYNCHRONISATION FIREBASE : lecture bloquée, réseau coupé/rétabli, reprise, listeners ══════════
+    console.log('Synchronisation — robustesse');
+    const SYNC_CFG = { timeout: 400, retries: 1, backoff: [50], offlineAfter: 300, debounce: 40, staleMs: 300, minResume: 0, fast: true, hydrate: 700 };
+    const CPATH = 'Asufor/' + FA + '/compteurs';
+    const CKEY = 'asufor_cache_v1:releves:' + CPATH;
+    const syncPage = async (opts) => {
+        opts = opts || {};
+        const r = await newPage(browser, 'président', opts.tree || migratedSeed());
+        await r.page.addInitScript(([cfg, hang, fail, cache, ckey, wd]) => {
+            window.__ASUFOR_SYNC = cfg; window.__ASUFOR_WATCHDOG_MS = wd;
+            if (hang) window.__DB.hang = hang; if (fail) window.__DB.failListen = fail;
+            if (cache) localStorage.setItem(ckey, JSON.stringify(cache));
+        }, [Object.assign({}, SYNC_CFG, opts.cfg || {}), opts.hang || null, opts.fail || null, opts.cache || null, CKEY, 1200]);
+        await r.page.goto(base + '/statistiques/stats.html');
+        return r;
+    };
+    const count = (page) => page.$$eval('#releves-list .item', e => e.length);
+    const badge = (page) => page.evaluate(() => (document.getElementById('asufor-sync-badge') || {}).textContent || '');
+    const reads = (page, p) => page.evaluate((p) => window.__DB.reads.filter(x => x === p).length, p);
+    const connect = (page, v) => page.evaluate((v) => { window.__DB.connected = v; (window.__DB.connListeners || []).forEach(f => f()); }, v);
+
+    {   // 1) lecture bloquée, aucune copie locale : « Connexion lente » + Réessayer, jamais de spinner infini
+        const { page, errors, ctx } = await syncPage({ hang: [CPATH] });
+        await check('lecture bloquée sans cache : après le délai, « Connexion lente » + Réessayer (pas de spinner infini)', async () => {
+            // « Connexion lente » (chien de garde) ou message d'échec de lecture : dans les deux cas un bouton Réessayer, jamais un spinner infini
+            await page.waitForFunction(() => { const r = document.getElementById('asufor-loader-root'); return r && r.classList.contains('on') && (r.classList.contains('slow') || r.classList.contains('error')) && [...r.querySelectorAll('.al-btn')].some(b => /Réessayer/.test(b.textContent)); }, null, { timeout: 6000 });
+            assert.ok(await page.evaluate(() => getComputedStyle(document.querySelector('#asufor-loader-root .al-spin')).display === 'none'), 'le spinner doit être masqué');
+        });
+        await check('lecture rétablie : « Réessayer » récupère les données sans recharger la page', async () => {
+            await page.evaluate(() => { window.__DB.hang = []; });
+            await page.evaluate(() => [...document.querySelectorAll('#asufor-loader-root .al-btn')].find(b => /Réessayer/.test(b.textContent)).click());
+            await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+            await page.waitForFunction(() => !document.getElementById('asufor-loader-root').classList.contains('on'), null, { timeout: 5000 });
+        });
+        await check('aucune erreur JavaScript (lecture bloquée)', () => assert.deepStrictEqual(errors.filter(e => !/Firebase relevés|Firebase agents|\[Compta\]|TIMEOUT|trop lente/.test(e)), []));
+        await ctx.close();
+    }
+
+    {   // 1b) chien de garde du loader : lecture très lente (délai de lecture > chien de garde) → « Connexion lente » + Réessayer / Continuer
+        const { page, ctx } = await syncPage({ hang: [CPATH], cfg: { timeout: 20000, retries: 0 } });
+        await check('chien de garde : « Connexion lente » + Réessayer + Continuer après ~12 s (ici 1,2 s), spinner masqué', async () => {
+            await page.waitForFunction(() => { const r = document.getElementById('asufor-loader-root'); return r && r.classList.contains('slow') && /Connexion lente/.test(r.textContent); }, null, { timeout: 6000 });
+            const labels = await page.$$eval('#asufor-loader-root .al-btn', b => b.map(x => x.textContent.trim()));
+            assert.deepStrictEqual(labels, ['Réessayer', 'Continuer']);
+            assert.strictEqual(await page.evaluate(() => getComputedStyle(document.querySelector('#asufor-loader-root .al-spin')).display), 'none');
+            await page.evaluate(() => [...document.querySelectorAll('#asufor-loader-root .al-btn')].find(b => /Continuer/.test(b.textContent)).click());
+            await page.waitForFunction(() => !document.getElementById('asufor-loader-root').classList.contains('on'));
+        });
+        await ctx.close();
+    }
+
+    {   // 2) lecture bloquée AVEC copie locale : affichage immédiat, jamais vidé
+        const t = migratedSeed();
+        const { page, ctx } = await syncPage({ tree: t, hang: [CPATH], cache: t.Asufor[FA].compteurs });
+        await check('lecture bloquée avec cache : données locales affichées immédiatement, écran jamais bloqué', async () => {
+            await page.waitForSelector('#releves-list .item', { timeout: 3000 });
+            assert.ok((await count(page)) >= 3);
+            assert.ok(await page.evaluate(() => !document.getElementById('asufor-loader-root') || !document.getElementById('asufor-loader-root').classList.contains('on')));
+        });
+        await check('statut : « Reconnexion » / « Hors ligne — données locales » (jamais « Synchronisé » à tort)', async () => {
+            await page.waitForFunction(() => /Reconnexion|Hors ligne/.test((document.getElementById('asufor-sync-badge') || {}).textContent || ''), null, { timeout: 6000 });
+            assert.ok((await count(page)) >= 3, 'la liste ne doit pas être vidée');
+        });
+        await ctx.close();
+    }
+
+    {   // 3) réseau coupé puis rétabli + 4) retour d'arrière-plan + 5) navigation répétée
+        const { page, errors, ctx } = await syncPage();
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await page.waitForFunction(() => /Synchronisé/.test((document.getElementById('asufor-sync-badge') || {}).textContent || ''), null, { timeout: 5000 });
+        await page.evaluate(() => { window.__minItems = 999; new MutationObserver(() => { window.__minItems = Math.min(window.__minItems, document.querySelectorAll('#releves-list .item').length); }).observe(document.getElementById('releves-list'), { childList: true, subtree: true }); });
+        const n0 = await count(page);
+
+        await check('réseau coupé : « Hors ligne — données locales », liste conservée ; rétabli : resynchronisation automatique', async () => {
+            const r0 = await reads(page, CPATH);
+            await connect(page, false);
+            await page.waitForFunction(() => /Reconnexion/.test(document.getElementById('asufor-sync-badge').textContent));
+            await page.waitForFunction(() => /Hors ligne — données locales/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 4000 });
+            assert.strictEqual(await count(page), n0);
+            await connect(page, true);
+            await page.waitForFunction(() => /Synchronisé/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 5000 });
+            await page.waitForFunction(([p, n]) => window.__DB.reads.filter(x => x === p).length > n, [CPATH, r0], { timeout: 5000 });   // relecture automatique après la reconnexion
+            assert.match(await badge(page), /\d\d:\d\d/, 'heure de dernière synchro');
+        });
+        await check('retour d\'arrière-plan (visibilitychange) avec données anciennes : rafraîchissement silencieux, liste jamais vidée', async () => {
+            await page.waitForTimeout(400);                                   // > staleMs
+            const r0 = await reads(page, CPATH);
+            await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+            await page.waitForTimeout(600);
+            assert.ok((await reads(page, CPATH)) > r0, 'relecture attendue');
+            assert.ok(await page.evaluate(() => window.__minItems) >= n0 || (await page.evaluate(() => window.__minItems)) >= 1, 'liste vidée pendant la resynchro');
+        });
+        await check('pageshow (bfcache) et online déclenchent aussi une reprise ; doublons évités', async () => {
+            await page.waitForTimeout(400);
+            const r0 = await reads(page, CPATH);
+            await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })); window.dispatchEvent(new Event('online')); document.dispatchEvent(new Event('visibilitychange')); });
+            await page.waitForTimeout(700);
+            const r1 = await reads(page, CPATH);
+            assert.ok(r1 > r0, 'reprise attendue'); assert.ok(r1 - r0 <= 2, 'reprises dédoublonnées : ' + (r1 - r0));
+        });
+        await check('navigation répétée : pas de listeners en double (mois ↔ actuel, 6 resynchronisations)', async () => {
+            const before = await page.evaluate(() => ({ l: window.__DB.listeners.length, t: window.AsuforSync.trackedCount() }));
+            for (let i = 0; i < 6; i++) {
+                await page.evaluate(() => window.AsuforSync.resync('manual', { force: true }));
+                if (i % 2 === 0) { await page.selectOption('#month-filter', '2026-07'); await page.waitForTimeout(150); await page.selectOption('#month-filter', 'actuel'); }
+                await page.waitForTimeout(120);
+            }
+            await page.waitForTimeout(600);
+            const after = await page.evaluate(() => ({ l: window.__DB.listeners.length, t: window.AsuforSync.trackedCount(), child: window.__DB.child }));
+            assert.deepStrictEqual(after.t, before.t, 'listeners suivis');
+            assert.ok(after.l <= before.l, 'onValue en double : ' + before.l + ' → ' + after.l);
+            Object.keys(after.child).forEach(k => assert.ok(after.child[k] <= 1, 'listener enfant en double : ' + k + ' = ' + after.child[k]));
+        });
+        await check('aucune erreur JavaScript (reprises)', () => assert.deepStrictEqual(errors, []));
+        await ctx.close();
+    }
+
+    {   // 6) grand livre : un nœud en échec → état dégradé/erreur + Réessayer, jamais « en attente » indéfiniment
+        const { page, ctx } = await syncPage({ fail: ['Asufor/' + FA + '/paiements'] });
+        await page.waitForSelector('#releves-list .item', { timeout: 8000 });
+        await check('nœud comptable en échec : lecture de secours, prêt sans attente infinie, message + Réessayer', async () => {
+            await page.waitForFunction(() => window.ComptaUI.isReady(), null, { timeout: 6000 });
+            await page.waitForFunction(() => document.getElementById('compta-status').style.display !== 'none', null, { timeout: 5000 });
+            assert.match(await page.textContent('#compta-status'), /Comptabilité/);
+            assert.ok(['degraded', 'error'].includes(await page.evaluate(() => window.ComptaUI.getStatus().status)));
+        });
+        await check('nœud rétabli : « Réessayer » ramène l\'état à prêt', async () => {
+            await page.evaluate(() => { window.__DB.failListen = []; });
+            await page.evaluate(() => window.ComptaUI.retry());
+            await page.waitForFunction(() => window.ComptaUI.getStatus().status === 'ready', null, { timeout: 6000 });
+            assert.strictEqual(await page.evaluate(() => document.getElementById('compta-status').style.display), 'none');
+        });
+        await ctx.close();
+    }
+
+    {   // 7) impression : statut de synchro, reprise après réseau rétabli, liste jamais vidée
+        const r = await newPage(browser, 'président', migratedSeed());
+        await r.page.addInitScript((cfg) => { window.__ASUFOR_SYNC = cfg; }, SYNC_CFG);
+        await r.page.goto(base + '/impression/impression.html');
+        await r.page.waitForSelector('.facture-item', { timeout: 8000 });
+        await check('impression : badge « Synchronisé », coupure → « Hors ligne », retour → relecture des archives, liste conservée', async () => {
+            await r.page.waitForFunction(() => /Synchronisé/.test((document.getElementById('asufor-sync-badge') || {}).textContent || ''), null, { timeout: 5000 }).catch(async (e) => { throw new Error('badge=' + (await badge(r.page)) + ' Sync=' + (await r.page.evaluate(() => typeof window.AsuforSync))); });
+            const n0 = await r.page.$$eval('.facture-item', e => e.length);
+            const b0 = await reads(r.page, 'Asufor/' + FA + '/backup');
+            await connect(r.page, false);
+            await r.page.waitForFunction(() => /Hors ligne — données locales/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 4000 });
+            assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
+            await connect(r.page, true);
+            await r.page.waitForFunction(([p, n]) => window.__DB.reads.filter(x => x === p).length > n, ['Asufor/' + FA + '/backup', b0], { timeout: 5000 });
+            assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
+        });
+        await r.ctx.close();
     }
 
     // ══════════ STATISTIQUES v7 : encaissement partiel, FIFO, avance ══════════

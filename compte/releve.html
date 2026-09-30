@@ -15,6 +15,7 @@
     <script src="../biometric.js"></script>
     <script src="../security.js"></script>
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <script src="../firebase-config.js"></script>
     <script src="../admin-config.js"></script>
     <script src="../forage-context.js"></script>
@@ -158,6 +159,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, get, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+// Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+
+const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 
 const app = initializeApp(window.ASUFOR_FIREBASE_CONFIG);
 const db = getDatabase(app);
@@ -326,8 +331,9 @@ onAuthStateChanged(auth, async (user) => {
     if (!user) { if (window.handleFirebaseSessionLoss) window.handleFirebaseSessionLoss('releve.html'); return; }
     if (!cid) { document.getElementById('meta').innerHTML = '<span class="chip">Compteur non précisé</span>'; return; }
     UI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
+    if (window.AsuforSync && !window.__relSyncOn) { window.__relSyncOn = true; window.AsuforSync.init({ db, ref, onValue }); }
     try {
-        const snap = await get(ref(db, `${P.compteurs}/${cid}`));
+        const snap = await sget(ref(db, `${P.compteurs}/${cid}`));
         releve = snap.exists() ? snap.val() : null;
         const src = releve || (Object.values(UI.getState().factures).find(f => f.compteur_id === cid) || {});
         document.getElementById('client').textContent = (releve ? releve.name : src.client) || 'Client';

@@ -21,6 +21,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
@@ -301,6 +302,8 @@
         if (!session) throw new Error('Accès refusé');
 
         const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+        // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+        const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
         const app  = initializeApp(firebaseConfig);
         const db   = getDatabase(app);
         const auth = getAuth(app);
@@ -399,7 +402,7 @@
 
             // ✅ CORRECTION : Vérification doublon par téléphone avant insertion
             try {
-                const existing = await get(
+                const existing = await sget(
                     query(ref(db, P.agents), orderByChild('agent_tel'), equalTo(tel))
                 );
                 if (existing.exists()) {
@@ -429,7 +432,7 @@
                 // retrouve avec le siège de Diandioly.
                 let siege = 'SATIGUE EAU';
                 try {
-                    const cfgSnap = await get(ref(db, P.config));
+                    const cfgSnap = await sget(ref(db, P.config));
                     const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
                     siege = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
                 } catch (_) { /* garde le repli générique */ }

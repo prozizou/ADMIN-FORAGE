@@ -55,6 +55,8 @@ jobs:
           node scripts/billing.test.js
           echo "── compta.test.js ──"
           node scripts/compta.test.js
+          echo "── sync.test.js ──"
+          node scripts/sync.test.js
           echo "── crypto.test.js ──"
           node scripts/crypto.test.js
           echo "── integration.test.js ──"
@@ -116,6 +118,7 @@ jobs:
             "firebase-config.js"
             "billing.js"
             "compta.js"
+            "sync.js"
             "compta-ui.js"
             ".gitignore"
             "sw.js"

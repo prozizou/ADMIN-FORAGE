@@ -21,6 +21,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Cache local des données (affichage instantané + restauration entre sessions) -->
     <script src="../data-cache.js"></script>
     <!-- ✅ Config Firebase centralisée -->
@@ -219,7 +220,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded, onChildChanged, onChildRemoved, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, push, onValue, onChildAdded, onChildChanged, onChildRemoved, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification d'accès
@@ -227,6 +228,9 @@
     if (!session) throw new Error('Accès refusé');
 
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
+
+    // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+    const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
@@ -242,7 +246,7 @@
     let forageSiege = 'SATIGUE EAU';
     async function loadForageSiege() {
         try {
-            const cfgSnap = await get(ref(db, P.config));
+            const cfgSnap = await sget(ref(db, P.config));
             const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
             forageSiege = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
         } catch (_) { /* garde le repli générique */ }
@@ -323,7 +327,7 @@
 
         const agentsRef = ref(db, P.agents);
         try {
-            const snap = await get(agentsRef);
+            const snap = await sget(agentsRef);
             storeAgents = snap.val() || {};
             if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
             renderAgentOptions();
@@ -331,34 +335,44 @@
         } catch (err) {
             console.error('Firebase db_agents :', err.code, err.message);
             if (!cached && window.AsuforLoader) {
-                AsuforLoader.fail('Impossible de charger les agents (' + err.code + '). Session peut-être expirée.', {
+                AsuforLoader.fail('Impossible de charger les agents (' + (err.code || 'réseau') + '). Vérifiez la connexion.', {
                     retry: loadAgents
                 });
             }
-            return;
+            // pas de « return » : les listeners ci-dessous sont attachés quand même et se remplissent au retour du réseau
         }
 
-        onChildAdded(agentsRef, (snap) => {
-            if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
-            storeAgents[snap.key] = snap.val();
-            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
-            renderAgentOptions();
-        });
-        onChildChanged(agentsRef, (snap) => {
-            storeAgents[snap.key] = snap.val();
-            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
-            renderAgentOptions();
-        });
-        onChildRemoved(agentsRef, (snap) => {
-            delete storeAgents[snap.key];
-            if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
-            renderAgentOptions();
-        });
+        // Listeners sous clé unique : chaque (ré)attachement détache d'abord l'ancien (aucun doublon / zombie).
+        const unsubs = [
+            onChildAdded(agentsRef, (snap) => {
+                if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
+                storeAgents[snap.key] = snap.val();
+                if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+                renderAgentOptions();
+                if (window.AsuforLoader) AsuforLoader.hide();
+            }),
+            onChildChanged(agentsRef, (snap) => {
+                storeAgents[snap.key] = snap.val();
+                if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+                renderAgentOptions();
+            }),
+            onChildRemoved(agentsRef, (snap) => {
+                delete storeAgents[snap.key];
+                if (window.AsuforCache) window.AsuforCache.write(agentsCacheKey, storeAgents);
+                renderAgentOptions();
+            })
+        ];
+        if (window.AsuforSync) window.AsuforSync.track('counter:agents', () => unsubs.forEach(u => u()));
     }
 
     // On attend la confirmation du jeton Firebase avant toute lecture.
     onAuthStateChanged(auth, (user) => {
         if (user) {
+            if (window.AsuforSync && !window.__listSyncOn) {
+                window.__listSyncOn = true;
+                window.AsuforSync.init({ db, ref, onValue });
+                window.AsuforSync.onResync(() => Promise.all([loadForageSiege(), loadAgents()]));
+            }
             loadForageSiege();
             loadAgents();
         } else if (window.AsuforLoader) {

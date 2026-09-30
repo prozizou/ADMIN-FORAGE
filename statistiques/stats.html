@@ -37,6 +37,7 @@
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
     <script src="../billing.js"></script>
     <!-- ✅ v7 : moteur comptable (factures, paiements FIFO, avances, ajustements) + fenêtres -->
+    <script src="../sync.js"></script>
     <script src="../compta.js"></script>
     <script src="../compta-ui.js"></script>
     <!-- ✅ Multi-forage : résolution des chemins (mode legacy = chemins actuels) -->
@@ -102,6 +103,7 @@
              "Encaissé"/"Impayé". -->
         <!-- ✅ v7 : bandeau « migration comptable requise » (vide une fois la migration faite) -->
         <div id="compta-migration" style="display:none"></div>
+        <div id="compta-status" class="compta-status" style="display:none" role="status"></div>
 
         <div class="recap-card">
             <div class="recap-title" id="recap-title">Bilan du mois</div>

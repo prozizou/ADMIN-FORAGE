@@ -28,6 +28,9 @@
     var STYLE_ID = 'asufor-loader-style';
     var ROOT_ID = 'asufor-loader-root';
     var pendingShow = null; // si show() est appelé avant que le DOM soit prêt
+    var watchdog = null;    // ✅ chien de garde : jamais de spinner infini
+    function watchdogMs() { return window.__ASUFOR_WATCHDOG_MS || 12000; }
+    function clearWatchdog() { if (watchdog) { clearTimeout(watchdog); watchdog = null; } }
 
     var CSS = [
         '#' + ROOT_ID + '{position:fixed;inset:0;z-index:99999;display:flex;',
@@ -51,6 +54,9 @@
         '#' + ROOT_ID + ' .al-bar > i{display:block;height:100%;width:40%;border-radius:4px;',
         'background:linear-gradient(90deg,#0ea5e9,#38bdf8);animation:albar 1.1s ease-in-out infinite;}',
         '@keyframes albar{0%{margin-left:-40%;}50%{margin-left:60%;}100%{margin-left:100%;}}',
+        '#' + ROOT_ID + '.slow .al-spin{display:none;}',
+        '#' + ROOT_ID + '.slow .al-bar{display:none;}',
+        '#' + ROOT_ID + '.slow .al-icon{font-size:34px;margin-bottom:12px;display:block;}',
         '#' + ROOT_ID + '.error .al-spin{display:none;}',
         '#' + ROOT_ID + '.error .al-bar{display:none;}',
         '#' + ROOT_ID + '.error .al-icon{font-size:34px;margin-bottom:12px;display:block;}',
@@ -108,17 +114,52 @@
         return dirDepth > 0 ? new Array(dirDepth + 1).join('../') + 'index.html' : 'index.html';
     }
 
+    // Après ~12 s sans réponse : message « Connexion lente », boutons Réessayer / Continuer (données locales).
+    function armWatchdog(root) {
+        clearWatchdog();
+        watchdog = setTimeout(function () {
+            watchdog = null;
+            if (!root.classList.contains('on') || root.classList.contains('error')) return;
+            root.classList.add('slow');
+            root.querySelector('.al-msg').textContent = 'Connexion lente… Les données locales restent disponibles.';
+            var actions = root.querySelector('.al-actions');
+            actions.innerHTML = '';
+            var retry = document.createElement('button');
+            retry.className = 'al-btn';
+            retry.textContent = 'Réessayer';
+            retry.addEventListener('click', function () {
+                root.classList.remove('slow');
+                root.querySelector('.al-msg').textContent = 'Nouvelle tentative…';
+                actions.innerHTML = '';
+                armWatchdog(root);
+                API.retry();
+            });
+            var cont = document.createElement('button');
+            cont.className = 'al-btn ghost';
+            cont.textContent = 'Continuer';
+            cont.addEventListener('click', function () { API.hide(); });
+            actions.appendChild(retry);
+            actions.appendChild(cont);
+        }, watchdogMs());
+    }
+
     var API = {
+        // Relance la synchronisation : reprise silencieuse (sync.js) si disponible, sinon rechargement de la page.
+        retry: function () {
+            if (window.AsuforSync && typeof window.AsuforSync.resync === 'function') window.AsuforSync.resync('loader-retry', { force: true });
+            else window.location.reload();
+        },
         show: function (message) {
             injectStyle();
             ready(function () {
                 var root = buildRoot();
-                root.classList.remove('error');
+                root.classList.remove('error', 'slow');
                 root.querySelector('.al-actions').innerHTML = '';
                 root.querySelector('.al-msg').textContent = message || 'Chargement…';
                 // reflow pour rejouer la transition
                 void root.offsetWidth;
                 root.classList.add('on');
+                armWatchdog(root);
             });
             return API;
         },
@@ -130,17 +171,20 @@
             return API;
         },
         hide: function () {
+            clearWatchdog();
             ready(function () {
                 var root = document.getElementById(ROOT_ID);
-                if (root) root.classList.remove('on');
+                if (root) root.classList.remove('on', 'slow');
             });
             return API;
         },
         fail: function (message, opts) {
             opts = opts || {};
+            clearWatchdog();
             injectStyle();
             ready(function () {
                 var root = buildRoot();
+                root.classList.remove('slow');
                 root.classList.add('on', 'error');
                 root.querySelector('.al-msg').textContent =
                     message || 'Session expirée. Reconnexion nécessaire.';
@@ -152,6 +196,7 @@
                     b.textContent = 'Réessayer';
                     b.addEventListener('click', function () {
                         root.classList.remove('error');
+                        armWatchdog(root);
                         opts.retry();
                     });
                     actions.appendChild(b);

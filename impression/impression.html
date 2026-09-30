@@ -22,6 +22,7 @@
     <script src="../security.js"></script>
     <!-- ✅ Overlay de chargement partagé -->
     <script src="../loader.js"></script>
+    <script src="../sync.js"></script>
     <!-- ✅ Config Firebase centralisée -->
     <script src="../firebase-config.js"></script>
     <!-- ✅ Moteur de facturation partagé (window.Billing) -->
@@ -571,6 +572,9 @@
     // ── Config Firebase ──
     const firebaseConfig = window.ASUFOR_FIREBASE_CONFIG;
 
+    // Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : jamais de chargement infini.
+    const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
+
     const app  = initializeApp(firebaseConfig);
     const db   = getDatabase(app);
     const auth = getAuth(app);
@@ -588,7 +592,7 @@
     let forageTelephone = '';
     async function loadForageBranding() {
         try {
-            const snap = await get(ref(db, P.config));
+            const snap = await sget(ref(db, P.config));
             const cfg = snap.exists() ? snap.val() : {};
             forageVillage = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
             document.title = 'Satigué Eau ' + forageVillage + ' - Impression v5';
@@ -689,21 +693,24 @@
         }
     }
 
+    const Sync = window.AsuforSync || null;
+    const fakeSnap = (obj) => ({
+        exists: () => !!obj, val: () => obj,
+        forEach: (cb) => { Object.keys(obj || {}).forEach(k => cb({ key: k, val: () => obj[k] })); }
+    });
+    function monthOptions(active) {
+        let html = '<option value="actuel">📅 Mois Actuel</option>';
+        Object.keys(allBackups || {}).sort().reverse().forEach(month => { html += `<option value="${month}">🗂️ Archive : ${month}</option>`; });
+        return { html, active };
+    }
+
     // ── Chargement du sélecteur de mois ──
     async function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
         try {
-            const snapshot = await get(ref(db, P.backup));
-            // ✅ v2 : icône calendrier au lieu d'une étoile/soleil — plus adaptée
-            // à une appli de gestion utilitaire.
-            let optionsHtml = '<option value="actuel">📅 Mois Actuel</option>';
-            if (snapshot.exists()) {
-                allBackups = snapshot.val();
-                Object.keys(allBackups).sort().reverse().forEach(month => {
-                    optionsHtml += `<option value="${month}">🗂️ Archive : ${month}</option>`;
-                });
-            }
-            monthSelect.innerHTML = optionsHtml;
+            const snapshot = await sget(ref(db, P.backup));
+            if (snapshot.exists()) allBackups = snapshot.val();
+            monthSelect.innerHTML = monthOptions().html;
             window.changeMonth();
         } catch (e) {
             monthSelect.innerHTML = '<option value="actuel">📅 Mois Actuel</option>';
@@ -716,17 +723,44 @@
         currentSelectedMonth = document.getElementById('monthFilter').value;
         manualOverrides = {};
         updateBanner();
-        document.getElementById('list-container').innerHTML = SKELETON_HTML;
-        if (unsubCurrentMonth) { unsubCurrentMonth(); unsubCurrentMonth = null; }
-        const path = currentSelectedMonth === "actuel"
-            ? P.compteurs
-            : `${P.backup}/${currentSelectedMonth}/donnees`;
-        unsubCurrentMonth = onValue(ref(db, path), renderData, (err) => {
-            console.error("Firebase:", err.code, err.message);
-            document.getElementById('list-container').innerHTML =
-                `<p style='text-align:center;color:#dc2626;'>⚠️ Erreur (${err.code}). Reconnectez-vous.</p>`;
-        });
+        attachData(false);
     };
+
+    // Écoute des relevés du mois choisi. silent = resynchronisation en arrière-plan : la liste affichée n'est PAS vidée.
+    // La copie locale (dernier instantané reçu) est affichée immédiatement ; le listener précédent est toujours détaché
+    // avant le nouveau (clé unique) : aucun doublon, aucun listener zombie.
+    function attachData(silent) {
+        const path = currentSelectedMonth === "actuel" ? P.compteurs : `${P.backup}/${currentSelectedMonth}/donnees`;
+        const cacheKey = 'impression:' + path;
+        const list = document.getElementById('list-container');
+        if (!silent) {
+            const cached = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
+            if (cached && typeof cached === 'object') renderData(fakeSnap(cached));
+            else { list.innerHTML = SKELETON_HTML; lastSnap = null; }
+        }
+        const un = onValue(ref(db, path), (snap) => {
+            if (window.AsuforCache) window.AsuforCache.write(cacheKey, snap.val() || {});
+            renderData(snap);
+        }, (err) => {
+            console.error("Firebase:", err.code, err.message);
+            if (lastSnap) return;         // des données sont déjà affichées : on les garde (le badge indique l'état)
+            list.innerHTML = `<p style='text-align:center;color:#dc2626;'>⚠️ Erreur (${err.code}). <a href="#" onclick="window.AsuforSync ? AsuforSync.resync('manual',{force:true}) : location.reload(); return false;" style="color:#3b82f6">Réessayer</a></p>`;
+        });
+        if (Sync) Sync.track('impression:data', un);
+        else { if (unsubCurrentMonth) unsubCurrentMonth(); unsubCurrentMonth = un; }
+    }
+
+    // Resynchronisation silencieuse : archives relues, écoute des relevés rattachée, rien n'est vidé.
+    async function resyncAll() {
+        const snapshot = await sget(ref(db, P.backup));
+        allBackups = snapshot.exists() ? snapshot.val() : {};
+        const monthSelect = document.getElementById('monthFilter');
+        const active = monthSelect.value;
+        monthSelect.innerHTML = monthOptions().html;
+        monthSelect.value = active;
+        attachData(true);
+        if (lastSnap) renderData(lastSnap);
+    }
 
     // ══════════════════════════════════════════
     // RENDU DE LA LISTE
@@ -1096,6 +1130,7 @@
             // ✅ v7 : grand livre (lecture continue) — re-rendu dès qu'il est chargé ou qu'il change.
             window.ComptaUI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
             window.ComptaUI.subscribe((st, mig, ready) => { if (ready && lastSnap) renderData(lastSnap); });
+            if (Sync && !window.__impSyncOn) { window.__impSyncOn = true; Sync.init({ db, ref, onValue }); Sync.onResync(resyncAll); }
             initMonthFilter();
         } else {
             // ✅ CORRECTION v4 : nettoyer aussi 'asufor_session' (sinon il reste
