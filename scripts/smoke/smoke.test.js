@@ -481,6 +481,21 @@ async function main() {
             assert.strictEqual(await has('Aminata'), true);
             assert.strictEqual(await has('Boubacar'), false);   // aucun paiement valide : pas de bouton
         });
+        await check('bouton « Annuler » lisible (libellé, pas seulement une icône) et sans débordement à 320 px', async () => {
+            await page.setViewportSize({ width: 320, height: 780 });
+            const info = await page.evaluate(() => {
+                const btn = document.querySelector('#releves-list .btn-cancel-pay');
+                if (!btn) return null;
+                const card = btn.closest('.item').getBoundingClientRect();
+                const r = btn.getBoundingClientRect();
+                return { text: btn.textContent.trim(), inside: r.right <= card.right + 0.5 && r.left >= card.left - 0.5, overX: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+            });
+            assert.ok(info, 'bouton Annuler introuvable');
+            assert.match(info.text, /Annuler/);   // libellé visible, plus une simple icône
+            assert.ok(info.inside, 'le bouton Annuler déborde de la carte');
+            assert.ok(info.overX <= 0, 'scroll horizontal ' + info.overX);
+            await page.setViewportSize({ width: 390, height: 780 });
+        });
         await check('dialogue : paiement affiché (montant, date, reçu), motif obligatoire, rien sans confirmation', async () => {
             await page.evaluate(() => window.annulerEncaissement('c1'));
             await page.waitForSelector('#cui-yes', { timeout: 8000 });

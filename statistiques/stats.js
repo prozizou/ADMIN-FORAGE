@@ -889,7 +889,7 @@ function comptaButtons(item, due) {
     // ce client a au moins un paiement valide. Toute la logique (contre-écriture, FIFO, audit) est
     // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
     const canCancelPay = ComptaUI.isPresident() && item.hasValidPayment;
-    const cancel = canCancelPay ? `<button class="btn-cancel-pay" onclick="annulerEncaissement('${item.key}')" ${lock} title="Annuler un encaissement saisi par erreur (président)"><i class="fa-solid fa-rotate-left"></i></button>` : '';
+    const cancel = canCancelPay ? `<button class="btn-cancel-pay" onclick="annulerEncaissement('${item.key}')" ${lock} title="Annuler un encaissement saisi par erreur (président)"><i class="fa-solid fa-rotate-left"></i><span>Annuler</span></button>` : '';
     return pay + rel + cancel;
 }
 
