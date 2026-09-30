@@ -685,7 +685,7 @@ window.applyFilter = function() {
             const realConsoA = nIdxA - lIdxA;
             // ✅ Un compteur pas encore relevé (new_index = 0) n'est pas une
             // anomalie — l'erreur d'index suppose qu'un index A été saisi.
-            const isAnomalyA = (nIdxA > 0 && realConsoA < 0) || realConsoA > 100;
+            const isAnomalyA = (nIdxA > 0 && realConsoA < 0) || window.Billing.isUnusualConsumption(item);
             if (!isAnomalyA) return false;
         }
         // ✅ v2 : filtre secondaire (déplacé hors des onglets) — uniquement les
@@ -952,7 +952,7 @@ function renderList() {
         // Fuite (> 100 m³) : consommation plausible mais suspecte — reste
         // affichée normalement, avec une simple alerte en plus (contrairement
         // à l'erreur d'index, ce n'est pas une donnée aberrante).
-        const anomalyHtml = (realConso > 100)
+        const anomalyHtml = window.Billing.isUnusualConsumption(item)
             ? `<div class="leak-alert"><i class="fa-solid fa-triangle-exclamation"></i> Consommation inhabituelle, à vérifier (&gt; 100 m³)</div>`
             : '';
 
@@ -989,7 +989,7 @@ function renderList() {
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
         // badge texte explicite (✓/✕), jamais la couleur seule.
-        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${realConso > 100 ? 'bg-alerte-fuite' : ''}`;
+        div.className = `item ${isPaid ? 'bg-paye' : 'bg-impaye'} ${window.Billing.isUnusualConsumption(item) ? 'bg-alerte-fuite' : ''}`;
 
         // ✅ v4 : carte empilée — nom + montant en gros en tête (l'essentiel
         // d'un coup d'œil), détails (quartier, compteur, relevé) en dessous

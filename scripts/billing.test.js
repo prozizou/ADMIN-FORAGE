@@ -485,6 +485,24 @@ test('clôture : rétro-compat des champs historiques (apaid, arrieres remis à 
     assert.strictEqual(updates['C/a/arrieres'], 0);
 });
 
+// ── Consommation inhabituelle ────────────────────────────────
+test('consommation inhabituelle : > 100 m³ seulement (seuil exclu), index qui recule ou non relevé jamais', () => {
+    assert.strictEqual(Billing.CONSO_INHABITUELLE_M3, 100);
+    assert.strictEqual(Billing.isUnusualConsumption({ last_index: '10', new_index: 111 }), true);     // 101 m³
+    assert.strictEqual(Billing.isUnusualConsumption({ last_index: '10', new_index: 110 }), false);    // 100 m³ pile
+    assert.strictEqual(Billing.isUnusualConsumption({ last_index: 500, new_index: 50 }), false);      // index qui recule
+    assert.strictEqual(Billing.isUnusualConsumption({ last_index: '300', new_index: 0 }), false);     // non relevé
+    assert.strictEqual(Billing.isUnusualConsumption({}), false);
+    assert.strictEqual(Billing.isUnusualConsumption(null), false);
+});
+
+test('consommation inhabituelle : reste FACTURÉE normalement, dans le mois comme dans les arriérés', () => {
+    const rec = { numero_compteur: '1', zone: 'N', last_index: '0', new_index: 150, facteur: 250, status: 'impaye' };
+    assert.strictEqual(Billing.computeCurrent(rec).montant, 37500);
+    const idx = Billing.indexBackups({ '2026-08': { donnees: { a: rec } } });
+    assert.strictEqual(Billing.computeArrears({ numero_compteur: '1', zone: 'N' }, idx, { fbKey: 'a' }).arriere, 37500);
+});
+
 // ── Bilan ────────────────────────────────────────────────────
 console.log('\n' + passed + ' test(s) réussi(s), ' + failures.length + ' échec(s).');
 if (failures.length > 0) process.exit(1);

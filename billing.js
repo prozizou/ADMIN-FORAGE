@@ -44,6 +44,10 @@
 
     var FACTEUR_DEFAUT = 250;
 
+    // Consommation « inhabituelle » (fuite possible) : au-delà de ce volume (m³) sur un mois.
+    // Elle reste FACTURÉE normalement (ce n'est pas une anomalie de relevé) mais elle est signalée.
+    var CONSO_INHABITUELLE_M3 = 100;
+
     // ─────────────────────────────────────────────────────────────
     // OUTILS DE CONVERSION (Firebase mélange String et Number)
     // ─────────────────────────────────────────────────────────────
@@ -132,6 +136,17 @@
             anomalie: false,
             raison: null
         };
+    }
+
+    /**
+     * Consommation inhabituelle du mois : volume réel (nouvel − ancien index) supérieur à
+     * CONSO_INHABITUELLE_M3. Un index qui recule ou un relevé absent n'en est PAS un
+     * (c'est une anomalie / un compteur non relevé, traités ailleurs).
+     */
+    function isUnusualConsumption(record) {
+        var l = toNum(record && record.last_index);
+        var n = toNum(record && record.new_index);
+        return (n - l) > CONSO_INHABITUELLE_M3;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -658,6 +673,8 @@
         isPaid: isPaid,
         // calculs
         computeCurrent: computeCurrent,
+        isUnusualConsumption: isUnusualConsumption,
+        CONSO_INHABITUELLE_M3: CONSO_INHABITUELLE_M3,
         indexBackups: indexBackups,
         findInCycle: findInCycle,
         computeArrears: computeArrears,
