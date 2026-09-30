@@ -277,6 +277,41 @@ async function main() {
     }
 
 
+    // ══════════ IMPRESSION : consommation inhabituelle + impayé → « Arriéré » ══════════
+    console.log('Impression — consommation inhabituelle');
+    {
+        const t = seed();
+        const C = t.Asufor[FA].compteurs;
+        C.h1 = rec({ name: 'Fuite Impayée', numero_compteur: '11', last_index: '0', new_index: 150 });                       // > 100 m³, impayé
+        C.h2 = rec({ name: 'Fuite Payée', numero_compteur: '12', last_index: '0', new_index: 150, status: 'paye', statut: true }); // > 100 m³, payé
+        C.h3 = rec({ name: 'Normal Impayé', numero_compteur: '13', last_index: '0', new_index: 10 });                         // impayé normal
+        const { page, errors } = await newPage(browser, 'président', t);
+        await page.goto(base + '/impression/impression.html');
+        await page.waitForSelector('.facture-item', { timeout: 8000 });
+        const chip = (name) => page.$$eval('.facture-item', (els, n) => {
+            const el = els.find(e => e.innerText.includes(n));
+            return el ? el.querySelector('.status-chip').className + '|' + el.querySelector('.status-chip').textContent.trim() : null;
+        }, name);
+        await check('consommation inhabituelle + impayé : pastille « Arriéré », montant inchangé', async () => {
+            assert.match(await chip('Fuite Impayée'), /chip-arriere\|.*Arriéré/);
+            assert.strictEqual(num(await page.textContent('#total-h1')), 37500);          // 150 m³ × 250, sans arriéré ancien
+            assert.strictEqual(num(await page.textContent('#arr-h1')), 0);
+        });
+        await check('consommation normale et impayé : reste « Impayé »', async () => {
+            assert.match(await chip('Normal Impayé'), /chip-impaye\|.*Impayé/);
+        });
+        await check('consommation inhabituelle mais PAYÉE : pas classée « Arriéré »', async () => {
+            assert.doesNotMatch(await chip('Fuite Payée'), /Arriéré/);
+        });
+        await check('décompte du bandeau : l\'« Arriéré » inclut le compteur à consommation inhabituelle', async () => {
+            const nArr = num(await page.textContent('#countArriere'));
+            // c1 (6000) et c2 (1500) ont de vrais arriérés + h1 = 3
+            assert.strictEqual(nArr, 3);
+        });
+        await check('aucune erreur JavaScript (impression, conso inhabituelle)', () => assert.deepStrictEqual(errors, []));
+        await page.context().close();
+    }
+
     // ══════════ MAINTENANCE / CLÔTURE ══════════
     console.log('Maintenance (clôture)');
     {

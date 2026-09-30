@@ -687,9 +687,12 @@
     // Impayé   : seul le mois courant est dû, sans solde reporté.
     // (Pas de "Partiellement payé" : aucun paiement partiel n'est suivi par
     // facture dans cette appli — l'inventer afficherait une donnée fausse.)
+    // Consommation inhabituelle (> 100 m³, voir Billing) ET impayé : classé « Arriéré » (dette à
+    // suivre de près) même sans arriéré ancien. Les montants ne changent pas.
     window.billStatusChip = function(d) {
         if (d.total <= 0)   return { cls: 'chip-ajour',   label: '✓ À jour' };
         if (d.arrieres > 0) return { cls: 'chip-arriere', label: '⏱ Arriéré' };
+        if (d.conso_inhabituelle && d.impaye) return { cls: 'chip-arriere', label: '⏱ Arriéré', title: 'Consommation inhabituelle et impayé' };
         return { cls: 'chip-impaye', label: '✕ Impayé' };
     };
 
@@ -810,6 +813,8 @@
             // Correction manuelle persistée (arrieres_ajustement) : elle est déjà comprise dans `arrieres`.
             if (stmt.ajustement !== 0) manualOverrides[key] = { arrieres: arrieres, original: stmt.arriere_calcule };
 
+            d.conso_inhabituelle = window.Billing.isUnusualConsumption(d);
+            d.impaye     = !window.Billing.isPaid(d);
             d.vol        = stmt.conso;
             d.montantMois = montantMois;
             d.anomalie   = stmt.anomalie;         // mois courant en anomalie ?
@@ -850,7 +855,7 @@
                 <div class="item-info">
                     <div class="name-row">
                         <strong>${d.name || 'Inconnu'}</strong>
-                        <span class="status-chip ${chip.cls}">${chip.label}</span>
+                        <span class="status-chip ${chip.cls}"${chip.title ? ` title="${chip.title}"` : ''}>${chip.label}</span>
                     </div>
                     <div class="sub">Compteur n°${d.numero_compteur || 'N/A'} · Zone : ${d.zone || 'N/A'}</div>
                     ${badgeHtml}
@@ -1113,6 +1118,7 @@
             const chip = window.billStatusChip(d);
             chipEl.className = `status-chip ${chip.cls}`;
             chipEl.textContent = chip.label;
+            if (chip.title) chipEl.title = chip.title; else chipEl.removeAttribute('title');
         }
 
         // Montants
