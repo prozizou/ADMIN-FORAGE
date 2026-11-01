@@ -668,32 +668,28 @@ async function main() {
         await check('chronologie : 2 factures + 1 paiement (affectations), soldes cohérents', async () => {
             const t = await page.textContent('#timeline');
             assert.match(t, /Facture Juin 2026/); assert.match(t, /Facture Juillet 2026/);
-            assert.match(t, /Paiement · reçu n°/);
+            assert.match(t, /Paiement reçu/);
             assert.strictEqual(num(await page.textContent('#t-avance')), 1000);
             assert.strictEqual(num(await page.textContent('#t-arrieres')), 0);
         });
         for (const width of [320, 360, 390]) {
-            await check(`relevé mobile ${width}px : dark, KPI, actions sur une ligne (≥ 44 px), menu ⋮, timeline, aucun débordement`, async () => {
+            await check(`fiche client ${width}px : total du jour, boutons nommés et détails à la demande`, async () => {
                 await page.setViewportSize({ width, height: 780 });
                 const r = await page.evaluate(() => {
-                    const vis = (e) => e.getBoundingClientRect().width > 0;
-                    const row = [...document.querySelectorAll('.card > .actions > .btn')].filter(vis);
-                    const tops = new Set(row.map(b => Math.round(b.getBoundingClientRect().top)));
-                    const kpi = [...document.querySelectorAll('.kpi')].map(k => k.getBoundingClientRect());
+                    const buttons = [...document.querySelectorAll('#btn-pay, #btn-print, #btn-more')];
                     return {
                         over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-                        bg: getComputedStyle(document.body).backgroundColor,
-                        oneLine: tops.size === 1, minH: Math.min(...row.map(b => b.getBoundingClientRect().height)),
-                        outside: row.filter(b => b.getBoundingClientRect().right > window.innerWidth).length + kpi.filter(k => k.right > window.innerWidth).length,
-                        main: [...document.querySelectorAll('.kpis:not(.second) .l')].map(e => e.textContent), second: [...document.querySelectorAll('.kpis.second .l')].map(e => e.textContent),
-                        dots: document.querySelectorAll('#timeline .ev .dot').length, meta: document.getElementById('meta').textContent
+                        minH: Math.min(...buttons.map(b => b.getBoundingClientRect().height)),
+                        named: buttons.every(b => b.innerText.trim().length > 5),
+                        detailsClosed: !document.getElementById('account-details').open,
+                        total: document.getElementById('total-due').textContent,
+                        meta: document.getElementById('meta').textContent
                     };
                 });
                 assert.ok(r.over <= 0, 'scroll horizontal ' + r.over);
-                assert.strictEqual(r.bg, 'rgb(10, 15, 28)');
-                assert.ok(r.oneLine, 'actions sur plusieurs lignes'); assert.ok(r.minH >= 44, 'bouton trop bas : ' + r.minH); assert.strictEqual(r.outside, 0);
-                assert.deepStrictEqual(r.main, ['Facturé', 'Payé', 'Solde à payer']); assert.deepStrictEqual(r.second, ['Arriérés', 'Avance', 'Ajustements']);
-                assert.ok(r.dots >= 3); assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
+                assert.ok(r.minH >= 44); assert.ok(r.named); assert.ok(r.detailsClosed);
+                assert.strictEqual(num(r.total), 500);
+                assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
                 await page.click('#btn-more');
                 assert.ok(await page.isVisible('#menu'));
                 await page.keyboard.press('Escape');
@@ -711,6 +707,7 @@ async function main() {
             await r.page.context().close();
         });
         await check('président : annulation motivée → paiement « annule » conservé, factures rouvertes', async () => {
+            await page.locator('details:has([data-cancel]) > summary').click();
             await page.click('[data-cancel]');
             await page.fill('#mot', 'Billet refusé à la banque');
             await page.click('#ok');
@@ -723,6 +720,7 @@ async function main() {
             assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_ANNULE'));
         });
         await check('ajustement : remise validée par le président (motif obligatoire), facture figée intacte', async () => {
+            await page.click('#btn-more');
             await page.click('#btn-adj');
             await page.selectOption('#typ', 'remise');
             await page.fill('#mnt', '500');
@@ -730,7 +728,7 @@ async function main() {
             assert.match(await page.textContent('#err'), /motif/i);
             await page.fill('#mot', 'Fuite sur le réseau public');
             await page.click('#ok');
-            await page.waitForFunction(() => /Remise/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            await page.waitForFunction(() => /Réduction de facture/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
             const F = (await db(page)).Asufor[FA];
             const j = Object.values(F.ajustements)[0];
             assert.deepStrictEqual([j.type, j.statut, j.montant], ['remise', 'valide', 500]);
@@ -746,12 +744,13 @@ async function main() {
         await page.waitForSelector('#timeline .ev', { timeout: 8000 });
         await check('trésorier : ne peut pas annuler un paiement ; son ajustement reste « en attente »', async () => {
             assert.strictEqual(await page.$('[data-cancel]'), null);
+            await page.click('#btn-more');
             await page.click('#btn-adj');
             await page.selectOption('#typ', 'majoration');
             await page.fill('#mnt', '300');
             await page.fill('#mot', 'Frais de réouverture');
             await page.click('#ok');
-            await page.waitForFunction(() => /en attente/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            await page.waitForFunction(() => /en attente/i.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
             const j = Object.values((await db(page)).Asufor[FA].ajustements)[0];
             assert.strictEqual(j.statut, 'en_attente');
             assert.strictEqual(await page.$('[data-validate]'), null);
