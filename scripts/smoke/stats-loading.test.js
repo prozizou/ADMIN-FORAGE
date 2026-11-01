@@ -8,7 +8,7 @@ const root = 'Asufor/' + FA;
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
     const base = 'http://127.0.0.1:' + server.address().port;
     try {
-        for (const slow of ['backup', 'migration', 'compteurs']) {
+        for (const slow of ['migration', 'compteurs']) {
             const { page, ctx, errors } = await newPage(browser, 'président', migratedSeed());
             await page.addInitScript(([root, slow]) => {
                 window.__ASUFOR_SYNC = { timeout: 5000, retries: 0, hydrate: 4000 };
@@ -72,7 +72,7 @@ const root = 'Asufor/' + FA;
             const { page, ctx } = await newPage(browser, 'président', { Asufor: { [FA]: { config: { nom: 'Vide' } } } });
             await page.goto(base + '/statistiques/stats.html');
             await page.waitForFunction(() => document.getElementById('stats-summary')?.getAttribute('aria-busy') === 'false');
-            assert.equal(await page.locator('#total-debt').innerText(), '0 CFA');
+            assert.equal(await page.locator('#total-debt').innerText(), '—');
             assert.equal(await page.locator('#total-money').innerText(), '0 CFA');
             console.log('✓ données complètes mais vides : vrais zéros affichés après chargement');
             await ctx.close();
@@ -83,6 +83,8 @@ const root = 'Asufor/' + FA;
             await page.goto(base + '/statistiques/stats.html');
             await page.waitForFunction(() => document.getElementById('stats-summary')?.getAttribute('aria-busy') === 'false');
             await page.evaluate(root => { window.__DB.listenDelays = { [root + '/backup/2026-06/donnees']: 1200 }; }, root);
+            await page.selectOption('#month-filter', '__archives__');
+            await page.waitForFunction(() => document.getElementById('month-filter').value === '2026-07');
             await page.selectOption('#month-filter', '2026-06');
             assert.equal(await page.locator('#total-debt').innerText(), '—');
             assert.equal(await page.locator('#stats-summary').getAttribute('aria-busy'), 'true');

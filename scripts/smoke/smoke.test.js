@@ -47,7 +47,19 @@ export const getDatabase = () => ({});
 export const goOffline = () => { DB().offlineCalls = (DB().offlineCalls || 0) + 1; DB().paused = true; (DB().connListeners || []).forEach(f => f()); };
 export const goOnline = () => { DB().onlineCalls = (DB().onlineCalls || 0) + 1; DB().paused = false; if (DB().recoverOnReopen) { DB().connected = true; DB().hangAll = false; DB().recoverOnReopen = false; } (DB().connListeners || []).forEach(f => f()); if (DB().connected !== false) DB().listeners.slice().forEach(f => f()); };
 export const ref = (db, path) => ({ path: path || '' });
-export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().hangAll || (DB().hang || []).includes(r.path)) return new Promise(() => {}); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(getAt(r.path)))); };
+export const orderByKey = () => ({ kind: 'key' });
+export const limitToLast = n => ({ kind: 'last', n });
+export const endBefore = key => ({ kind: 'before', key });
+export const query = (r, ...constraints) => ({ ...r, constraints });
+const queried = r => {
+  const value = getAt(r.path);
+  if (!r.constraints || !value) return value;
+  let keys = Object.keys(value).sort();
+  for (const c of r.constraints) if (c.kind === 'before') keys = keys.filter(k => k < c.key);
+  for (const c of r.constraints) if (c.kind === 'last') keys = keys.slice(-c.n);
+  return keys.length ? Object.fromEntries(keys.map(k => [k, value[k]])) : null;
+};
+export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().hangAll || (DB().hang || []).includes(r.path)) return new Promise(() => {}); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(queried(r)))); };
 export const update = async (r, updates) => { if (DB().denyWrites) throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'PERMISSION_DENIED' });
   DB().writes.push(JSON.parse(JSON.stringify(updates))); for (const [k, v] of Object.entries(updates)) setAt((r.path ? r.path + '/' : '') + k, v);
   for (const l of DB().listeners) l(); };
@@ -56,7 +68,7 @@ export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1)
 export const onValue = (r, cb, errCb) => {
   DB().onValuePaths = (DB().onValuePaths || []).concat([r.path]);
   if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false && !DB().paused)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
-  const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll || (DB().hangListen || []).includes(r.path)) return; DB().valueDeliveries = DB().valueDeliveries || {}; DB().valueDeliveries[r.path] = (DB().valueDeliveries[r.path] || 0) + 1; cb(snap(r.path, getAt(r.path))); };
+  const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll || (DB().hangListen || []).includes(r.path)) return; DB().valueDeliveries = DB().valueDeliveries || {}; DB().valueDeliveries[r.path] = (DB().valueDeliveries[r.path] || 0) + 1; cb(snap(r.path, queried(r))); };
   DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, (DB().listenDelays || {})[r.path] || 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
 const childReg = (p) => { DB().child = DB().child || {}; DB().child[p] = (DB().child[p] || 0) + 1; let off = false; return () => { if (!off) { off = true; DB().child[p]--; } }; };
 export const onChildAdded = (r) => childReg(r.path + '#add'); export const onChildChanged = (r) => childReg(r.path + '#chg'); export const onChildRemoved = (r) => childReg(r.path + '#rem');
@@ -159,6 +171,10 @@ async function main() {
             await page.evaluate(() => window.encaisser('c1'));
             assert.match(await page.textContent('#toast'), /Migration comptable requise/);
         });
+        await page.selectOption('#month-filter', '__archives__');
+        await page.waitForFunction(() => document.getElementById('month-filter').value === '2026-07');
+        await page.selectOption('#month-filter', 'actuel');
+        await page.waitForFunction(() => document.getElementById('stats-summary').getAttribute('aria-busy') === 'false');
         await check('avant migration : arriérés affichés depuis les archives (Aminata = 1 500 + 6 000)', async () => {
             const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
             assert.ok(/7[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))));
@@ -350,7 +366,7 @@ async function main() {
             const before = await page.evaluate(() => ({ l: window.__DB.listeners.length, t: window.AsuforSync.trackedCount() }));
             for (let i = 0; i < 6; i++) {
                 await page.evaluate(() => window.AsuforSync.resync('manual', { force: true }));
-                if (i % 2 === 0) { await page.selectOption('#month-filter', '2026-07'); await page.waitForTimeout(150); await page.selectOption('#month-filter', 'actuel'); }
+                if (i % 2 === 0) { await page.selectOption('#month-filter', '__archives__'); await page.waitForFunction(() => document.getElementById('month-filter').value === '2026-07'); await page.waitForTimeout(150); await page.selectOption('#month-filter', 'actuel'); }
                 await page.waitForTimeout(120);
             }
             await page.waitForTimeout(600);
@@ -556,7 +572,8 @@ async function main() {
         const { page, errors, ctx } = await newPage(browser, 'président', migratedSeed());
         await page.goto(base + '/statistiques/stats.html');
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await page.waitForFunction(() => [...document.querySelectorAll('#month-filter option')].some(o => o.value === '2026-06'), null, { timeout: 8000 });
+        await page.selectOption('#month-filter', '__archives__');
+        await page.waitForFunction(() => document.getElementById('month-filter').value === '2026-07');
         await page.selectOption('#month-filter', '2026-06');
         await page.waitForSelector('.archive-lock, .item', { timeout: 8000 });
         await page.waitForFunction(() => document.getElementById('archive-banner').classList.contains('visible'));
@@ -600,7 +617,8 @@ async function main() {
         const { page, errors, ctx } = await newPage(browser, 'président', migratedSeed());
         await page.goto(base + '/statistiques/stats.html');
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await page.waitForFunction(() => [...document.querySelectorAll('#month-filter option')].some(o => o.value === '2026-06'), null, { timeout: 8000 });
+        await page.selectOption('#month-filter', '__archives__');
+        await page.waitForFunction(() => document.getElementById('month-filter').value === '2026-07');
         await page.selectOption('#month-filter', '2026-06');
         await page.waitForFunction(() => document.getElementById('archive-banner').classList.contains('visible'));
         await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .item')].some(e => e.innerText.includes('Boubacar')), null, { timeout: 8000 });

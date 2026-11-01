@@ -84,9 +84,15 @@
 
             <div class="select-wrapper">
                 <select id="month-filter" onchange="changeMonth()" title="Sélectionner la période">
-                    <option value="actuel">Chargement des périodes...</option>
+                    <option value="actuel">Mois courant</option>
                 </select>
             </div>
+        </div>
+
+        <div id="archives-status" class="compta-status" role="status" hidden>
+            <span></span>
+            <button type="button" onclick="retryArchives()">Réessayer</button>
+            <button type="button" onclick="cancelArchives()">Rester sur le mois courant</button>
         </div>
 
         <!-- ✅ v2 : bandeau visible uniquement sur une période archivée —
@@ -133,6 +139,11 @@
                 <div class="recap-mini"><span class="recap-lbl">Problèmes</span><span class="recap-mini-val" id="rc-problemes">—</span></div>
             </div>
             <p class="recap-source" id="rc-source"></p>
+            <div id="cycle-status" class="compta-status" role="status" hidden>
+                <span>Date de dernière clôture indisponible pour le moment.</span>
+                <button type="button" onclick="retryCurrentCycle()">Réessayer</button>
+                <button type="button" onclick="showStatsDiagnostic()">Diagnostic</button>
+            </div>
             <div class="recap-barline">
                 <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
                 <div class="recap-pct" id="recap-pct">—</div>

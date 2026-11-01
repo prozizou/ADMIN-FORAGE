@@ -38,21 +38,21 @@ const sources = [root + '/config', root + '/agents', root + '/compteurs', root +
             const { page, ctx } = await newPage(browser, 'président', migratedSeed());
             await page.addInitScript(root => {
                 window.__ASUFOR_SYNC = { timeout: 50, retries: 0, sourceWatchdog: 100, hydrate: 3000 };
-                window.__DB.listenDelays = { [root + '/backup']: 1400 };
+                window.__DB.listenDelays = { [root + '/agents']: 1400 };
             }, root);
             await page.goto(base + '/statistiques/stats.html');
-            await page.waitForFunction(() => window.asuforDiagnostics?.().sources.archives?.status === 'slow');
+            await page.waitForFunction(() => window.asuforDiagnostics?.().sources.agents?.status === 'slow');
             const before = await page.evaluate(() => window.asuforDiagnostics());
             assert.equal(before.firebaseConnected, true);
             assert.equal(before.sources.releves.status, 'ready');
-            assert.equal(before.sources.archives.status, 'slow');
+            assert.equal(before.sources.agents.status, 'slow');
             assert.equal(await page.locator('#total-debt').innerText(), '—');
             assert.equal(await page.locator('#stats-diagnostic').isVisible(), true);
             await page.evaluate(() => window.AsuforSync.resync('recovery', { force: true }));
-            assert.equal(await page.evaluate(root => window.__DB.onValuePaths.filter(p => p === root + '/backup').length, root), 1,
+            assert.equal(await page.evaluate(root => window.__DB.onValuePaths.filter(p => p === root + '/agents').length, root), 1,
                 'la reprise automatique ne doit pas abandonner une source lente encore active');
             await page.waitForFunction(() => document.getElementById('stats-summary').getAttribute('aria-busy') === 'false');
-            assert.equal(await page.evaluate(() => window.asuforDiagnostics().sources.archives.status), 'ready');
+            assert.equal(await page.evaluate(() => window.asuforDiagnostics().sources.agents.status), 'ready');
             assert.equal(await page.locator('#total-debt').innerText().then(s => s.replace(/\D/g, '')), '10500');
             const serialized = JSON.stringify(before);
             assert.ok(!/email|token|uid|Asufor_a|Aminata|AIza/.test(serialized));
