@@ -54,6 +54,7 @@ export const update = async (r, updates) => { if (DB().denyWrites) throw Object.
 export const set = async (r, v) => { setAt(r.path, v); for (const l of DB().listeners) l(); };
 export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1), path: r.path + '/-Pid' + DB().pushN });
 export const onValue = (r, cb, errCb) => {
+  DB().onValuePaths = (DB().onValuePaths || []).concat([r.path]);
   if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false && !DB().paused)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
   const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll) return; cb(snap(r.path, getAt(r.path))); };
   DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, (DB().listenDelays || {})[r.path] || 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
@@ -385,7 +386,7 @@ async function main() {
         await r.page.addInitScript((cfg) => { window.__ASUFOR_SYNC = cfg; }, SYNC_CFG);
         await r.page.goto(base + '/impression/impression.html');
         await r.page.waitForSelector('.facture-item', { timeout: 8000 });
-        await check('impression : badge « Synchronisé », coupure → « Hors ligne », retour → relecture des archives, liste conservée', async () => {
+        await check('impression : reconnexion sans get archives bloquant, une seule écoute et liste conservée', async () => {
             await r.page.waitForFunction(() => /Synchronisé/.test((document.getElementById('asufor-sync-badge') || {}).textContent || ''), null, { timeout: 5000 }).catch(async (e) => { throw new Error('badge=' + (await badge(r.page)) + ' Sync=' + (await r.page.evaluate(() => typeof window.AsuforSync))); });
             const n0 = await r.page.$$eval('.facture-item', e => e.length);
             const b0 = await reads(r.page, 'Asufor/' + FA + '/backup');
@@ -393,7 +394,9 @@ async function main() {
             await r.page.waitForFunction(() => /Hors ligne — données locales/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 4000 });
             assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
             await connect(r.page, true);
-            await r.page.waitForFunction(([p, n]) => window.__DB.reads.filter(x => x === p).length > n, ['Asufor/' + FA + '/backup', b0], { timeout: 5000 });
+            await r.page.evaluate(() => window.AsuforSync.resync('manual', { force: true }));
+            assert.strictEqual(await reads(r.page, 'Asufor/' + FA + '/backup'), b0);
+            assert.strictEqual(await r.page.evaluate((p) => window.__DB.onValuePaths.filter(x => x === p).length, 'Asufor/' + FA + '/backup'), 1);
             assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
         });
         await r.ctx.close();

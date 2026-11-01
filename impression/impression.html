@@ -496,15 +496,19 @@
 
 <!-- ── Total à payer : mis en évidence avant la liste, recalculé à chaque
      recherche/filtre pour ne jamais afficher un chiffre obsolète. ── -->
-<div class="summary-bar">
+<div id="print-loading" role="status" style="margin:12px 16px;padding:12px;border-radius:12px;background:rgba(2,132,199,.1);">
+    <span id="print-loading-message">Vérification des factures en cours…</span>
+    <button type="button" onclick="retryPrintLoading()">Réessayer</button>
+</div>
+<div class="summary-bar" id="invoice-summary" aria-busy="true">
     <div class="summary-total">
         <div class="lbl">Total à recouvrer (liste affichée)</div>
-        <div class="val" id="summaryTotal">0 FCFA</div>
+        <div class="val" id="summaryTotal">—</div>
     </div>
     <div class="summary-chips">
-        <span class="summary-chip chip-ajour"><span class="n" id="countAjour">0</span> À jour</span>
-        <span class="summary-chip chip-arriere"><span class="n" id="countArriere">0</span> Arriéré</span>
-        <span class="summary-chip chip-impaye"><span class="n" id="countImpaye">0</span> Impayé</span>
+        <span class="summary-chip chip-ajour"><span class="n" id="countAjour">—</span> À jour</span>
+        <span class="summary-chip chip-arriere"><span class="n" id="countArriere">—</span> Arriéré</span>
+        <span class="summary-chip chip-impaye"><span class="n" id="countImpaye">—</span> Impayé</span>
     </div>
     <!-- Source des arriérés : impayés de l'archive du mois précédent -->
     <div id="prevArrearsInfo" style="width:100%;font-size:0.8rem;color:var(--text-sub, #64748b);margin-top:6px;"></div>
@@ -514,7 +518,7 @@
      (avant : isolée dans la barre de filtres, sans lien visuel avec elle) ── -->
 <div class="select-bar">
     <label class="select-all" for="master-cb">
-        <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)">
+        <input type="checkbox" id="master-cb" onchange="window.toggleAll(this)" disabled>
         <span>Tout sélectionner</span>
     </label>
 </div>
@@ -613,6 +617,11 @@
     let editCurrentKey      = null; // clé en cours d'édition dans le modal
     let unsubCurrentMonth   = null;
     let currentSelectedMonth = "actuel";
+    let archivesReady = false, archivesListening = false, archivesError = null;
+    let archiveDelayTimer = null, archiveSlow = false;
+    let ledgerReady = false, ledgerError = false, freshData = false, dataError = null;
+    let dataListenerVersion = 0, printRenderQueued = false;
+    let unsubArchives = null;
 
     // ── Formateurs ──
     const fPrice = (val) => new Intl.NumberFormat('fr-FR').format(Math.round(val)) + " FCFA";
@@ -705,18 +714,94 @@
     }
 
     // ── Chargement du sélecteur de mois ──
-    async function initMonthFilter() {
+    function initMonthFilter() {
         const monthSelect = document.getElementById('monthFilter');
-        try {
-            const snapshot = await sget(ref(db, P.backup));
-            if (snapshot.exists()) allBackups = snapshot.val();
-            monthSelect.innerHTML = monthOptions().html;
-            window.changeMonth();
-        } catch (e) {
-            monthSelect.innerHTML = '<option value="actuel">📅 Mois Actuel</option>';
-            window.changeMonth();
-        }
+        monthSelect.innerHTML = monthOptions().html;
+        monthSelect.value = 'actuel';
+        window.changeMonth();
+        ensureArchiveListener();
     }
+
+    // Une écoute persistante reçoit les mises à jour et reprend avec le SDK au retour du réseau.
+    // Aucune relecture get() de tout l'historique ne bloque la reprise des factures.
+    function ensureArchiveListener(force) {
+        if (archivesListening && !force) return;
+        if (Sync) Sync.untrack('impression:archives');
+        else if (unsubArchives) unsubArchives();
+        archivesListening = true;
+        archivesError = null;
+        archiveSlow = false;
+        clearTimeout(archiveDelayTimer);
+        const delay = (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.archiveWatchdog) || 12000;
+        archiveDelayTimer = setTimeout(() => { if (!archivesReady) { archiveSlow = true; schedulePrintRender(); } }, delay);
+        const onError = (err) => {
+            archivesListening = false; archivesReady = false; archivesError = err;
+            clearTimeout(archiveDelayTimer);
+            console.error('[Impression] Lecture des archives :', err.code || err.message);
+            schedulePrintRender();
+        };
+        try {
+            const un = onValue(ref(db, P.backup), (snapshot) => {
+                allBackups = snapshot.exists() ? snapshot.val() : {};
+                archivesReady = true; archivesError = null; archiveSlow = false;
+                clearTimeout(archiveDelayTimer);
+                const monthSelect = document.getElementById('monthFilter');
+                const active = currentSelectedMonth;
+                monthSelect.innerHTML = monthOptions().html;
+                monthSelect.value = active === 'actuel' || Object.prototype.hasOwnProperty.call(allBackups, active) ? active : 'actuel';
+                if (monthSelect.value !== currentSelectedMonth) window.changeMonth();
+                schedulePrintRender();
+            }, onError);
+            if (Sync) Sync.track('impression:archives', un);
+            else unsubArchives = un;
+        } catch (err) { onError(err); }
+    }
+
+    function invoicesReady() { return archivesReady && ledgerReady && freshData && !archivesError && !dataError; }
+
+    function schedulePrintRender() {
+        if (printRenderQueued) return;
+        printRenderQueued = true;
+        requestAnimationFrame(() => {
+            printRenderQueued = false;
+            if (lastSnap) renderData(lastSnap);
+            else renderPendingInvoices();
+        });
+    }
+
+    function renderPendingInvoices() {
+        document.getElementById('print-loading').hidden = false;
+        document.getElementById('invoice-summary').setAttribute('aria-busy', 'true');
+        document.getElementById('master-cb').disabled = true;
+        document.getElementById('master-cb').checked = false;
+        for (const id of ['summaryTotal', 'countAjour', 'countArriere', 'countImpaye']) document.getElementById(id).textContent = '—';
+        document.getElementById('prevArrearsInfo').textContent = '';
+        document.getElementById('actionBar').classList.remove('visible');
+        document.body.classList.remove('has-selection', 'preview-mode');
+        document.getElementById('print-zone').innerHTML = '';
+        const message = archivesError ? 'Impossible de charger les archives. Réessayez.'
+            : dataError ? 'Impossible de charger les relevés. Réessayez.'
+            : ledgerError ? 'Impossible de vérifier la comptabilité. Réessayez.'
+            : Sync && Sync.status() === 'offline' ? 'Données locales affichées. Reconnectez-vous pour vérifier les montants.'
+            : archiveSlow ? 'Le chargement des archives prend plus de temps. Les factures seront disponibles après vérification.'
+            : 'Vérification des factures en cours…';
+        document.getElementById('print-loading-message').textContent = message;
+        const list = document.getElementById('list-container');
+        if (lastSnap) {
+            const rows = [];
+            lastSnap.forEach(child => {
+                const d = child.val() || {};
+                rows.push(`<div class="skeleton-card invoice-pending" data-search="${esc(((d.name || '') + ' ' + (d.numero_compteur || '')).toLowerCase())}">
+                    <div><strong>${esc(d.name || 'Inconnu')}</strong><div>Compteur n°${esc(d.numero_compteur || 'N/A')}</div></div>
+                    <span>Montants en cours de vérification…</span></div>`);
+            });
+            list.innerHTML = rows.join('');
+            if (window.AsuforLoader) AsuforLoader.hide();
+        }
+        window.filterList();
+    }
+
+    window.retryPrintLoading = () => { if (Sync) Sync.retry('badge'); else { ensureArchiveListener(true); attachData(true); } };
 
     // ── Changement de mois ──
     window.changeMonth = function() {
@@ -730,42 +815,50 @@
     // La copie locale (dernier instantané reçu) est affichée immédiatement ; le listener précédent est toujours détaché
     // avant le nouveau (clé unique) : aucun doublon, aucun listener zombie.
     function attachData(silent) {
+        const version = ++dataListenerVersion;
         const path = currentSelectedMonth === "actuel" ? P.compteurs : `${P.backup}/${currentSelectedMonth}/donnees`;
         const cacheKey = 'impression:' + path;
         const list = document.getElementById('list-container');
         if (!silent) {
+            freshData = false; dataError = null;
             const cached = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
-            if (cached && typeof cached === 'object') renderData(fakeSnap(cached));
+            if (cached && typeof cached === 'object') { lastSnap = fakeSnap(cached); schedulePrintRender(); }
             else { list.innerHTML = SKELETON_HTML; lastSnap = null; }
+            renderPendingInvoices();
         }
         const un = onValue(ref(db, path), (snap) => {
+            if (version !== dataListenerVersion) return;
+            dataError = null;
+            if (!Sync || Sync._state.connected === true) freshData = true;
+            lastSnap = snap;
             if (window.AsuforCache) window.AsuforCache.write(cacheKey, snap.val() || {});
-            renderData(snap);
+            schedulePrintRender();
         }, (err) => {
+            if (version !== dataListenerVersion) return;
+            dataError = err;
             console.error("Firebase:", err.code, err.message);
-            if (lastSnap) return;         // des données sont déjà affichées : on les garde (le badge indique l'état)
-            list.innerHTML = `<p style='text-align:center;color:#dc2626;'>⚠️ Erreur (${err.code}). <a href="#" onclick="window.AsuforSync ? AsuforSync.resync('manual',{force:true}) : location.reload(); return false;" style="color:#3b82f6">Réessayer</a></p>`;
+            schedulePrintRender();
         });
         if (Sync) Sync.track('impression:data', un);
         else { if (unsubCurrentMonth) unsubCurrentMonth(); unsubCurrentMonth = un; }
     }
 
-    // Resynchronisation silencieuse : archives relues, écoute des relevés rattachée, rien n'est vidé.
-    async function resyncAll() {
-        const snapshot = await sget(ref(db, P.backup));
-        allBackups = snapshot.exists() ? snapshot.val() : {};
-        const monthSelect = document.getElementById('monthFilter');
-        const active = monthSelect.value;
-        monthSelect.innerHTML = monthOptions().html;
-        monthSelect.value = active;
+    // Réattacher les relevés immédiatement, sans attendre le téléchargement des archives.
+    function resyncAll(reason) {
+        ensureArchiveListener((reason === 'badge' || reason === 'loader-retry') && !archivesReady);
         attachData(true);
-        if (lastSnap) renderData(lastSnap);
+        schedulePrintRender();
+        return !archivesError && !dataError;
     }
 
     // ══════════════════════════════════════════
     // RENDU DE LA LISTE
     // ══════════════════════════════════════════
     function renderData(snap) {
+        if (!invoicesReady()) { renderPendingInvoices(); return; }
+        document.getElementById('print-loading').hidden = true;
+        document.getElementById('invoice-summary').setAttribute('aria-busy', 'false');
+        document.getElementById('master-cb').disabled = false;
         if (window.AsuforLoader) AsuforLoader.hide();
         const selectedMonthStr = currentSelectedMonth === "actuel" ? "9999-99" : currentSelectedMonth;
         const listContainer    = document.getElementById('list-container');
@@ -793,7 +886,7 @@
         lastSnap = snap;
 
         snap.forEach(child => {
-            const d   = child.val();
+            const d   = { ...child.val() };
             const key = child.key;
             const cur = window.Billing.computeCurrent(d);
             let montantMois, arrieres, avance = 0, total;
@@ -954,6 +1047,16 @@
         const listContainer = document.getElementById('list-container');
         const q   = searchEl.value.toLowerCase();
         const sel = relEl.value;
+        if (!invoicesReady()) {
+            let count = 0;
+            listContainer.querySelectorAll('.invoice-pending').forEach(item => {
+                const show = item.dataset.search.includes(q);
+                item.style.display = show ? 'flex' : 'none';
+                if (show) count++;
+            });
+            document.getElementById('resultCount').textContent = count ? `${count} client(s) — calcul en cours` : 'Chargement…';
+            return;
+        }
         // ✅ v2 : feedback visuel qu'un filtre est appliqué (contour bleu),
         // absent jusqu'ici — on ne voyait pas si "Tous les agents" avait été
         // changé pour un agent précis.
@@ -993,6 +1096,7 @@
     };
 
     window.toggleAll = function(src) {
+        if (!invoicesReady()) { src.checked = false; return; }
         document.querySelectorAll('.facture-item').forEach(it => {
             if (it.style.display !== 'none') {
                 const cb = it.querySelector('.bill-cb');
@@ -1025,6 +1129,7 @@
     // GÉNÉRATION DES PAGES D'IMPRESSION
     // ══════════════════════════════════════════
     window.renderPrint = function() {
+        if (!invoicesReady()) { showToast('Les montants sont encore en cours de vérification.', true); return; }
         const printZone = document.getElementById('print-zone');
         let html = "";
 
@@ -1096,6 +1201,7 @@
     // affiche à l'écran (voir .preview-mode dans le <style>) — aucun contenu
     // dupliqué, #print-zone sert à la fois à l'aperçu et à l'impression réelle.
     window.openPreview = function() {
+        if (!invoicesReady()) { showToast('Les montants sont encore en cours de vérification.', true); return; }
         const n = document.querySelectorAll('.bill-cb:checked').length;
         if (n === 0) { showToast('Sélectionnez au moins une facture à prévisualiser.', true); return; }
         window.renderPrint();
@@ -1110,6 +1216,7 @@
     // d'ouvrir la boîte de dialogue d'impression du navigateur — on ne veut
     // jamais qu'un clic déclenche une impression dont l'ampleur surprend.
     window.confirmPrint = function() {
+        if (!invoicesReady()) { showToast('Les montants sont encore en cours de vérification.', true); return; }
         const checked = Array.from(document.querySelectorAll('.bill-cb:checked'));
         const n = checked.length;
         if (n === 0) { showToast('Sélectionnez au moins une facture à imprimer.', true); return; }
@@ -1129,8 +1236,12 @@
             loadForageBranding();
             // ✅ v7 : grand livre (lecture continue) — re-rendu dès qu'il est chargé ou qu'il change.
             window.ComptaUI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
-            window.ComptaUI.subscribe((st, mig, ready) => { if (ready && lastSnap) renderData(lastSnap); });
-            if (Sync && !window.__impSyncOn) { window.__impSyncOn = true; Sync.init({ db, ref, onValue, goOffline, goOnline }); Sync.onResync(resyncAll); }
+            window.ComptaUI.subscribe((st, mig, ready, info) => {
+                ledgerReady = ready && (!info || info.status === 'ready');
+                ledgerError = !!info && (info.status === 'error' || info.status === 'degraded');
+                schedulePrintRender();
+            });
+            if (Sync && !window.__impSyncOn) { window.__impSyncOn = true; Sync.init({ db, ref, onValue, goOffline, goOnline }); Sync.onResync(resyncAll); Sync.onState(() => { if (!invoicesReady()) schedulePrintRender(); }); }
             initMonthFilter();
         } else {
             // ✅ CORRECTION v4 : nettoyer aussi 'asufor_session' (sinon il reste
