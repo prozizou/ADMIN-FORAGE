@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push, query, orderByKey, limitToLast, endBefore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -13,19 +13,19 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v71';
+const STATS_BUILD = 'v72';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
 // Chaque source d'affichage est écoutée immédiatement, sans attendre un get() ni multiplier les essais.
-function watchStatsSource(key, path, onSnapshot, force) {
+function watchStatsSource(key, path, onSnapshot, force, target) {
     const previous = liveSources[key];
     if (previous && !previous.stopped && previous.path === path && previous.status !== 'error' && !force) return previous;
     if (Sync) Sync.untrack('stats:' + key);
     else if (previous) previous.stop();
     const source = liveSources[key] = { path, status: 'pending', receivedAt: null, connectedAtReceive: null, errorCode: null, stopped: false };
     let unsubscribe = () => {};
-    const report = () => { if (key !== 'config' && Sync && Sync.reportSource) Sync.reportSource('stats:' + key, source.status); scheduleStatisticsRender(); };
+    const report = () => { if (Sync && Sync.reportSource) Sync.reportSource('stats:' + key, requiredStatsSources().includes(key) ? source.status : null); scheduleStatisticsRender(); };
     const delay = (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.sourceWatchdog) || 12000;
     const timer = setTimeout(() => {
         if (!source.stopped && source.status === 'pending') { source.status = 'slow'; report(); }
@@ -45,7 +45,7 @@ function watchStatsSource(key, path, onSnapshot, force) {
     };
     report();
     try {
-        unsubscribe = onValue(ref(db, path), snapshot => {
+        unsubscribe = onValue(target || ref(db, path), snapshot => {
             if (source.stopped || liveSources[key] !== source) return;
             try {
                 source.status = 'ready'; source.errorCode = null;
@@ -98,10 +98,12 @@ let backupWindows = null;
 function invalidateBackupCalculations() { backupIndex = null; backupWindows = null; }
 function getBackupIndex() { return backupIndex || (backupIndex = window.Billing.indexBackups(allBackupsCache)); }
 function getBackupWindows() { return backupWindows || (backupWindows = Compta.cycleWindows(allBackupsCache)); }
-// ✅ Vrai UNIQUEMENT quand les archives ont été lues EN ENTIER. Tant que ce n'est pas
-// le cas, l'encaissement est bloqué : régulariser un paiement sans connaître les cycles
-// impayés laisserait des arriérés ouverts sans que personne ne le voie.
+// Les archives ne sont demandées que depuis le sélecteur de périodes.
 let backupsLoaded = false;
+let archivesRequested = false;
+let openLatestArchive = false;
+let currentCycleStart = null;
+let cycleLookupGeneration = 0;
 // ✅ v7 : grand livre (factures / paiements / affectations / ajustements) entièrement chargé.
 let ledgerReady = false;
 let relevesReady = false;
@@ -228,7 +230,7 @@ async function currentReleveFor(key) {
 // le statut payé/impayé du compteur doit toujours être le relevé réellement en cours (pas celui de
 // l'archive affichée à l'écran) : on va le relire quand une archive est consultée.
 window.encaisser = async function(key) {
-    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    if (!ledgerReady || (isArchiveView && !backupsLoaded)) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
     if (!ComptaUI.isMigrated()) { showToast("⚠️ Migration comptable requise (président) avant tout encaissement.", true); return; }
     const item = await currentReleveFor(key);
     ComptaUI.openPaymentDialog({
@@ -242,7 +244,7 @@ window.encaisser = async function(key) {
 };
 
 window.annulerEncaissement = async function(key) {
-    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    if (!ledgerReady || (isArchiveView && !backupsLoaded)) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
     const item = await currentReleveFor(key);
     ComptaUI.openPaymentCancelDialog({
         compteurId: key,
@@ -261,7 +263,7 @@ window.annulerEncaissement = async function(key) {
 //    « Annuler encaissement » (contre-écriture tracée du paiement concerné).
 window.marquerNonPaye = function(key) {
     if (!isArchiveView || !ComptaUI.isPresident()) return;
-    if (!ledgerReady || !backupsLoaded) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
+    if (!ledgerReady || (isArchiveView && !backupsLoaded)) { showToast("⏳ Comptabilité en cours de chargement : patientez un instant.", true); return; }
     if (!ComptaUI.isMigrated()) { showToast("⚠️ Migration comptable requise (président).", true); return; }
     const cycle = currentSelection;
     const row = storeReleves[key] || {};
@@ -362,42 +364,119 @@ function monthLabelFR(cycle) {
     return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-// --- INITIALISATION DU MENU DÉROULANT DES MOIS ---
+// Le mois courant n'ouvre aucun chemin de backup, y compris lors d'une reprise.
 window.initMonthFilter = function() {
     const monthSelect = document.getElementById('month-filter');
-    monthSelect.innerHTML = '<option value="actuel">Données actuelles</option>';
-    monthSelect.value = "actuel";
+    monthSelect.innerHTML = '<option value="actuel">Mois courant</option><option value="__archives__">Voir les archives…</option>';
+    monthSelect.value = 'actuel';
+    loadDataForMonth('actuel');
+};
 
-    // ✅ Chargement INSTANTANÉ : la liste des relevés (le plus important à
-    // l'écran) se charge tout de suite, SANS attendre la liste des archives
-    // ci-dessous — les deux se font en parallèle plutôt qu'en série.
-    loadDataForMonth("actuel");
-
-    loadBackups(monthSelect, 0);
+function archiveStatus() {
+    const el = document.getElementById('archives-status');
+    if (!el) return;
+    const source = liveSources.archives;
+    el.hidden = !archivesRequested || !source || source.status === 'ready';
+    const message = source && source.status === 'error'
+        ? 'Archives indisponibles. Le mois courant reste accessible.'
+        : 'Chargement des archives… Le mois courant reste accessible.';
+    el.querySelector('span').textContent = message;
 }
 
-// Une seule écoute des archives, conservée à la reconnexion et relancée sur demande explicite.
 function loadBackups(monthSelect, force) {
+    if (!archivesRequested) return;
     return watchStatsSource('archives', P.backup, snapshot => {
         allBackupsCache = snapshot.exists() ? snapshot.val() : {};
         invalidateBackupCalculations();
-        let optionsHtml = '<option value="actuel">Données actuelles</option>';
-        Object.keys(allBackupsCache).sort().reverse().forEach(month => {
-            optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
+        const months = Object.keys(allBackupsCache).sort().reverse();
+        let optionsHtml = '<option value="actuel">Mois courant</option><option value="__archives__">Voir les archives…</option>';
+        months.forEach(month => {
+            optionsHtml += `<option value="${escHtml(month)}">${escHtml(monthLabelFR(month))} — Archive</option>`;
         });
-        const activeValue = currentSelection;
+        const activeValue = openLatestArchive ? (months[0] || 'actuel') : currentSelection;
+        openLatestArchive = false;
         monthSelect.innerHTML = optionsHtml;
         monthSelect.value = activeValue === 'actuel' || Object.prototype.hasOwnProperty.call(allBackupsCache, activeValue) ? activeValue : 'actuel';
         backupsLoaded = true;
         if (monthSelect.value !== currentSelection) window.changeMonth();
+        else if (!months.length) { showToast('Aucune archive disponible.'); stopArchives(); }
+        archiveStatus();
     }, !!force);
 }
 
-// --- CHARGEMENT DES DONNÉES ---
-window.changeMonth = function() {
-    const selectedValue = document.getElementById('month-filter').value;
-    loadDataForMonth(selectedValue);
+function stopArchives() {
+    archivesRequested = false;
+    openLatestArchive = false;
+    if (Sync) Sync.untrack('stats:archives');
+    else if (liveSources.archives) liveSources.archives.stop();
+    archiveStatus();
+}
+
+window.cancelArchives = function() {
+    document.getElementById('month-filter').value = 'actuel';
+    window.changeMonth();
 };
+window.retryArchives = function() { if (archivesRequested) loadBackups(document.getElementById('month-filter'), true); };
+window.changeMonth = function() {
+    const select = document.getElementById('month-filter');
+    const selectedValue = select.value;
+    if (selectedValue === '__archives__') {
+        select.value = currentSelection;
+        archivesRequested = true;
+        openLatestArchive = true;
+        loadBackups(select, true);
+        archiveStatus();
+        return;
+    }
+    if (selectedValue === 'actuel') stopArchives();
+    else { archivesRequested = true; loadBackups(select, false); }
+    loadDataForMonth(selectedValue);
+    refreshSourceRequirements();
+};
+
+// Le journal contient la date de TOUTE clôture, même sans facture (consommation nulle).
+// Pages de 64 événements, ordonnées par les clés push Firebase : aucune lecture de backup.
+window.retryCurrentCycle = () => loadCurrentCycle(true);
+function loadCurrentCycle(force) {
+    const auditPath = ComptaUI.paths().audit;
+    const pageSize = 64;
+    const head = query(ref(db, auditPath), orderByKey(), limitToLast(pageSize));
+    watchStatsSource('cycle', auditPath, snapshot => {
+        const generation = ++cycleLookupGeneration;
+        currentCycleStart = null;
+        if (liveSources.cycle.connectedAtReceive === false) return;
+        if (Sync) Sync.untrack('stats:cycle-page');
+        let latest = 0;
+        let chronological = true;
+        function inspect(snap, cursor) {
+            if (generation !== cycleLookupGeneration) return;
+            const events = snap.val() || {};
+            const keys = Object.keys(events).sort();
+            let found = false;
+            for (const key of keys) {
+                const event = events[key];
+                if (event.action !== 'CLOTURE_EFFECTUEE') continue;
+                const date = Date.parse(event.date);
+                if (!Number.isFinite(date)) throw Object.assign(new Error('Date de clôture invalide'), { code: 'INVALID_CLOSURE_DATE' });
+                latest = Math.max(latest, date); found = true;
+            }
+            // Les identifiants non standard sont parcourus en entier pour ne pas déduire leur chronologie.
+            chronological = chronological && keys.every(key => /^[-0-9A-Z_a-z]{20}$/.test(key));
+            if ((found && chronological) || keys.length < pageSize) {
+                currentCycleStart = latest;
+                const completed = liveSources['cycle-page'];
+                queueMicrotask(() => { if (generation === cycleLookupGeneration && completed && completed === liveSources['cycle-page']) { if (Sync) Sync.untrack('stats:cycle-page'); else completed.stop(); } });
+                scheduleStatisticsRender();
+                return;
+            }
+            const before = keys[0];
+            if (!before || before === cursor) return;
+            const older = query(ref(db, auditPath), orderByKey(), endBefore(before), limitToLast(pageSize));
+            watchStatsSource('cycle-page', auditPath + ':' + before, page => inspect(page, before), true, older);
+        }
+        inspect(snapshot);
+    }, !!force, head);
+}
 
 function cacheKeyFor(dbPath) {
     return 'releves:' + dbPath;
@@ -497,8 +576,9 @@ function resyncAll(reason) {
     const force = ['manual', 'badge', 'loader-retry', 'visible', 'pageshow-bfcache', 'online'].includes(reason);
     loadDataForMonth(currentSelection, { silent: true, force });
     syncAgents(force);
-    loadBackups(document.getElementById('month-filter'), force);
-    return ['releves', 'agents', 'archives'].every(key => liveSources[key] && liveSources[key].status !== 'error');
+    if (archivesRequested) loadBackups(document.getElementById('month-filter'), force);
+    loadCurrentCycle(force);
+    return requiredStatsSources().every(key => liveSources[key] && liveSources[key].status !== 'error');
 }
 
 // Comptabilité : jamais « en attente » sans explication — message + bouton Réessayer si un nœud du grand livre échoue.
@@ -533,6 +613,7 @@ window.startSync = function() {
     // pas l'autre) : chacun affiche sa propre copie en cache instantanément
     // pendant que sa version fraîche arrive en tâche de fond.
     syncAgents();
+    loadCurrentCycle();
     window.initMonthFilter();
 }
 
@@ -593,14 +674,27 @@ function zoneOf(item) {
 }
 
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
+function requiredStatsSources() { return isArchiveView ? ['releves', 'agents', 'archives'] : ['releves', 'agents']; }
+function refreshSourceRequirements() {
+    if (Sync && Sync.reportSource) Object.entries(liveSources).forEach(([key, source]) => {
+        Sync.reportSource('stats:' + key, requiredStatsSources().includes(key) && !source.stopped ? source.status : null);
+    });
+}
 function statisticsReady() {
-    return relevesReady && backupsLoaded && ledgerReady && ['releves', 'agents', 'archives'].every(key => liveSources[key] && liveSources[key].status === 'ready');
+    return relevesReady && ledgerReady && (!isArchiveView || backupsLoaded) && requiredStatsSources().every(key => liveSources[key] && liveSources[key].status === 'ready');
 }
 
 function scheduleStatisticsRender() {
     if (statisticsRenderQueued) return;
     statisticsRenderQueued = true;
-    requestAnimationFrame(() => { statisticsRenderQueued = false; window.applyFilter(); });
+    requestAnimationFrame(() => {
+        statisticsRenderQueued = false;
+        archiveStatus();
+        const cycleStatus = document.getElementById('cycle-status');
+        if (cycleStatus) cycleStatus.hidden = isArchiveView || !ComptaUI.isMigrated() || currentCycleStart !== null ||
+            !['cycle', 'cycle-page'].some(key => liveSources[key] && ['slow', 'error'].includes(liveSources[key].status));
+        window.applyFilter();
+    });
 }
 
 window.retryStatistics = function () {
@@ -614,7 +708,7 @@ window.asuforDiagnostics = function () {
     }
     return { build: STATS_BUILD, page: 'statistiques', navigatorOnline: navigator.onLine, visibility: document.visibilityState,
         firebaseConnected: Sync ? Sync._state.connected : null, calculationsReady: statisticsReady(), readingsVerified: relevesReady,
-        archivesReceived: backupsLoaded, sources, ledger: ComptaUI.getStatus() };
+        archivesReceived: backupsLoaded, archivesRequested, migrated: ComptaUI.isMigrated(), cycleStartKnown: currentCycleStart !== null, sources, ledger: ComptaUI.getStatus() };
 };
 window.showStatsDiagnostic = () => { console.info('[ASUFOR diagnostic]', JSON.stringify(window.asuforDiagnostics())); showToast('Diagnostic affiché dans la console F12.'); };
 
@@ -654,7 +748,7 @@ function renderPendingStatistics() {
     document.getElementById('trend-money').textContent = '';
     document.getElementById('trend-debt').textContent = '';
     document.getElementById('top-quartiers').innerHTML = '<p class="muted-note">Chargement des statistiques…</p>';
-    const critical = ['releves', 'agents', 'archives'];
+    const critical = requiredStatsSources();
     const errors = critical.filter(key => liveSources[key] && liveSources[key].status === 'error');
     const slow = critical.filter(key => liveSources[key] && liveSources[key].status === 'slow');
     const labels = { releves: 'relevés', agents: 'agents', archives: 'archives' };
@@ -671,6 +765,7 @@ function renderPendingStatistics() {
 window.applyFilter = function() {
     if (!statisticsReady()) { renderPendingStatistics(); return; }
     setStatisticsAvailability(true);
+    if (!ComptaUI.isMigrated() && !backupsLoaded) document.querySelectorAll('[data-requires-statistics]').forEach(button => { button.disabled = true; });
     const selectedId = document.getElementById('agent-spinner').value || 'all';
     const searchQuery = document.getElementById('search-client').value.trim();
     const sortOption = document.getElementById('sort-spinner').value;
@@ -787,7 +882,7 @@ window.applyFilter = function() {
     const prevFig = prevCycle ? periodFigures(prevCycle, null, ids, S, migrated && prevCycle > cutoff) : null;
 
     const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    const F = (n) => Math.round(n || 0).toLocaleString() + " CFA";
+    const F = (n) => n === null ? '—' : Math.round(n || 0).toLocaleString() + " CFA";
     const aReclamer = ledgerMode && monthSel === 'actuel'
         ? filteredBase.reduce((t, it) => t + (it.totalDu || 0), 0)
         : fig.arrieres;
@@ -801,9 +896,10 @@ window.applyFilter = function() {
     setTxt('rc-problemes', String(fig.problemes));
     setTxt('rc-source', fig.historique
         ? 'Chiffres reconstitués depuis les archives (avant la comptabilité).'
-        : (migrated ? 'Grand livre : factures, paiements, affectations et ajustements.' : ''));
+        : (migrated ? (currentCycleStart === null && monthSel === 'actuel' ? 'Soldes vérifiés. Date de dernière clôture en cours de vérification ; encaissé et ajustements indisponibles.' : 'Grand livre : encaissé depuis la dernière clôture.') : (!backupsLoaded ? 'Mois courant uniquement. Arriérés historiques indisponibles avant consultation des archives ou migration comptable.' : '')));
 
-    const recapTotal = fig.encaisse + aReclamer;
+    const recapKnown = fig.encaisse !== null && aReclamer !== null;
+    const recapTotal = recapKnown ? fig.encaisse + aReclamer : 0;
     const recapPct = recapTotal > 0 ? (fig.encaisse / recapTotal * 100) : 0;
     const recapBar = document.getElementById('recap-bar-fill');
     if (recapBar) {
@@ -812,18 +908,18 @@ window.applyFilter = function() {
     }
     const recapStoryEl = document.getElementById('recap-story');
     if (recapStoryEl) {
-        recapStoryEl.textContent = aReclamer > 0
+        recapStoryEl.textContent = aReclamer === null ? 'Consultez les archives pour connaître les arriérés historiques.' : aReclamer > 0
             ? `Il reste ${Math.round(aReclamer).toLocaleString()} F à encaisser`
             : '🎉 Rien à réclamer !';
     }
     const recapPctEl = document.getElementById('recap-pct');
-    if (recapPctEl) recapPctEl.textContent = recapPct.toFixed(1).replace('.', ',') + ' % encaissé';
+    if (recapPctEl) recapPctEl.textContent = recapKnown ? recapPct.toFixed(1).replace('.', ',') + ' % encaissé' : '—';
 
     // Tendances : même définition pour la période précédente (sinon comparaison trompeuse).
     const calcTrend = (current, prev, elId, goodWhenUp) => {
         const el = document.getElementById(elId);
         if (!el) return;
-        if (!prev) { el.innerHTML = ""; return; }
+        if (!prev || current === null) { el.innerHTML = ""; return; }
         const diff = ((current - prev) / prev) * 100;
         const dirUp = diff >= 0;
         const sign = dirUp ? '+' : '';
@@ -860,7 +956,7 @@ function periodFigures(sel, items, ids, S, ledger) {
     const W = getBackupWindows();
     if (ledger) {
         const isOpen = sel === 'actuel';
-        const w = isOpen ? { start: W.openStart, end: Infinity } : (W.windows[sel] || { start: 0, end: Infinity });
+        const w = isOpen ? { start: currentCycleStart === null ? 0 : currentCycleStart, end: Infinity } : (W.windows[sel] || { start: 0, end: Infinity });
         const st = Compta.periodStats(S, { cycle: isOpen ? '__ouvert__' : sel, start: w.start, end: w.end, compteurIds: ids || undefined });
         let problemes = st.problemes;
         let facture = st.facture, previsionnel = false;
@@ -882,7 +978,7 @@ function periodFigures(sel, items, ids, S, ledger) {
                 if ((!ids || ids[f.compteur_id]) && f.probleme && f.probleme.actif && !f.probleme.resolu) problemes++;
             });
         }
-        return { facture, previsionnel, encaisse: st.encaisse, arrieres: st.arrieres, avances: st.avances, ajustements: st.ajustements, problemes, historique: false };
+        return { facture, previsionnel, encaisse: isOpen && currentCycleStart === null ? null : st.encaisse, arrieres: st.arrieres, avances: st.avances, ajustements: isOpen && currentCycleStart === null ? null : st.ajustements, problemes, historique: false };
     }
     // Historique : relevés de la période (archive ou actuel avant migration)
     const rows = items || Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r }));
@@ -897,7 +993,7 @@ function periodFigures(sel, items, ids, S, ledger) {
         arrieres += arr + (!paid && !cur.anomalie ? cur.montant : 0);
         if ((parseFloat(it.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(it)) problemes++;
     });
-    return { facture, previsionnel: sel === 'actuel', encaisse, arrieres, avances: 0, ajustements: 0, problemes, historique: sel !== 'actuel' };
+    return { facture, previsionnel: sel === 'actuel', encaisse, arrieres: !backupsLoaded && sel === 'actuel' ? null : arrieres, avances: 0, ajustements: 0, problemes, historique: sel !== 'actuel' };
 }
 
 // Bandeau « migration comptable requise » (président : bouton Migrer).
@@ -966,7 +1062,7 @@ function comptaButtons(item, due) {
     // ✅ v8 : Encaisser et Annuler restent disponibles en archive (mois passé) — payer une vieille dette
     // ou corriger un paiement mal saisi ne dépend pas du mois affiché à l'écran.
     const canPay = ComptaUI.canCollect() && due > 0 && !item.estSolde;
-    const ready = ledgerReady && backupsLoaded && ComptaUI.isMigrated();
+    const ready = ledgerReady && (!isArchiveView || backupsLoaded) && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
     const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
@@ -1109,7 +1205,7 @@ function renderList() {
         const totalDu = (item.totalDu != null) ? item.totalDu : calculatedAmount;
         const isPaid = !!item.estSolde;
         // Détail : mois + arriérés − avance (seulement quand il y a quelque chose à expliquer)
-        const arriereHtml = ((arriere > 0 || avance > 0) && !isPaid)
+        const arriereHtml = !ComptaUI.isMigrated() && !backupsLoaded ? '<div class="stats-pending-note">Mois courant uniquement — arriérés historiques non chargés.</div>' : ((arriere > 0 || avance > 0) && !isPaid)
             ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">${isArchiveView ? 'Facture' : 'Mois'} : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F${avance > 0 ? ` − Avance : ${avance.toLocaleString()} F` : ''}</div>`
             : (avance > 0 ? `<div style="font-size:0.8rem;color:var(--success);font-weight:700;">Avance disponible : ${avance.toLocaleString()} F</div>` : '');
         const factStatut = item.factureStatut ? { payee: '✓ Facture payée', partielle: '◐ Facture partielle', ouverte: '✕ Facture ouverte', annulee: '⊘ Facture annulée' }[item.factureStatut] : null;
