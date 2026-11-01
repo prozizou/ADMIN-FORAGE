@@ -13,7 +13,7 @@ const root = 'Asufor/' + FA;
             await page.addInitScript(([root, slow]) => {
                 window.__ASUFOR_SYNC = { timeout: 5000, retries: 0, hydrate: 4000 };
                 if (slow === 'migration') window.__DB.listenDelays = { [root + '/migration_comptable/v1']: 1600 };
-                else window.__DB.delays[root + '/' + slow] = 1600;
+                else window.__DB.listenDelays = { [root + '/' + slow]: 1600 };
                 localStorage.setItem('asufor_cache_v1:releves:' + root + '/compteurs', JSON.stringify({ old: { name: 'Copie locale', agent_id: 'ag1', numero_compteur: '1', last_index: '0', new_index: 900, facteur: 250 } }));
                 window.__figures = [];
                 document.addEventListener('DOMContentLoaded', () => {
@@ -82,7 +82,7 @@ const root = 'Asufor/' + FA;
             const { page, ctx } = await newPage(browser, 'président', migratedSeed());
             await page.goto(base + '/statistiques/stats.html');
             await page.waitForFunction(() => document.getElementById('stats-summary')?.getAttribute('aria-busy') === 'false');
-            await page.evaluate(root => { window.__DB.delays[root + '/backup/2026-06/donnees'] = 1200; }, root);
+            await page.evaluate(root => { window.__DB.listenDelays = { [root + '/backup/2026-06/donnees']: 1200 }; }, root);
             await page.selectOption('#month-filter', '2026-06');
             assert.equal(await page.locator('#total-debt').innerText(), '—');
             assert.equal(await page.locator('#stats-summary').getAttribute('aria-busy'), 'true');

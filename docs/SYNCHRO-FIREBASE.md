@@ -34,6 +34,14 @@ Avant réception des archives, des relevés et de la comptabilité complète, la
 
 ### Chargement des statistiques
 
+Les sources d'affichage (configuration, agents, relevés de la période et archives) sont écoutées dès le démarrage via `onValue`. Elles ne dépendent plus d'un premier `get()` et leurs reprises ne créent pas de lectures ponctuelles concurrentes. Chaque source garde une seule écoute ; changer de période ou demander un réessai détache l'ancienne avant la nouvelle. Les lectures de validation utilisées par les opérations comptables restent des lectures ponctuelles protégées.
+
+Un délai de 12 s signale une source lente sans abandonner sa réponse. La reprise automatique garde une écoute lente active ; les sources en erreur peuvent être réattachées. Le badge tient compte des sources nécessaires encore en attente. Les notifications tardives d'une ancienne écoute sont ignorées.
+
+En cas d'attente, d'erreur ou de mode hors ligne, le bouton « Diagnostic » affiche dans la console un résumé : version de la page, état réseau/Firebase, statut et heure de réception de chaque source, état du grand livre. Ce résumé exclut les chemins de base de données, identifiants, adresses e-mail, jetons et données métier. La fonction `asuforDiagnostics()` retourne le même objet.
+
+`CHROMIUM_PATH=/chemin/vers/chromium node scripts/smoke/stats-live.test.js` vérifie le chargement avec des `get()` d'affichage bloqués, les reprises sans doublon, les mises à jour reçues, une source lente conservée jusqu'à son résultat et un réessai après erreur.
+
 Les montants, les statuts de paiement et les exports attendent la lecture des relevés de la période, des archives et du grand livre complet. Avant cela, les noms des clients restent accessibles et les montants affichent « — » avec un message de vérification. Une copie locale partielle ne sert pas à présenter des chiffres définitifs. Les données complètes mais vides donnent bien des zéros.
 
 Les notifications reçues dans une même image sont regroupées pour éviter les recalculs successifs au chargement. L'index des archives et les fenêtres de périodes sont réutilisés entre les recherches, puis invalidés après une nouvelle lecture ou une correction d'archive. Une réponse tardive d'une ancienne sélection ne remplace pas la sélection courante.

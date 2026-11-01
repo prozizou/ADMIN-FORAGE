@@ -45,7 +45,7 @@ const snap = (path, val) => ({ key: seg(path).pop() || null, exists: () => val !
   forEach: (cb) => { if (val && typeof val === 'object') for (const k of Object.keys(val)) { if (cb(snap(path + '/' + k, val[k])) === true) return true; } return false; } });
 export const getDatabase = () => ({});
 export const goOffline = () => { DB().offlineCalls = (DB().offlineCalls || 0) + 1; DB().paused = true; (DB().connListeners || []).forEach(f => f()); };
-export const goOnline = () => { DB().onlineCalls = (DB().onlineCalls || 0) + 1; DB().paused = false; if (DB().recoverOnReopen) { DB().connected = true; DB().hangAll = false; DB().recoverOnReopen = false; } (DB().connListeners || []).forEach(f => f()); };
+export const goOnline = () => { DB().onlineCalls = (DB().onlineCalls || 0) + 1; DB().paused = false; if (DB().recoverOnReopen) { DB().connected = true; DB().hangAll = false; DB().recoverOnReopen = false; } (DB().connListeners || []).forEach(f => f()); if (DB().connected !== false) DB().listeners.slice().forEach(f => f()); };
 export const ref = (db, path) => ({ path: path || '' });
 export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().hangAll || (DB().hang || []).includes(r.path)) return new Promise(() => {}); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(getAt(r.path)))); };
 export const update = async (r, updates) => { if (DB().denyWrites) throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'PERMISSION_DENIED' });
@@ -56,7 +56,7 @@ export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1)
 export const onValue = (r, cb, errCb) => {
   DB().onValuePaths = (DB().onValuePaths || []).concat([r.path]);
   if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false && !DB().paused)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
-  const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll) return; cb(snap(r.path, getAt(r.path))); };
+  const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll || (DB().hangListen || []).includes(r.path)) return; DB().valueDeliveries = DB().valueDeliveries || {}; DB().valueDeliveries[r.path] = (DB().valueDeliveries[r.path] || 0) + 1; cb(snap(r.path, getAt(r.path))); };
   DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, (DB().listenDelays || {})[r.path] || 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
 const childReg = (p) => { DB().child = DB().child || {}; DB().child[p] = (DB().child[p] || 0) + 1; let off = false; return () => { if (!off) { off = true; DB().child[p]--; } }; };
 export const onChildAdded = (r) => childReg(r.path + '#add'); export const onChildChanged = (r) => childReg(r.path + '#chg'); export const onChildRemoved = (r) => childReg(r.path + '#rem');
@@ -256,7 +256,7 @@ async function main() {
         const r = await newPage(browser, 'président', opts.tree || migratedSeed());
         await r.page.addInitScript(([cfg, hang, fail, cache, ckey, wd]) => {
             window.__ASUFOR_SYNC = cfg; window.__ASUFOR_WATCHDOG_MS = wd;
-            if (hang) window.__DB.hang = hang; if (fail) window.__DB.failListen = fail;
+            if (hang) { window.__DB.hang = hang; window.__DB.hangListen = hang; } if (fail) window.__DB.failListen = fail;
             if (cache) localStorage.setItem(ckey, JSON.stringify(cache));
         }, [Object.assign({}, SYNC_CFG, opts.cfg || {}), opts.hang || null, opts.fail || null, opts.cache || null, CKEY, 1200]);
         await r.page.goto(base + '/statistiques/stats.html');
@@ -264,8 +264,8 @@ async function main() {
     };
     const count = (page) => page.$$eval('#releves-list .item', e => e.length);
     const badge = (page) => page.evaluate(() => (document.getElementById('asufor-sync-badge') || {}).textContent || '');
-    const reads = (page, p) => page.evaluate((p) => window.__DB.reads.filter(x => x === p).length, p);
-    const connect = (page, v) => page.evaluate((v) => { window.__DB.connected = v; (window.__DB.connListeners || []).forEach(f => f()); }, v);
+    const reads = (page, p) => page.evaluate((p) => window.__DB.reads.filter(x => x === p).length + ((window.__DB.valueDeliveries || {})[p] || 0), p);
+    const connect = (page, v) => page.evaluate((v) => { window.__DB.connected = v; (window.__DB.connListeners || []).forEach(f => f()); if (v) window.__DB.listeners.slice().forEach(f => f()); }, v);
 
     {   // 1) lecture bloquée, aucune copie locale : « Connexion lente » + Réessayer, jamais de spinner infini
         const { page, errors, ctx } = await syncPage({ hang: [CPATH] });
@@ -275,7 +275,7 @@ async function main() {
             assert.ok(await page.evaluate(() => getComputedStyle(document.querySelector('#asufor-loader-root .al-spin')).display === 'none'), 'le spinner doit être masqué');
         });
         await check('lecture rétablie : « Réessayer » récupère les données sans recharger la page', async () => {
-            await page.evaluate(() => { window.__DB.hang = []; });
+            await page.evaluate(() => { window.__DB.hang = []; window.__DB.hangListen = []; });
             await page.evaluate(() => [...document.querySelectorAll('#asufor-loader-root .al-btn')].find(b => /Réessayer/.test(b.textContent)).click());
             await page.waitForSelector('#releves-list .item', { timeout: 8000 });
             await page.waitForFunction(() => !document.getElementById('asufor-loader-root').classList.contains('on'), null, { timeout: 5000 });
@@ -327,7 +327,7 @@ async function main() {
             assert.strictEqual(await count(page), n0);
             await connect(page, true);
             await page.waitForFunction(() => /Synchronisé/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 5000 });
-            await page.waitForFunction(([p, n]) => window.__DB.reads.filter(x => x === p).length > n, [CPATH, r0], { timeout: 5000 });   // relecture automatique après la reconnexion
+            await page.waitForFunction(([p, n]) => window.__DB.reads.filter(x => x === p).length + ((window.__DB.valueDeliveries || {})[p] || 0) > n, [CPATH, r0], { timeout: 5000 });
             assert.match(await badge(page), /\d\d:\d\d/, 'heure de dernière synchro');
         });
         await check('retour d\'arrière-plan (visibilitychange) avec données anciennes : rafraîchissement silencieux, liste jamais vidée', async () => {
@@ -357,7 +357,7 @@ async function main() {
             const after = await page.evaluate(() => ({ l: window.__DB.listeners.length, t: window.AsuforSync.trackedCount(), child: window.__DB.child }));
             assert.deepStrictEqual(after.t, before.t, 'listeners suivis');
             assert.ok(after.l <= before.l, 'onValue en double : ' + before.l + ' → ' + after.l);
-            Object.keys(after.child).forEach(k => assert.ok(after.child[k] <= 1, 'listener enfant en double : ' + k + ' = ' + after.child[k]));
+            Object.keys(after.child || {}).forEach(k => assert.ok(after.child[k] <= 1, 'listener enfant en double : ' + k + ' = ' + after.child[k]));
         });
         await check('aucune erreur JavaScript (reprises)', () => assert.deepStrictEqual(errors, []));
         await ctx.close();
@@ -389,13 +389,13 @@ async function main() {
         await check('impression : reconnexion sans get archives bloquant, une seule écoute et liste conservée', async () => {
             await r.page.waitForFunction(() => /Synchronisé/.test((document.getElementById('asufor-sync-badge') || {}).textContent || ''), null, { timeout: 5000 }).catch(async (e) => { throw new Error('badge=' + (await badge(r.page)) + ' Sync=' + (await r.page.evaluate(() => typeof window.AsuforSync))); });
             const n0 = await r.page.$$eval('.facture-item', e => e.length);
-            const b0 = await reads(r.page, 'Asufor/' + FA + '/backup');
+            const b0 = await r.page.evaluate((p) => window.__DB.reads.filter(x => x === p).length, 'Asufor/' + FA + '/backup');
             await connect(r.page, false);
             await r.page.waitForFunction(() => /Hors ligne — données locales/.test(document.getElementById('asufor-sync-badge').textContent), null, { timeout: 4000 });
             assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
             await connect(r.page, true);
             await r.page.evaluate(() => window.AsuforSync.resync('manual', { force: true }));
-            assert.strictEqual(await reads(r.page, 'Asufor/' + FA + '/backup'), b0);
+            assert.strictEqual(await r.page.evaluate((p) => window.__DB.reads.filter(x => x === p).length, 'Asufor/' + FA + '/backup'), b0);
             assert.strictEqual(await r.page.evaluate((p) => window.__DB.onValuePaths.filter(x => x === p).length, 'Asufor/' + FA + '/backup'), 1);
             assert.strictEqual(await r.page.$$eval('.facture-item', e => e.length), n0);
         });
