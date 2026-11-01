@@ -208,6 +208,8 @@ function render() {
     const S = UI.getState();
     const acc = C.computeAccount(S, cid);
     const du = C.amountDueNow(S, cid, releve);
+    const missingReading = releve && !(Number(releve.new_index) > 0);
+    const invalidReading = releve && !missingReading && B.computeCurrent(releve).anomalie;
     document.getElementById('t-facture').textContent = fcfa(acc.total_facture);
     document.getElementById('t-paye').textContent = fcfa(acc.total_paye);
     document.getElementById('t-ajust').textContent = (acc.total_ajustements > 0 ? '+' : '') + fcfa(acc.total_ajustements);
@@ -226,15 +228,17 @@ function render() {
     document.getElementById('balance-state').textContent = !ready ? 'Vérification du compte en cours…'
         : !migrated ? 'Le président doit initialiser la comptabilité pour afficher ce montant.'
         : du.credit > 0 ? 'Rien à payer. Il reste ' + fcfa(du.credit) + ' d’avance pour les prochaines factures.'
-        : du.total_du === 0 ? 'Tout est payé pour le moment.' : '';
+        : du.total_du === 0 ? (missingReading || invalidReading ? 'Aucune ancienne facture à payer.' : 'Tout est payé pour le moment.') : '';
     document.getElementById('balance-state').hidden = showBalance && du.total_du > 0;
     document.getElementById('balance-breakdown').hidden = !showBalance;
     document.getElementById('due-old').textContent = fcfa(du.arrieres);
-    document.getElementById('due-current').textContent = fcfa(du.facture_provisoire);
+    document.getElementById('due-current').textContent = missingReading ? 'À relever' : invalidReading ? 'À vérifier' : fcfa(du.facture_provisoire);
     document.getElementById('due-advance-row').hidden = !du.avance;
     document.getElementById('due-advance').textContent = '− ' + fcfa(Math.min(du.avance, du.arrieres + du.facture_provisoire));
-    document.getElementById('provisoire').textContent = showBalance && du.facture_provisoire
-        ? 'Le montant de ce mois peut encore changer.' : '';
+    document.getElementById('provisoire').textContent = !showBalance ? '' : missingReading
+        ? 'Le relevé du mois n’est pas encore saisi. Son montant n’est pas inclus dans ce total.' : invalidReading
+        ? 'L’index du relevé est à vérifier. Le montant du mois n’est pas inclus dans ce total.'
+        : du.facture_provisoire ? 'Le montant de ce mois peut encore changer.' : '';
     const accountStatus = document.getElementById('account-status');
     accountStatus.hidden = !(releveError || ['error', 'degraded'].includes(info.status));
     accountStatus.textContent = releveError ? 'Le relevé du mois n’a pas pu être chargé. Réessayez pour connaître le montant exact.' : 'Une partie du compte n’a pas pu être chargée. Réessayez.';

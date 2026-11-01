@@ -102,6 +102,18 @@ async function open(browser, base, role = 'président', tree = example()) {
             await ctx.close();
         }
         {
+            for (const index of [0, 100]) {
+                const tree = example(); tree.Asufor[FA].compteurs.c1.new_index = index;
+                const { page, ctx, errors } = await open(browser, base, 'président', tree);
+                assert.equal(await page.locator('#due-current').innerText(), index === 0 ? 'À relever' : 'À vérifier');
+                assert.equal(digits(await page.locator('#total-due').innerText()), 41750);
+                assert.match(await page.locator('#provisoire').innerText(), /n’est pas inclus/);
+                assert.deepEqual(errors, []);
+                await ctx.close();
+            }
+            console.log('✓ relevé manquant ou index erroné : état expliqué, aucun faux zéro pour le mois courant');
+        }
+        {
             const tree = example(), f = tree.Asufor[FA];
             for (let month = 1; month <= 9; month++) {
                 const cycle = '2026-' + String(month).padStart(2, '0');
