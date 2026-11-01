@@ -9,13 +9,16 @@
  *   • pilote la migration comptable (aperçu, sauvegarde téléchargée, exécution unique).
  *
  * Usage (depuis un module ES qui importe le SDK Firebase) :
- *   ComptaUI.init({ db, ref, get, update, push, onValue, P, session, getUid, basePath })
+ *   ComptaUI.init({ db, ref, get, update, push, onValue, P, session, getUid, basePath, customerFactures })
+ *   customerFactures (facultatif) : read() et watch(onSnapshot, onError, onPending),
+ *   pour lire et écouter les seuls documents de facture du client consulté.
  */
 (function (root) {
     'use strict';
     var C = root.Compta;
     var fb = null;               // { db, ref, get, update, push, onValue }
     var paths = null;
+    var customerFactures = null;
     var ctx = { session: {}, getUid: function () { return null; } };
     var state = null;            // état comptable normalisé (dernier chargé)
     var migration = null;        // migration_comptable/v1 (ou null)
@@ -46,6 +49,7 @@
         ctx.session = o.session || {};
         ctx.getUid = o.getUid || ctx.getUid;
         paths = C.pathsFor(o.basePath || String(o.P.compteurs).replace(/\/compteurs$/, ''));
+        customerFactures = o.customerFactures || null;
         ensureStyle();
         return paths;
     }
@@ -54,10 +58,12 @@
     /** get() protégé (délai maximal + nouvelles tentatives) quand sync.js est chargé. */
     function sget(r) { var y = Sync(); return y ? y.safeGet(fb.get, r) : fb.get(r); }
 
+    function readNode(n) { return n === 'factures' && customerFactures ? customerFactures.read() : sget(fb.ref(fb.db, nodePath(n))); }
+
     /** Relit l'état comptable complet (et la migration) depuis Firebase. */
     function reload() {
         var names = ['factures', 'paiements', 'affectations', 'ajustements', 'soldes'];
-        return Promise.all(names.map(function (n) { return sget(fb.ref(fb.db, paths[n])); }).concat([sget(fb.ref(fb.db, paths.migration + '/v1'))]))
+        return Promise.all(names.map(readNode).concat([sget(fb.ref(fb.db, paths.migration + '/v1'))]))
             .then(function (snaps) {
                 var S = {};
                 names.forEach(function (n, i) { S[n] = snaps[i].exists() ? snaps[i].val() : {}; });
@@ -105,7 +111,8 @@
             live.failed[n] = true; fire(); scheduleRetry(n);
         };
         try {
-            un = fb.onValue(fb.ref(fb.db, nodePath(n)), function (snap) { setNode(n, snap); fire(); }, onErr);
+            var onSnapshot = function (snap) { setNode(n, snap); fire(); };
+            un = n === 'factures' && customerFactures ? customerFactures.watch(onSnapshot, onErr, function () { live.got[n] = false; ready = false; fire(); }) : fb.onValue(fb.ref(fb.db, nodePath(n)), onSnapshot, onErr);
         } catch (e) { onErr(e); return; }
         var y = Sync();
         if (y) y.track('compta:' + n, un); else { if (live.unsubs[n]) { try { live.unsubs[n](); } catch (_) {} } live.unsubs[n] = un; }
@@ -113,7 +120,7 @@
     /** Filet de sécurité : si un nœud n'a rien reçu au bout de quelques secondes, lecture directe protégée. */
     function hydrateMissing() {
         NODES.filter(function (n) { return !live.got[n]; }).forEach(function (n) {
-            sget(fb.ref(fb.db, nodePath(n))).then(function (snap) {
+            readNode(n).then(function (snap) {
                 if (live.got[n]) return;
                 setNode(n, snap); fire();
             }, function () { live.failed[n] = true; fire(); });
@@ -233,7 +240,7 @@
         var du = C.amountDueNow(S0, o.compteurId, o.releve);
         var modes = C.MODES.map(function (m) { return '<option value="' + m + '">' + esc(C.MODES_LABEL[m]) + '</option>'; }).join('');
         var m = modal(
-            '<h3>Encaisser</h3>' +
+            '<h3>' + (o.installments ? 'Ajouter un versement' : 'Encaisser') + '</h3>' +
             '<p class="cui-sub">' + esc(o.client || '') + (o.numero ? ' — compteur n°' + esc(o.numero) : '') + '</p>' +
             '<div class="cui-due">' +
             '<span>Arriérés (factures échues)</span><b>' + fcfa(du.arrieres) + '</b>' +
@@ -241,7 +248,7 @@
             (du.avance ? '<span>Avance disponible</span><b>− ' + fcfa(du.avance) + '</b>' : '') +
             '<span><strong>Total dû</strong></span><b>' + fcfa(du.total_du) + '</b>' +
             '</div>' +
-            '<div class="cui-row"><div><label for="cui-montant">Montant encaissé (F)</label><input id="cui-montant" type="number" inputmode="numeric" min="1" step="1" value="' + (du.total_du || '') + '"></div>' +
+            '<div class="cui-row"><div><label for="cui-montant">Montant encaissé (F)</label><input id="cui-montant" type="number" inputmode="numeric" min="1" step="1" value="' + (o.installments ? '' : (du.total_du || '')) + '"></div>' +
             '<div><label for="cui-mode">Mode</label><select id="cui-mode">' + modes + '</select></div></div>' +
             '<div class="cui-row"><div><label for="cui-recu">N° de reçu</label><input id="cui-recu" type="text" maxlength="40" value="' + esc(defaultRecu()) + '"></div>' +
             '<div><label for="cui-ref">Référence (facultatif)</label><input id="cui-ref" type="text" maxlength="60" placeholder="ex. ID transaction"></div></div>' +

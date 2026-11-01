@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v72';
+const STATS_BUILD = 'v74';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -311,6 +311,7 @@ window.marquerNonPaye = function(key) {
     });
 };
 
+window.openDetails = function(key) { window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}&vue=factures`; };
 window.openReleve = function(key) {
     window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}`;
 };
@@ -1065,7 +1066,7 @@ function comptaButtons(item, due) {
     const ready = ledgerReady && (!isArchiveView || backupsLoaded) && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
-    const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé de compte : factures, paiements, reçus"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
+    const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé : suivi et paiements par tranches"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
     // ✅ v8 : correction d'un paiement saisi par erreur — réservé au président, visible seulement si
     // ce client a au moins un paiement valide. Toute la logique (contre-écriture, FIFO, audit) est
     // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
@@ -1075,7 +1076,8 @@ function comptaButtons(item, due) {
     // « Non payé » par le président : la dette réapparaît dans le grand livre (facture tracée).
     const canUnpay = isArchiveView && ComptaUI.isPresident() && item.estSolde && item.factureStatut !== 'annulee';
     const unpay = canUnpay ? `<button class="btn-unpay" onclick="marquerNonPaye('${item.key}')" ${lock} title="Remettre ce mois en « non payé » (président)"><i class="fa-solid fa-rotate-left"></i><span>Non payé</span></button>` : '';
-    return pay + rel + cancel + unpay;
+    const details = `<button class="btn-edit btn-ghost" onclick="openDetails('${item.key}')" title="Charger les factures archivées de ce client"><i class="fa-solid fa-list"></i><span>Détails</span></button>`;
+    return pay + rel + details + cancel + unpay;
 }
 
 function renderList() {
