@@ -108,6 +108,19 @@ test('le bouton Réessayer peut contredire un signal navigateur hors ligne péri
     assert.equal(S.status(), 'synced');
 });
 
+test('une connexion active attend ses sources de données avant d’indiquer Synchronisé', async ({ S }) => {
+    S._setConnected(true);
+    S.reportSource('stats:archives', 'pending');
+    S.markSynced();
+    assert.equal(S.status(), 'reconnecting');
+    S.reportSource('stats:archives', 'slow');
+    assert.equal(S.status(), 'reconnecting');
+    S.reportSource('stats:archives', 'ready');
+    assert.equal(S.status(), 'synced');
+    S.reportSource('stats:archives', null);
+    assert.equal(S.status(), 'synced');
+});
+
 (async () => {
     let failures = 0;
     for (const [name, fn] of tests) {

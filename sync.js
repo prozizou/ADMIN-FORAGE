@@ -45,6 +45,7 @@
     var offlineTimer = null;
     var connection = null, recoveryTimer = null, recoveryAttempts = 0, lastRecovery = 0;
     var connectionEpoch = 0;
+    var readSources = {};
     var api = {};
 
     function now() { return Date.now(); }
@@ -100,7 +101,7 @@
         if (state.connected === false) {
             return (now() - state.connectedFalseAt) >= cfg('offlineAfter') ? 'offline' : 'reconnecting';
         }
-        if (state.failing) return 'reconnecting';
+        if (state.failing || hasPendingSources()) return 'reconnecting';
         if (inited && state.connected === null) return 'reconnecting';
         return 'synced';
     }
@@ -122,8 +123,16 @@
         if (state.connected === false) return; // aucune lecture locale ne prouve un retour en ligne
         state.lastSync = now();
         state.failing = false;
-        if (state.connected === true) { clearTimeout(recoveryTimer); recoveryTimer = null; recoveryAttempts = 0; }
+        if (state.connected === true && !hasPendingSources()) { clearTimeout(recoveryTimer); recoveryTimer = null; recoveryAttempts = 0; }
         emit();
+        if (hasPendingSources()) scheduleRecovery();
+    }
+    function hasPendingSources() { return Object.keys(readSources).some(function (key) { return readSources[key] !== 'ready'; }); }
+    function reportSource(key, value) {
+        if (value == null) delete readSources[key];
+        else if (['pending', 'slow', 'error', 'ready'].indexOf(value) >= 0) readSources[key] = value;
+        emit();
+        if (hasPendingSources()) scheduleRecovery();
     }
     function setConnected(v) {
         var was = state.connected;
@@ -140,7 +149,7 @@
             if (was === false) resync('reconnect', { force: true });    // retour du réseau : rafraîchissement automatique
         }
         emit();
-        if (v === false) scheduleRecovery();
+        if (v === false || hasPendingSources()) scheduleRecovery();
     }
 
     function refreshOnline() {
@@ -150,7 +159,7 @@
         return state.online !== false && (typeof document === 'undefined' || document.visibilityState !== 'hidden');
     }
     function scheduleRecovery() {
-        if (!inited || !connection || recoveryTimer || (state.connected === true && !state.failing)) return;
+        if (!inited || !connection || recoveryTimer || (state.connected === true && !state.failing && !hasPendingSources())) return;
         var delay = Math.min(cfg('recoveryMax'), cfg('recoveryDelay') * Math.pow(2, Math.min(recoveryAttempts, 4)));
         recoveryTimer = setTimeout(function () {
             recoveryTimer = null;
@@ -301,7 +310,7 @@
     }
 
     api = {
-        safeGet: safeGet, init: init, onResync: onResync, resync: resync, retry: retryConnection, track: track, untrack: untrack, untrackPrefix: untrackPrefix,
+        safeGet: safeGet, init: init, onResync: onResync, resync: resync, retry: retryConnection, reportSource: reportSource, track: track, untrack: untrack, untrackPrefix: untrackPrefix,
         trackedCount: trackedCount, markSynced: markSynced, status: status, lastSync: function () { return state.lastSync; }, onState: onState,
         isStale: isStale, _state: state, _setConnected: setConnected
     };

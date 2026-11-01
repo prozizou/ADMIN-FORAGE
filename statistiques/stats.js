@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, goOffline, goOnline, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -13,6 +13,54 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
+const STATS_BUILD = 'v71';
+const liveSources = {};
+console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
+
+// Chaque source d'affichage est écoutée immédiatement, sans attendre un get() ni multiplier les essais.
+function watchStatsSource(key, path, onSnapshot, force) {
+    const previous = liveSources[key];
+    if (previous && !previous.stopped && previous.path === path && previous.status !== 'error' && !force) return previous;
+    if (Sync) Sync.untrack('stats:' + key);
+    else if (previous) previous.stop();
+    const source = liveSources[key] = { path, status: 'pending', receivedAt: null, connectedAtReceive: null, errorCode: null, stopped: false };
+    let unsubscribe = () => {};
+    const report = () => { if (key !== 'config' && Sync && Sync.reportSource) Sync.reportSource('stats:' + key, source.status); scheduleStatisticsRender(); };
+    const delay = (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.sourceWatchdog) || 12000;
+    const timer = setTimeout(() => {
+        if (!source.stopped && source.status === 'pending') { source.status = 'slow'; report(); }
+    }, delay);
+    source.stop = () => {
+        source.stopped = true;
+        clearTimeout(timer);
+        unsubscribe();
+        if (key !== 'config' && Sync && Sync.reportSource) Sync.reportSource('stats:' + key, null);
+    };
+    const fail = error => {
+        if (source.stopped || liveSources[key] !== source) return;
+        source.status = 'error'; source.errorCode = String(error.code || 'READ_ERROR');
+        clearTimeout(timer);
+        console.error('[Statistiques] ' + key + ' : ' + source.errorCode);
+        report();
+    };
+    report();
+    try {
+        unsubscribe = onValue(ref(db, path), snapshot => {
+            if (source.stopped || liveSources[key] !== source) return;
+            try {
+                source.status = 'ready'; source.errorCode = null;
+                source.receivedAt = Date.now();
+                source.connectedAtReceive = !Sync || Sync._state.connected === true;
+                clearTimeout(timer);
+                onSnapshot(snapshot);
+                report();
+                if (Sync && Sync._state.connected === true && statisticsReady()) Sync.markSynced();
+            } catch (error) { fail(error); }
+        }, fail);
+        if (Sync) Sync.track('stats:' + key, source.stop);
+    } catch (error) { fail(error); }
+    return source;
+}
 
 // ✅ Vue à 360° super-admin : sélecteur de village (aucun effet pour les autres rôles)
 if (window.SuperadminVillage) {
@@ -27,7 +75,6 @@ if (window.AsuforLoader) AsuforLoader.show('Connexion sécurisée…');
 
 let storeReleves = {};
 let storeAgents = {};
-let unsubCurrentMonth = null; 
 
 let currentTab = 'all';
 // ✅ v2 : Relevés/Non relevés quittent la ligne d'onglets pour un filtre
@@ -58,7 +105,6 @@ let backupsLoaded = false;
 // ✅ v7 : grand livre (factures / paiements / affectations / ajustements) entièrement chargé.
 let ledgerReady = false;
 let relevesReady = false;
-let relevesLoadVersion = 0;
 let statisticsRenderQueued = false;
 const Compta = window.Compta;
 const ComptaUI = window.ComptaUI;
@@ -69,9 +115,8 @@ let currentUser = 'Trésorier/Admin';
 // depuis Asufor/{forageKey}/config.nom, jamais "Diandioly" en dur — chaque
 // village doit voir son propre nom.
 let forageBranding = 'Satigué Eau';
-async function loadForageBranding() {
-    try {
-        const snap = await sget(ref(db, P.config));
+function loadForageBranding() {
+    watchStatsSource('config', P.config, snap => {
         const cfg = snap.exists() ? snap.val() : {};
         if (cfg.nom) {
             forageBranding = cfg.nom;
@@ -79,7 +124,7 @@ async function loadForageBranding() {
             const titleEl = document.getElementById('forage-title');
             if (titleEl) titleEl.textContent = cfg.nom;
         }
-    } catch (_) { /* garde le repli générique */ }
+    });
 }
 
 // ✅ Échappement HTML partagé (security.js), avec un repli local UNIQUE
@@ -331,37 +376,21 @@ window.initMonthFilter = function() {
     loadBackups(monthSelect, 0);
 }
 
-// Charge TOUTES les archives (liste des périodes + cache des arriérés). backupsLoaded ne
-// passe à vrai qu'en cas de lecture complète ; sinon nouvel essai automatique (délai croissant, sans limite :
-// jamais besoin de recharger la page). Lors d'une resynchronisation, l'ancien état reste affiché.
-let backupsTimer = null, backupsInFlight = false;
-function loadBackups(monthSelect, attempt) {
-    if (backupsInFlight && attempt === 0) return;
-    clearTimeout(backupsTimer);
-    backupsInFlight = true;
-    sget(ref(db, P.backup)).then((snapshot) => {
-        backupsInFlight = false;
-        let optionsHtml = '<option value="actuel">Données actuelles</option>';
-
-        allBackupsCache = snapshot.exists() ? snapshot.val() : {};   // conservé pour billing.js (arriérés + cascade paiement)
+// Une seule écoute des archives, conservée à la reconnexion et relancée sur demande explicite.
+function loadBackups(monthSelect, force) {
+    return watchStatsSource('archives', P.backup, snapshot => {
+        allBackupsCache = snapshot.exists() ? snapshot.val() : {};
         invalidateBackupCalculations();
+        let optionsHtml = '<option value="actuel">Données actuelles</option>';
         Object.keys(allBackupsCache).sort().reverse().forEach(month => {
             optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
         });
-
-        const activeValue = monthSelect.value;
+        const activeValue = currentSelection;
         monthSelect.innerHTML = optionsHtml;
-        monthSelect.value = activeValue;
+        monthSelect.value = activeValue === 'actuel' || Object.prototype.hasOwnProperty.call(allBackupsCache, activeValue) ? activeValue : 'actuel';
         backupsLoaded = true;
-        // Les arriérés dépendent des archives : recalcul maintenant qu'elles sont là
-        // (et déblocage des boutons d'encaissement).
-        scheduleStatisticsRender();
-    }).catch((error) => {
-        backupsInFlight = false;
-        console.error("Erreur lors du chargement des périodes:", error);
-        if (attempt === 0 && !backupsLoaded) showToast("⚠️ Archives indisponibles : l'encaissement reste bloqué tant qu'elles ne sont pas chargées.", true);
-        backupsTimer = setTimeout(() => loadBackups(monthSelect, attempt + 1), Math.min(30000, 4000 * Math.pow(2, Math.min(attempt, 3))) * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
-    });
+        if (monthSelect.value !== currentSelection) window.changeMonth();
+    }, !!force);
 }
 
 // --- CHARGEMENT DES DONNÉES ---
@@ -374,16 +403,12 @@ function cacheKeyFor(dbPath) {
     return 'releves:' + dbPath;
 }
 
-let relevesRetryTimer = null;
-async function loadDataForMonth(selection, opts) {
+function loadDataForMonth(selection, opts) {
     // silent = resynchronisation en arrière-plan : on ne vide RIEN (ni données, ni liste, ni écran de chargement).
     const silent = !!(opts && opts.silent);
-    const loadVersion = ++relevesLoadVersion;
-    clearTimeout(relevesRetryTimer);
     if (!silent) { storeReleves = {}; relevesReady = false; }
 
     const dbPath = (selection === "actuel") ? P.compteurs : `${P.backup}/${selection}/donnees`;
-    const changedPath = dbPath !== currentActivePath;
     currentActivePath = dbPath;
 
     // ✅ v2 : une archive est un état historique figé — on verrouille les
@@ -410,7 +435,6 @@ async function loadDataForMonth(selection, opts) {
     // ✅ Chargement INSTANTANÉ : copie locale affichée tout de suite, sans attendre le réseau.
     const cacheKey = cacheKeyFor(dbPath);
     const cached = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
-    const haveData = silent ? Object.keys(storeReleves).length > 0 : false;
     if (!silent) {
         if (cached && typeof cached === 'object') {
             storeReleves = cached;
@@ -424,68 +448,17 @@ async function loadDataForMonth(selection, opts) {
         }
     }
     scheduleStatisticsRender();
-    const displayed = silent ? (haveData || !!cached) : !!cached;
-
-    const dataRef = ref(db, dbPath);
-    const thisPath = dbPath; // capture : ignorer une réponse tardive si le mois a changé entre-temps
-    let failed = false;
-
-    try {
-        const snap = await sget(dataRef);
-        if (loadVersion !== relevesLoadVersion || currentActivePath !== thisPath) return;
+    const thisPath = dbPath;
+    const previous = liveSources.releves;
+    const unverifiedCache = !relevesReady && previous && previous.status === 'ready' && previous.connectedAtReceive === false;
+    return watchStatsSource('releves', dbPath, snap => {
+        if (currentActivePath !== thisPath) return;
         storeReleves = snap.val() || {};
-        relevesReady = !Sync || Sync._state.connected !== false;
+        relevesReady = !Sync || Sync._state.connected === true;
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        document.getElementById('skeleton-loader').style.display = "none";
+        document.getElementById('skeleton-loader').style.display = 'none';
         if (window.AsuforLoader) AsuforLoader.hide();
-        scheduleStatisticsRender();
-    } catch (err) {
-        if (loadVersion !== relevesLoadVersion || currentActivePath !== thisPath) return;
-        failed = true;
-        console.error('Firebase relevés :', err.code, err.message);
-        if (displayed) {
-            // ✅ Une copie locale est déjà affichée : on la conserve, le badge indique « Hors ligne — données locales ».
-            document.getElementById('skeleton-loader').style.display = "none";
-            if (window.AsuforLoader) AsuforLoader.hide();
-            if (!silent) showToast('⚠️ Connexion indisponible : données locales affichées (peut-être non à jour).', true);
-        } else if (window.AsuforLoader) {
-            AsuforLoader.fail('Impossible de charger les relevés (' + (err.code || 'réseau') + '). Vérifiez la connexion.', { retry: () => loadDataForMonth(currentSelection) });
-        }
-        // Nouvel essai automatique (jamais bloqué définitivement) ; le retour du réseau relance aussi une synchro.
-        relevesRetryTimer = setTimeout(() => { if (currentActivePath === thisPath) loadDataForMonth(currentSelection, { silent: true }); },
-            15000 * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
-    }
-
-    // ✅ Rafraîchissement CIBLÉ par élément (ajout / modification / suppression d'UN compteur). Les listeners sont
-    // enregistrés sous une clé unique : chaque nouvelle mise en place détache d'abord l'ancienne (aucun doublon,
-    // aucun listener zombie), et ils sont attachés MÊME si la première lecture a échoué (ils se remplissent au retour du réseau).
-    const key = 'stats:releves';
-    const unsubAdd = onChildAdded(dataRef, (snap) => {
-        if (currentActivePath !== thisPath) return;
-        if (Object.prototype.hasOwnProperty.call(storeReleves, snap.key)) return; // déjà connu (chargement initial)
-        storeReleves[snap.key] = snap.val();
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        if (window.AsuforLoader && failed) AsuforLoader.hide();
-        document.getElementById('skeleton-loader').style.display = "none";
-        scheduleStatisticsRender();
-    });
-    const unsubChange = onChildChanged(dataRef, (snap) => {
-        if (currentActivePath !== thisPath) return;
-        storeReleves[snap.key] = snap.val();
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        scheduleStatisticsRender();
-    });
-    const unsubRemove = onChildRemoved(dataRef, (snap) => {
-        if (currentActivePath !== thisPath) return;
-        delete storeReleves[snap.key];
-        if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        scheduleStatisticsRender();
-    });
-    const detach = () => { unsubAdd(); unsubChange(); unsubRemove(); };
-    if (Sync) Sync.track(key, detach);
-    else { if (unsubCurrentMonth) unsubCurrentMonth(); }
-    unsubCurrentMonth = detach;
-    return !failed;
+    }, !silent || !!(opts && opts.force) || !!unverifiedCache);
 }
 
 // --- SYNCHRONISATION INITIALE ---
@@ -504,66 +477,28 @@ function renderAgentSpinner() {
     spinner.value = active;
 }
 
-let agentsRetryTimer = null;
-async function syncAgents() {
-    clearTimeout(agentsRetryTimer);
+function syncAgents(force) {
     const cacheKey = 'agents:' + P.agents;
     const cachedAgents = window.AsuforCache ? window.AsuforCache.read(cacheKey) : null;
     if (Object.keys(storeAgents).length === 0 && cachedAgents && typeof cachedAgents === 'object') {
         storeAgents = cachedAgents;
         renderAgentSpinner();
     }
-
-    const agentsRef = ref(db, P.agents);
-    let ok = true;
-    try {
-        const snap = await sget(agentsRef);
+    return watchStatsSource('agents', P.agents, snap => {
         storeAgents = snap.val() || {};
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
         renderAgentSpinner();
-    } catch (err) {
-        ok = false;
-        console.error('Firebase agents :', err.code, err.message);
-        agentsRetryTimer = setTimeout(syncAgents, 15000 * (window.__ASUFOR_SYNC && window.__ASUFOR_SYNC.fast ? 0.02 : 1));
-    }
-
-    // ✅ Rafraîchissement ciblé : un agent ajouté/modifié/supprimé ne renvoie
-    // et ne retraite plus que CET agent, pas la liste complète. Clé unique : jamais de doublon.
-    const unsubs = [
-        onChildAdded(agentsRef, (snap) => {
-            if (Object.prototype.hasOwnProperty.call(storeAgents, snap.key)) return;
-            storeAgents[snap.key] = snap.val();
-            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-            renderAgentSpinner();
-        }),
-        onChildChanged(agentsRef, (snap) => {
-            storeAgents[snap.key] = snap.val();
-            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-            renderAgentSpinner();
-        }),
-        onChildRemoved(agentsRef, (snap) => {
-            delete storeAgents[snap.key];
-            if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeAgents);
-            renderAgentSpinner();
-        })
-    ];
-    const detach = () => unsubs.forEach(u => u());
-    if (Sync) Sync.track('stats:agents', detach);
-    return ok;
+    }, !!force);
 }
 
-// Resynchronisation silencieuse (retour d'arrière-plan, réseau rétabli, bouton Réessayer) : rien n'est vidé,
-// les listeners sont détachés puis rattachés, les données locales restent affichées pendant la lecture.
+// La reprise demande les écoutes immédiatement, sans attendre les trois get() qui expiraient.
 let syncStarted = false;
-async function resyncAll(reason) {
-    const monthSelect = document.getElementById('month-filter');
-    const results = await Promise.all([
-        loadDataForMonth(currentSelection, { silent: true }),
-        syncAgents(),
-        (async () => { loadBackups(monthSelect, 0); return true; })()
-        // le grand livre (ComptaUI) se resynchronise lui-même : il s'est inscrit à Sync.onResync dans subscribe()
-    ]);
-    if (results.some(r => r === false)) throw new Error('synchronisation incomplète');
+function resyncAll(reason) {
+    const force = ['manual', 'badge', 'loader-retry', 'visible', 'pageshow-bfcache', 'online'].includes(reason);
+    loadDataForMonth(currentSelection, { silent: true, force });
+    syncAgents(force);
+    loadBackups(document.getElementById('month-filter'), force);
+    return ['releves', 'agents', 'archives'].every(key => liveSources[key] && liveSources[key].status !== 'error');
 }
 
 // Comptabilité : jamais « en attente » sans explication — message + bouton Réessayer si un nœud du grand livre échoue.
@@ -591,6 +526,7 @@ window.startSync = function() {
     ComptaUI.subscribe((st, mig, ready, info) => {
         ledgerReady = ready && (!info || info.status === 'ready');
         renderLedgerStatus(info);
+        if (Sync && Sync._state.connected === true && statisticsReady()) Sync.markSynced();
         scheduleStatisticsRender();
     });
     // ✅ Les agents et les relevés se chargent en PARALLÈLE (l'un n'attend
@@ -658,7 +594,7 @@ function zoneOf(item) {
 
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
 function statisticsReady() {
-    return relevesReady && backupsLoaded && ledgerReady;
+    return relevesReady && backupsLoaded && ledgerReady && ['releves', 'agents', 'archives'].every(key => liveSources[key] && liveSources[key].status === 'ready');
 }
 
 function scheduleStatisticsRender() {
@@ -670,6 +606,17 @@ function scheduleStatisticsRender() {
 window.retryStatistics = function () {
     if (Sync) Sync.retry('badge');
 };
+
+window.asuforDiagnostics = function () {
+    const sources = {};
+    for (const [key, source] of Object.entries(liveSources)) {
+        sources[key] = { status: source.status, receivedAt: source.receivedAt, connectedAtReceive: source.connectedAtReceive, errorCode: source.errorCode };
+    }
+    return { build: STATS_BUILD, page: 'statistiques', navigatorOnline: navigator.onLine, visibility: document.visibilityState,
+        firebaseConnected: Sync ? Sync._state.connected : null, calculationsReady: statisticsReady(), readingsVerified: relevesReady,
+        archivesReceived: backupsLoaded, sources, ledger: ComptaUI.getStatus() };
+};
+window.showStatsDiagnostic = () => { console.info('[ASUFOR diagnostic]', JSON.stringify(window.asuforDiagnostics())); showToast('Diagnostic affiché dans la console F12.'); };
 
 function setStatisticsAvailability(ready) {
     document.getElementById('stats-summary').setAttribute('aria-busy', String(!ready));
@@ -707,7 +654,15 @@ function renderPendingStatistics() {
     document.getElementById('trend-money').textContent = '';
     document.getElementById('trend-debt').textContent = '';
     document.getElementById('top-quartiers').innerHTML = '<p class="muted-note">Chargement des statistiques…</p>';
-    document.getElementById('stats-loading-message').textContent = Sync && Sync.status() === 'offline'
+    const critical = ['releves', 'agents', 'archives'];
+    const errors = critical.filter(key => liveSources[key] && liveSources[key].status === 'error');
+    const slow = critical.filter(key => liveSources[key] && liveSources[key].status === 'slow');
+    const labels = { releves: 'relevés', agents: 'agents', archives: 'archives' };
+    document.getElementById('stats-diagnostic').hidden = !(errors.length || slow.length || (Sync && Sync.status() === 'offline') || ComptaUI.getStatus().status === 'error');
+    document.getElementById('stats-loading-message').textContent = errors.length
+        ? `Chargement impossible : ${errors.map(key => labels[key]).join(', ')}. Réessayez.`
+        : slow.length ? `Chargement plus long que prévu : ${slow.map(key => labels[key]).join(', ')}. Les données sont toujours attendues.`
+        : Sync && Sync.status() === 'offline'
         ? 'Données locales affichées. Reconnectez-vous pour vérifier les montants.'
         : 'Vérification des montants en cours…';
     renderPendingList();
