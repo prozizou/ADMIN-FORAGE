@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
 
 // ── Firebase simulé (modules ES injectés à la place des CDN gstatic) ──
 const FB_APP = `export const initializeApp = () => ({}); export const deleteApp = async () => {};`;
-const FB_AUTH = `const A = {}; export const getAuth = () => A; export const onAuthStateChanged = (a, cb) => { setTimeout(() => { A.currentUser = { uid: 'u1', email: 'x@asufor.local' }; cb(A.currentUser); }, 0); return () => {}; };
+const FB_AUTH = `const A = {}; export const getAuth = () => A; export const onAuthStateChanged = (a, cb) => { setTimeout(() => { A.currentUser = { uid: 'u1', email: 'x@asufor.local', getIdToken: async () => 'fake-token' }; cb(A.currentUser); }, 0); return () => {}; };
 export const createUserWithEmailAndPassword = async () => ({ user: { uid: 'x' } }); export const signOut = async () => {};`;
 const FB_DB = `
 const DB = () => window.__DB;
@@ -118,6 +118,17 @@ async function newPage(browser, role, tree, opts) {
     await page.route('**/*', async (route) => {
         const url = route.request().url();
         if (url.startsWith('http://127.0.0.1') || url.startsWith('http://localhost')) return route.continue();
+        if (/firebaseio\.com\//.test(url) && new URL(url).searchParams.get('shallow') === 'true') {
+            const pathname = decodeURIComponent(new URL(url).pathname).replace(/^\//, '').replace(/\.json$/, '');
+            const result = await page.evaluate(pathname => {
+                window.__DB.shallowReads = (window.__DB.shallowReads || []).concat([pathname]);
+                if (window.__DB.failShallow === true || (window.__DB.failShallow || []).includes(pathname)) return { fail: true };
+                let node = window.__DB.tree;
+                for (const part of pathname.split('/')) node = node && node[part];
+                return { value: node ? Object.fromEntries(Object.keys(node).map(key => [key, true])) : null };
+            }, pathname);
+            return route.fulfill({ status: result.fail ? 503 : 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(result.value ?? null) });
+        }
         if (/firebase-app\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_APP });
         if (/firebase-auth\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_AUTH });
         if (/firebase-database\.js/.test(url)) return route.fulfill({ contentType: 'text/javascript', body: FB_DB });
@@ -237,14 +248,14 @@ async function main() {
             assert.ok(rows.inView, 'élément hors écran');
             assert.match(rows.pct, /^\d+,\d % encaissé$/);
         });
-        await check(`mobile ${width}px : actions sur une seule ligne, sans débordement de la carte`, async () => {
+        await check(`mobile ${width}px : actions nommées sur deux colonnes, sans débordement de la carte`, async () => {
             await page.click('#chip-non-releves');
             await page.waitForFunction(() => document.querySelectorAll('#releves-list .bg-non-releve').length > 0);
             const bad = await page.evaluate(() => [...document.querySelectorAll('#releves-list .item')].flatMap((it) => {
                 const cr = it.getBoundingClientRect(); const out = [];
                 const row = it.querySelector('.citem-actions'); if (!row) return out;
                 const tops = new Set([...row.children].map(b => Math.round(b.getBoundingClientRect().top)));
-                if (tops.size > 1) out.push('actions sur plusieurs lignes');
+                if (tops.size > 3) out.push('trop de lignes d’actions');
                 row.querySelectorAll('button,a').forEach((b) => {
                     const r = b.getBoundingClientRect();
                     if (r.right > cr.right + 0.5 || r.left < cr.left - 0.5) out.push('bouton hors carte : ' + b.textContent.trim());
@@ -667,10 +678,10 @@ async function main() {
         await page.waitForSelector('#timeline .ev', { timeout: 8000 });
         await check('chronologie : 2 factures + 1 paiement (affectations), soldes cohérents', async () => {
             const t = await page.textContent('#timeline');
-            assert.match(t, /Facture Juin 2026/); assert.match(t, /Facture Juillet 2026/);
-            assert.match(t, /Paiement reçu/);
-            assert.strictEqual(num(await page.textContent('#t-avance')), 1000);
-            assert.strictEqual(num(await page.textContent('#t-arrieres')), 0);
+            assert.match(t, /7[\s  ]?000 F/);
+            assert.strictEqual(num(await page.textContent('#t-paye')), 7000);
+            assert.strictEqual(num(await page.textContent('#past-total')), 6000);
+            assert.strictEqual(num(await page.textContent('#total-due')), 500);
         });
         for (const width of [320, 360, 390]) {
             await check(`fiche client ${width}px : total du jour, boutons nommés et détails à la demande`, async () => {
@@ -681,7 +692,7 @@ async function main() {
                         over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                         minH: Math.min(...buttons.map(b => b.getBoundingClientRect().height)),
                         named: buttons.every(b => b.innerText.trim().length > 5),
-                        detailsClosed: !document.getElementById('account-details').open,
+                        detailsClosed: document.getElementById('archive-panel').hidden,
                         total: document.getElementById('total-due').textContent,
                         meta: document.getElementById('meta').textContent
                     };
@@ -711,7 +722,7 @@ async function main() {
             await page.click('[data-cancel]');
             await page.fill('#mot', 'Billet refusé à la banque');
             await page.click('#ok');
-            await page.waitForFunction(() => /annulé/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
             const F = (await db(page)).Asufor[FA];
             const p = F.paiements[paiementId];
             assert.deepStrictEqual([p.statut, p.montant, p.motif_annulation], ['annule', 7000, 'Billet refusé à la banque']);
@@ -725,10 +736,11 @@ async function main() {
             await page.selectOption('#typ', 'remise');
             await page.fill('#mnt', '500');
             await page.click('#ok');
-            assert.match(await page.textContent('#err'), /motif/i);
+            await page.waitForFunction(() => /motif/i.test(document.getElementById('err').textContent));
             await page.fill('#mot', 'Fuite sur le réseau public');
             await page.click('#ok');
-            await page.waitForFunction(() => /Réduction de facture/.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
+            await page.waitForFunction(() => /Réduction de facture/.test(document.getElementById('corrections').textContent), null, { timeout: 8000 });
             const F = (await db(page)).Asufor[FA];
             const j = Object.values(F.ajustements)[0];
             assert.deepStrictEqual([j.type, j.statut, j.montant], ['remise', 'valide', 500]);
@@ -750,7 +762,8 @@ async function main() {
             await page.fill('#mnt', '300');
             await page.fill('#mot', 'Frais de réouverture');
             await page.click('#ok');
-            await page.waitForFunction(() => /en attente/i.test(document.getElementById('timeline').textContent), null, { timeout: 8000 });
+            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
+            await page.waitForFunction(() => /en attente/i.test(document.getElementById('corrections').textContent), null, { timeout: 8000 });
             const j = Object.values((await db(page)).Asufor[FA].ajustements)[0];
             assert.strictEqual(j.statut, 'en_attente');
             assert.strictEqual(await page.$('[data-validate]'), null);

@@ -507,3 +507,8 @@ body {
 .stats-loading button { flex: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 8px; background: transparent; color: inherit; cursor: pointer; }
 .stats-pending-note { margin: 8px 0 0; color: var(--text-sub); font-size: .8rem; }
 [data-requires-statistics]:disabled { opacity: .5; cursor: wait; }
+
+/* Quatre actions nommées, accessibles aussi sur petit écran. */
+.citem-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.citem-actions button,.citem-actions a { min-height:44px; white-space:normal; overflow:visible; line-height:1.3; padding:8px 6px; }
+.citem-actions button span,.citem-actions a span { overflow:visible; text-overflow:clip; }

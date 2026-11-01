@@ -10,7 +10,7 @@
     <script src="../pwa.js" defer></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Satigué Eau – Relevé de compte</title>
+    <title>Satigué Eau – Paiements par tranches</title>
 
     <script src="../biometric.js"></script>
     <script src="../security.js"></script>
@@ -100,6 +100,22 @@
         #history-more { width:100%; margin-top:12px; }
         .status { margin-top:12px; font-size:.88rem; color:var(--warn); }
         @media (max-width:359px) { .card { padding:14px; } .balance { padding:14px; } .back span { font-size:.75rem; } .ev .h { flex-wrap:wrap; } .breakdown > div { font-size:.8rem; } }
+        .simple-table { width:100%; border-collapse:collapse; font-size:.9rem; margin-top:12px; }
+        .simple-table th,.simple-table td { padding:11px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+        .simple-table th { font-weight:650; }
+        .simple-table .money { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+        .simple-table .total-row { background:#3b82f612; font-weight:800; }
+        .simple-table .total-row td { font-size:1.2rem; }
+        .simple-table caption { text-align:left; font-size:.85rem; color:var(--text-sub); margin-bottom:8px; }
+        .simple-table thead th { color:var(--text-sub); font-size:.8rem; }
+        .row-actions summary { font-size:.75rem; padding:6px 0; min-height:44px; }
+        .row-actions { position:relative; }
+        .row-menu { position:absolute; z-index:10; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:6px; width:200px; box-shadow:0 8px 24px #0008; }
+        .row-menu .btn { width:100%; margin:3px 0; }
+        #archives-table { font-size:.8rem; }
+        #archives-table th,#archives-table td { padding:10px 4px; }
+        #archive-panel h2 { scroll-margin-top:16px; }
+        .archive-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
         @media print {
             :root { color-scheme:light; --bg:white; --surface:white; --surface-2:white; --text-main:black; --text-sub:#444; --border:#aaa; --success:#166534; --danger:#991b1b; --warn:#854d0e; }
             .no-print,.actions,.ev .btn,.menu,summary { display:none !important; }
@@ -120,21 +136,29 @@
             </div>
         </div>
         <div id="compta-migration" style="display:none"></div>
-        <div class="balance" aria-busy="true" id="balance">
-            <div class="balance-label">À payer aujourd’hui</div>
-            <strong class="balance-value" id="total-due">—</strong>
-            <p class="balance-state" id="balance-state">Chargement du compte…</p>
-            <dl class="breakdown" id="balance-breakdown" hidden>
-                <div><dt>Anciennes factures à payer</dt><dd id="due-old">—</dd></div>
-                <div><dt>Ce mois (en cours)</dt><dd id="due-current">—</dd></div>
-                <div id="due-advance-row" hidden><dt>Avance déjà payée, déduite</dt><dd id="due-advance">—</dd></div>
-            </dl>
+        <div id="statement">
+        <h2 style="margin-top:20px" id="statement-title">Paiements par tranches</h2>
+        <p class="sub" id="statement-help">Versements cumulés, arriérés compris.</p>
+        <div id="balance" aria-busy="true">
+            <table class="simple-table" id="statement-table">
+                <tbody>
+                    <tr><th scope="row">Anciennes factures</th><td class="money" id="past-total">—</td></tr>
+                    <tr><th scope="row">Mois en cours</th><td class="money" id="due-current">—</td></tr>
+                    <tr><th scope="row">Total des factures</th><td class="money" id="t-facture">—</td></tr>
+                    <tr><th scope="row">Paiements cumulés</th><td class="money good" id="t-paye">—</td></tr>
+                    <tr class="total-row"><th scope="row">Reste à payer</th><td class="money" id="total-due">—</td></tr>
+                    <tr id="credit-row" hidden><th scope="row">Avance pour les prochains mois</th><td class="money good" id="t-credit">—</td></tr>
+                </tbody>
+            </table>
+            <p class="sub" id="balance-state">Chargement du compte…</p>
             <p class="sub" id="provisoire"></p>
+        </div>
         </div>
         <div id="account-status" class="status" role="status" hidden></div>
         <button class="btn no-print" id="retry-account" hidden>Réessayer le chargement</button>
-        <button class="btn primary pay-action no-print" id="btn-pay" hidden disabled><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i><span>Encaisser un paiement</span></button>
-        <p class="sub action-help no-print" id="pay-help" hidden>Saisissez ensuite le montant reçu.</p>
+        <button class="btn primary pay-action no-print" id="btn-pay" hidden disabled><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i><span>Ajouter un versement</span></button>
+        <p class="sub action-help no-print" id="pay-help" hidden>Saisissez uniquement la somme reçue aujourd’hui.</p>
+        <button class="btn no-print" id="btn-details" style="width:100%;margin-top:12px" disabled>Détails — factures archivées</button>
         <div class="actions secondary-actions no-print">
             <button class="btn" id="btn-print" onclick="window.print()" disabled><i class="fa-solid fa-print" aria-hidden="true"></i><span>Imprimer la fiche</span></button>
             <button class="btn" id="btn-more" aria-haspopup="true" aria-expanded="false" aria-controls="menu"><span>Autres actions</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>
@@ -146,26 +170,20 @@
             </div>
         </div>
         <p class="sub no-print" id="action-feedback" role="status" hidden></p>
-        <details class="account-details" id="account-details">
-            <summary>Voir le détail du compte</summary>
-            <p class="sub">Ces montants concernent les factures déjà établies. Le mois en cours est indiqué au-dessus.</p>
-            <div class="kpis">
-                <div class="kpi"><div class="l">Total des factures</div><div class="v" id="t-facture">—</div></div>
-                <div class="kpi"><div class="l">Total payé</div><div class="v good" id="t-paye">—</div></div>
-                <div class="kpi"><div class="l">Solde des factures</div><div class="v" id="t-solde">—</div></div>
-                <div class="kpi"><div class="l">Factures restant à payer</div><div class="v bad" id="t-arrieres">—</div></div>
-                <div class="kpi"><div class="l">Argent payé en avance</div><div class="v good" id="t-avance">—</div></div>
-                <div class="kpi"><div class="l">Corrections de factures</div><div class="v" id="t-ajust">—</div></div>
-            </div>
-        </details>
     </section>
-    <section class="card" aria-labelledby="history-title">
-        <div class="history-head">
-            <h2 id="history-title">Factures et paiements</h2>
-            <p class="sub">Les plus récents sont affichés en premier.</p>
+    <section class="card" id="payments-section" aria-labelledby="history-title">
+        <h2 id="history-title">Versements du client</h2>
+        <div id="timeline"><p class="empty">Chargement des paiements…</p></div>
+        <div id="corrections"></div>
+    </section>
+    <section class="card" id="archive-panel" aria-labelledby="archive-title" hidden>
+        <h2 id="archive-title">Factures archivées de ce client</h2>
+        <p class="sub" id="archive-status" role="status"></p>
+        <div id="archive-content" aria-busy="false"></div>
+        <div class="archive-toolbar no-print">
+            <button class="btn" id="retry-archives" hidden>Réessayer les factures</button>
+            <button class="btn" id="hide-archives">Fermer les détails</button>
         </div>
-        <div id="timeline"><div class="empty">Chargement de l’historique…</div></div>
-        <button class="btn no-print" id="history-more" hidden>Voir les opérations plus anciennes</button>
     </section>
 </main>
 
@@ -187,10 +205,21 @@ const esc = UI.esc, fcfa = UI.fcfa, cyc = UI.cycleLabel;
 const session = JSON.parse(localStorage.getItem('asufor_session') || '{}');
 const role = session.role;
 const cid = new URLSearchParams(location.search).get('c');
+const detailsView = new URLSearchParams(location.search).get('vue') === 'factures';
+document.getElementById('statement').hidden = detailsView;
+document.getElementById('payments-section').hidden = detailsView;
+if (detailsView) {
+    document.querySelector('.eyebrow').textContent = 'Factures archivées';
+    document.getElementById('btn-print').querySelector('span').textContent = 'Imprimer les factures';
+}
 let releve = null;
 let releveLoaded = false;
 let releveError = false;
-let historyLimit = 5;
+let releveVersion = 0;
+let archiveState = 'idle';
+let archiveRecords = {};
+let archiveRequested = false;
+let archivePromise = null;
 
 const dt = (iso) => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const SOURCES = { cloture: 'clôture mensuelle', migration_backup: 'reprise des archives', correction_releve: 'relevé corrigé' };
@@ -210,132 +239,212 @@ function render() {
     const du = C.amountDueNow(S, cid, releve);
     const missingReading = releve && !(Number(releve.new_index) > 0);
     const invalidReading = releve && !missingReading && B.computeCurrent(releve).anomalie;
-    document.getElementById('t-facture').textContent = fcfa(acc.total_facture);
-    document.getElementById('t-paye').textContent = fcfa(acc.total_paye);
-    document.getElementById('t-ajust').textContent = (acc.total_ajustements > 0 ? '+' : '') + fcfa(acc.total_ajustements);
-    document.getElementById('t-arrieres').textContent = fcfa(acc.arrieres);
-    document.getElementById('t-avance').textContent = fcfa(acc.avance);
-    const sol = document.getElementById('t-solde');
-    sol.textContent = acc.solde < 0 ? 'Crédit ' + fcfa(-acc.solde) : fcfa(acc.solde);
-    sol.className = 'v ' + (acc.solde > 0 ? 'bad' : 'good');
     const info = UI.getStatus();
     const ready = UI.isReady() && info.status === 'ready' && releveLoaded;
     const migrated = UI.isMigrated();
     const showBalance = ready && migrated;
+    const past = acc.factures.reduce((sum, f) => sum + f.montant_net, 0);
+    const figure = value => showBalance ? fcfa(value) : '—';
+    document.getElementById('past-total').textContent = figure(past);
+    document.getElementById('t-facture').textContent = figure(past + du.facture_provisoire);
+    document.getElementById('t-paye').textContent = figure(acc.total_paye);
+    document.getElementById('total-due').textContent = figure(du.total_du);
+    document.getElementById('total-due').className = 'money ' + (showBalance && du.total_du === 0 ? 'good' : '');
+    document.getElementById('credit-row').hidden = !showBalance || !du.credit;
+    document.getElementById('t-credit').textContent = figure(du.credit);
     document.getElementById('balance').setAttribute('aria-busy', String(!ready));
-    document.getElementById('total-due').textContent = showBalance ? fcfa(du.total_du) : '—';
-    document.getElementById('total-due').className = 'balance-value ' + (showBalance && du.total_du === 0 ? 'good' : '');
     document.getElementById('balance-state').textContent = !ready ? 'Vérification du compte en cours…'
-        : !migrated ? 'Le président doit initialiser la comptabilité pour afficher ce montant.'
-        : du.credit > 0 ? 'Rien à payer. Il reste ' + fcfa(du.credit) + ' d’avance pour les prochaines factures.'
-        : du.total_du === 0 ? (missingReading || invalidReading ? 'Aucune ancienne facture à payer.' : 'Tout est payé pour le moment.') : '';
-    document.getElementById('balance-state').hidden = showBalance && du.total_du > 0;
-    document.getElementById('balance-breakdown').hidden = !showBalance;
-    document.getElementById('due-old').textContent = fcfa(du.arrieres);
-    document.getElementById('due-current').textContent = missingReading ? 'À relever' : invalidReading ? 'À vérifier' : fcfa(du.facture_provisoire);
-    document.getElementById('due-advance-row').hidden = !du.avance;
-    document.getElementById('due-advance').textContent = '− ' + fcfa(Math.min(du.avance, du.arrieres + du.facture_provisoire));
+        : !migrated ? 'Le président doit initialiser la comptabilité pour afficher les montants.'
+        : '';
+    document.getElementById('balance-state').hidden = showBalance;
+    document.getElementById('due-current').textContent = !showBalance ? '—' : missingReading ? 'À relever' : invalidReading ? 'À vérifier' : fcfa(du.facture_provisoire);
     document.getElementById('provisoire').textContent = !showBalance ? '' : missingReading
         ? 'Le relevé du mois n’est pas encore saisi. Son montant n’est pas inclus dans ce total.' : invalidReading
         ? 'L’index du relevé est à vérifier. Le montant du mois n’est pas inclus dans ce total.'
-        : du.facture_provisoire ? 'Le montant de ce mois peut encore changer.' : '';
+        : du.facture_provisoire ? 'Le montant du mois en cours peut encore changer.' : '';
     const accountStatus = document.getElementById('account-status');
     accountStatus.hidden = !(releveError || ['error', 'degraded'].includes(info.status));
     accountStatus.textContent = releveError ? 'Le relevé du mois n’a pas pu être chargé. Réessayez pour connaître le montant exact.' : 'Une partie du compte n’a pas pu être chargée. Réessayez.';
     document.getElementById('retry-account').hidden = accountStatus.hidden;
-    const bp = document.getElementById('btn-pay');
-    bp.hidden = !UI.canCollect();
-    bp.disabled = !showBalance;
-    document.getElementById('pay-help').hidden = bp.hidden;
-    document.getElementById('pay-help').textContent = showBalance && du.total_du === 0 ? 'Pour enregistrer une avance sur les prochaines factures.' : 'Saisissez ensuite le montant reçu.';
-    document.getElementById('account-details').hidden = !showBalance;
-    document.getElementById('btn-print').disabled = !showBalance;
+    document.getElementById('btn-pay').hidden = detailsView || !UI.canCollect();
+    document.getElementById('btn-pay').disabled = !showBalance || du.total_du <= 0;
+    document.getElementById('pay-help').hidden = detailsView || !UI.canCollect() || (showBalance && du.total_du <= 0);
+    document.getElementById('btn-print').disabled = detailsView ? !(ready && archiveState === 'ready') : !showBalance || archiveState === 'loading' || (archiveRequested && archiveState === 'error');
+    document.getElementById('btn-details').disabled = !ready;
+    document.getElementById('btn-details').hidden = detailsView;
     document.getElementById('btn-adj').hidden = !(UI.canCollect() && migrated && ready);
-    if (UI.isReady() && info.status === 'ready') UI.migrationBanner(document.getElementById('compta-migration'), render);
-
-    const events = [];
-    acc.factures.forEach(f => events.push({ t: f.date_creation, kind: 'facture', f }));
-    acc.paiements.forEach(p => events.push({ t: p.date_paiement, kind: 'paiement', p }));
-    acc.ajustements.forEach(j => events.push({ t: j.created_at, kind: 'ajustement', j }));
-    events.sort((a, b) => Date.parse(b.t) - Date.parse(a.t));
+    if (UI.isReady() && info.status === 'ready') {
+        const migration = document.getElementById('compta-migration');
+        migration.style.display = migrated ? 'none' : '';
+        migration.innerHTML = migrated ? '' : '<p class="notice">Le président doit initialiser la comptabilité depuis les <a href="../statistiques/stats.html">statistiques</a> avant tout versement.</p>';
+    }
 
     const tl = document.getElementById('timeline');
-    const openDetails = new Set([...tl.querySelectorAll('details[open]')].map(el => el.dataset.eventDetails));
-    document.getElementById('history-more').hidden = events.length <= historyLimit;
-    if (!ready) { tl.innerHTML = '<div class="empty">Vérification des factures et des paiements en cours…</div>'; document.getElementById('history-more').hidden = true; return; }
-    if (!events.length) { tl.innerHTML = `<div class="empty">${UI.isMigrated() ? 'Aucune facture ni aucun paiement pour ce client.' : 'Le président doit initialiser la comptabilité de ce client.'}</div>`; return; }
-    tl.innerHTML = events.slice(0, historyLimit).map(e => {
-        if (e.kind === 'facture') {
-            const f = e.f;
-            const prob = f.probleme && f.probleme.actif
-                ? `<div class="notice">${f.probleme.resolu ? '✓ Relevé vérifié.' : '⚠ Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³. Vérifiez le relevé.'}</div>` : '';
-            const canResolve = f.probleme && f.probleme.actif && !f.probleme.resolu && (role === 'président' || role === 'secrétaire');
-            return `<article class="ev facture ${f.annulee ? 'annule' : ''}"><div class="box">
-                <div class="h"><div class="t">Facture ${esc(cyc(f.cycle))}</div><div class="amt">${fcfa(f.montant_net)}</div></div>
-                <span class="pill ${esc(f.statut)}">${esc(STATUTS[f.statut] || f.statut)}</span>
-                <div class="pr"><span>Déjà payé : <b class="good">${fcfa(f.montant_paye)}</b></span><span>Reste à payer : <b class="${f.reste_a_payer > 0 ? 'bad' : 'good'}">${fcfa(f.reste_a_payer)}</b></span></div>
-                ${prob}
-                <details class="event-details" data-event-details="facture:${esc(f.facture_id)}">
-                    <summary>Voir le détail de la facture</summary>
-                    <div class="d">Établie le ${dt(f.date_creation)} · ${esc(SOURCES[f.source] || f.source)}</div>
-                    ${f.ancien_index != null ? `<div class="m">Ancien index : ${esc(f.ancien_index)}<br>Nouvel index : ${esc(f.nouvel_index)}<br>Consommation : ${esc(f.consommation)} m³<br>Calcul : ${esc(f.consommation)} m³ × ${esc(f.facteur)} F = ${fcfa(f.montant_initial)}</div>` : ''}
-                    ${f.montant_net !== f.montant_initial ? `<div class="m">Montant après correction : <b>${fcfa(f.montant_net)}</b></div>` : ''}
-                    ${f.probleme && f.probleme.resolu && f.probleme.resolution ? `<div class="d">Vérifié le ${dt(f.probleme.resolution.resolu_le)} : ${esc(f.probleme.resolution.motif)}. La vérification ne remplace pas le paiement.</div>` : ''}
-                    ${canResolve ? `<p class="sub">Après avoir contrôlé le relevé, indiquez ici ce qui a été vérifié. Cela ne change pas le montant à payer.</p><button class="btn no-print" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}
-                </details>
-            </div></article>`;
-        }
-        if (e.kind === 'paiement') {
-            const p = e.p;
-            const affs = Object.entries((S.affectations[p.paiement_id]) || {}).sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0))
-                .map(([fid, a]) => `<li>${esc(cyc(a.cycle))} : ${fcfa(a.montant)}${a.statut === 'annulee' ? ' <i>(annulée)</i>' : ''}</li>`).join('');
-            const valide = p.statut === 'valide';
-            return `<article class="ev paiement ${valide ? '' : 'annule'}"><div class="box">
-                <div class="h"><div class="t">Paiement reçu</div><div class="amt ${valide ? 'good' : ''}">${fcfa(p.montant)}</div></div>
-                <span class="pill ${esc(p.statut)}">${valide ? 'Enregistré' : 'Annulé'}</span>
-                <div class="d">${dt(p.date_paiement)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}</div>
-                ${!valide ? `<div class="m bad">Ce paiement a été annulé : ${esc(p.motif_annulation || '')}</div>` : ''}
-                <div class="actions no-print"><button class="btn" data-recu="${esc(p.paiement_id)}"><i class="fa-solid fa-receipt" aria-hidden="true"></i>Voir le reçu</button></div>
-                <details class="event-details" data-event-details="paiement:${esc(p.paiement_id)}">
-                    <summary>Détails de ce paiement</summary>
-                    <div class="d">Reçu n°${esc(p.numero_recu)}${p.reference ? ' · Référence : ' + esc(p.reference) : ''}<br>Enregistré par ${esc(p.encaisse_par_nom || p.role || '—')}</div>
-                    ${affs ? `<p class="sub">Factures réglées par ce paiement :</p><ul>${affs}</ul>` : '<div class="m">Ce montant est gardé en avance pour les prochaines factures.</div>'}
-                    ${valide && p.disponible > 0 ? `<div class="m good">Avance encore disponible : ${fcfa(p.disponible)}</div>` : ''}
-                    ${!valide ? `<div class="d">Annulé le ${dt(p.annule_le)}</div>` : ''}
-                    ${valide && role === 'président' ? `<div class="actions no-print"><button class="btn danger" data-cancel="${esc(p.paiement_id)}">Annuler ce paiement</button></div>` : ''}
-                </details>
-            </div></article>`;
-        }
-        const j = e.j;
-        const signe = j.type === 'remise' ? -Math.abs(j.montant) : (j.type === 'majoration' ? Math.abs(j.montant) : (j.type === 'annulation' ? -Math.abs(j.montant) : j.montant));
-        return `<div class="ev ajustement ${j.statut === 'rejete' ? 'annule' : ''}"><div class="box">
-            <div class="h"><div class="t">${esc(TYPES[j.type] || j.type)} · ${esc(cyc(j.cycle))}<span class="pill ${j.statut}">${STATUTS[j.statut] || j.statut}</span></div><div class="amt ${signe > 0 ? 'bad' : 'good'}">${signe > 0 ? '+' : ''}${fcfa(signe)}</div></div>
-            <div class="d">${dt(j.created_at)} · proposé par ${esc(j.cree_par_nom || '—')}${j.date_validation ? ' · ' + (j.statut === 'valide' ? 'validé' : 'traité') + ' le ' + dt(j.date_validation) + (j.valide_par_nom ? ' par ' + esc(j.valide_par_nom) : '') : ''}</div>
-            <div class="m">Motif : ${esc(j.motif)}</div>
-            ${j.statut === 'en_attente' && role === 'président' ? `<div class="actions"><button class="btn small primary" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn small danger" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}
-        </div></div>`;
+    const openDetails = new Set([...tl.querySelectorAll('details[open]')].map(el => el.dataset.payment));
+    let cumul = 0;
+    const rows = acc.paiements.map(p => {
+        const valid = p.statut === 'valide';
+        if (valid) cumul += p.montant;
+        return `<tr class="ev paiement"><td><time datetime="${esc(p.date_paiement)}">${new Date(p.date_paiement).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'})}</time>
+            <details class="row-actions no-print" data-payment="${esc(p.paiement_id)}"><summary>Reçu / actions</summary><div class="row-menu">
+                <button class="btn" data-recu="${esc(p.paiement_id)}">Voir le reçu</button>
+                ${valid && UI.isPresident() ? `<button class="btn danger" data-cancel="${esc(p.paiement_id)}">Annuler ce paiement</button>` : ''}
+                <p class="sub">Reçu n°${esc(p.numero_recu)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}</p>
+            </div></details>
+            ${valid ? '' : '<div class="sub">Paiement annulé</div>'}</td>
+            <td class="money ${valid ? 'good' : ''}">${fcfa(p.montant)}</td><td class="money">${fcfa(cumul)}</td></tr>`;
     }).join('');
-    tl.querySelectorAll('details').forEach(el => { el.open = openDetails.has(el.dataset.eventDetails); });
+    tl.innerHTML = !ready ? '<p class="empty">Vérification des paiements en cours…</p>' : !rows ? '<p class="empty">Aucun versement enregistré.</p>'
+        : `<table class="simple-table" id="payments-table"><caption>Les versements s’additionnent. Un paiement annulé n’entre pas dans le cumul.</caption><thead><tr><th scope="col">Date</th><th scope="col" class="money">Versé</th><th scope="col" class="money">Cumul</th></tr></thead><tbody>${rows}</tbody></table>`;
+    tl.querySelectorAll('details').forEach(el => { el.open = openDetails.has(el.dataset.payment); });
+    document.getElementById('corrections').innerHTML = !ready || !acc.ajustements.length ? '' : `<details><summary>Corrections de factures</summary>${acc.ajustements.map(j => `<div class="m">${esc(TYPES[j.type] || j.type)} · ${esc(cyc(j.cycle))} · ${fcfa(j.montant)} · ${esc(STATUTS[j.statut] || j.statut)}<p class="sub">${esc(j.motif)}</p>${j.statut === 'en_attente' && UI.isPresident() ? `<div class="actions"><button class="btn" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}</div>`).join('')}</details>`;
+    if (archiveRequested && archiveState === 'ready') {
+        document.getElementById('archive-content').setAttribute('aria-busy', String(!ready));
+        if (ready) renderArchives(acc);
+        else { document.getElementById('archive-content').innerHTML = ''; document.getElementById('archive-status').textContent = 'Vérification des paiements du client…'; }
+    }
 }
 
-document.getElementById('history-more').onclick = () => { historyLimit += 10; render(); };
-// L'impression inclut tout l'historique, même les opérations repliées à l'écran.
-let printState = null;
-const detailKey = el => el.id || el.dataset.eventDetails;
-window.addEventListener('beforeprint', () => {
-    if (printState) return;
-    printState = { limit: historyLimit, open: new Set([...document.querySelectorAll('details[open]')].map(detailKey)) };
-    historyLimit = Infinity;
+// L'API shallow ne renvoie que les clés des mois, jamais les relevés d'autres clients.
+async function shallowKeys(dbPath) {
+    const token = await auth.currentUser.getIdToken();
+    const path = dbPath.split('/').map(encodeURIComponent).join('/');
+    const url = new URL(path + '.json', window.ASUFOR_FIREBASE_CONFIG.databaseURL.replace(/\/?$/, '/'));
+    url.searchParams.set('shallow', 'true');
+    url.searchParams.set('auth', token);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+        const response = await fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' });
+        if (!response.ok) throw new Error('ARCHIVE_LIST_' + response.status);
+        const result = await response.json();
+        if (result !== null && (typeof result !== 'object' || Array.isArray(result) || Object.values(result).some(value => value !== true))) throw new Error('ARCHIVE_LIST_INVALID');
+        return Object.keys(result || {}).sort();
+    } finally { clearTimeout(timeout); }
+}
+
+// Les identifiants de facture sont déterministes : YYYY-MM_compteurId.
+// On ne récupère les documents que pour ce client, sans index serveur supplémentaire.
+function ownInvoiceIds(keys) { return keys.filter(key => key === C.factureId(key.slice(0, 7), cid)); }
+function invoiceSnapshot(rows) { return { exists: () => Object.keys(rows).length > 0, val: () => rows }; }
+function verifyInvoice(invoice) {
+    if (invoice && invoice.compteur_id !== cid) throw new Error('INVOICE_OWNER_MISMATCH');
+    return invoice;
+}
+const customerFactures = {
+    async read() {
+        const ids = ownInvoiceIds(await shallowKeys(UI.paths().factures));
+        const rows = {};
+        let next = 0;
+        async function worker() {
+            while (next < ids.length) {
+                const id = ids[next++];
+                const snap = await sget(ref(db, UI.paths().factures + '/' + id));
+                if (snap.exists()) rows[id] = verifyInvoice(snap.val());
+            }
+        }
+        await Promise.all(Array.from({length:Math.min(4, ids.length)}, worker));
+        return invoiceSnapshot(rows);
+    },
+    watch(onSnapshot, onError, onPending) {
+        let stopped = false, revision = 0, discovering = false;
+        let values = {}, ids = [], received = new Set();
+        const subscriptions = new Map();
+        const emit = () => { if (!stopped && !discovering && ids.every(id => received.has(id))) onSnapshot(invoiceSnapshot({...values})); };
+        async function discover() {
+            const request = ++revision;
+            discovering = true;
+            if (onPending) onPending();
+            try {
+                const found = ownInvoiceIds(await shallowKeys(UI.paths().factures));
+                if (stopped || request !== revision) return;
+                ids = found;
+                discovering = false;
+                for (const [id, unsubscribe] of subscriptions) if (!ids.includes(id)) { unsubscribe(); subscriptions.delete(id); delete values[id]; received.delete(id); }
+                for (const id of ids) if (!subscriptions.has(id)) {
+                    const unsubscribe = onValue(ref(db, UI.paths().factures + '/' + id), snap => {
+                        if (stopped || !ids.includes(id)) return;
+                        try {
+                            const value = verifyInvoice(snap.val());
+                            if (value) values[id] = value; else delete values[id];
+                            received.add(id); emit();
+                        } catch (error) { onError(error); }
+                    }, error => { if (!stopped) onError(error); });
+                    subscriptions.set(id, unsubscribe);
+                }
+                emit();
+            } catch (error) { if (!stopped && request === revision) onError(error); }
+        }
+        // Chaque création/paiement/correction met à jour la révision de ce seul compte.
+        const off = onValue(ref(db, UI.paths().soldes + '/' + cid), discover, onError);
+        return () => { stopped = true; revision++; off(); subscriptions.forEach(unsubscribe => unsubscribe()); };
+    }
+};
+
+async function loadCustomerArchives(force = false) {
+    archiveRequested = true;
+    document.getElementById('archive-panel').hidden = false;
+    if (archivePromise) return archivePromise;
+    if (archiveState === 'ready' && !force) { render(); return; }
+    archiveState = 'loading';
+    document.getElementById('archive-status').textContent = 'Chargement des factures de ce client…';
+    document.getElementById('archive-content').innerHTML = '';
+    document.getElementById('archive-content').setAttribute('aria-busy', 'true');
+    document.getElementById('retry-archives').hidden = true;
     render();
-    document.querySelectorAll('details').forEach(el => { el.open = true; });
-});
-window.addEventListener('afterprint', () => {
-    if (!printState) return;
-    const previous = printState; printState = null;
-    historyLimit = previous.limit;
-    render();
-    document.querySelectorAll('details').forEach(el => { el.open = previous.open.has(detailKey(el)); });
-});
+    archivePromise = (async () => {
+        try {
+            const months = await shallowKeys(P.backup);
+            const result = {};
+            let next = 0, completed = 0;
+            async function worker() {
+                while (next < months.length) {
+                    const month = months[next++];
+                    const snapshot = await sget(ref(db, `${P.backup}/${month}/donnees/${cid}`));
+                    if (snapshot.exists()) result[month] = snapshot.val();
+                    completed++;
+                    document.getElementById('archive-status').textContent = `Factures du client : ${completed}/${months.length} mois vérifiés…`;
+                }
+            }
+            const settled = await Promise.allSettled(Array.from({length:Math.min(4, months.length)}, worker));
+            if (settled.some(result => result.status === 'rejected')) throw new Error('ARCHIVE_RECORD_FAILED');
+            archiveRecords = result;
+            archiveState = 'ready';
+        } catch (_) {
+            archiveState = 'error';
+            document.getElementById('archive-status').textContent = 'Les factures n’ont pas toutes été chargées. Le relevé des versements reste disponible.';
+            document.getElementById('retry-archives').hidden = false;
+        } finally {
+            archivePromise = null;
+            document.getElementById('archive-content').setAttribute('aria-busy', 'false');
+            render();
+        }
+    })();
+    return archivePromise;
+}
+
+function renderArchives(acc) {
+    const ledger = Object.fromEntries(acc.factures.map(f => [f.cycle, f]));
+    const months = [...new Set([...Object.keys(archiveRecords), ...Object.keys(ledger)])].sort().reverse();
+    document.getElementById('archive-status').textContent = `${months.length} facture(s) — uniquement ce client.`;
+    document.getElementById('archive-content').innerHTML = !months.length ? '<p class="empty">Aucune facture archivée pour ce client.</p>' : `<table class="simple-table" id="archives-table"><thead><tr><th scope="col">Mois</th><th class="money" scope="col">Facture</th><th class="money" scope="col">Payé</th><th class="money" scope="col">Reste</th></tr></thead><tbody>${months.map(month => {
+        const f = ledger[month];
+        const record = archiveRecords[month];
+        const old = record ? B.computeCurrent(record) : null;
+        const amount = f ? f.montant_net : old.montant;
+        const paid = f ? f.montant_paye : B.isPaid(record) ? amount : 0;
+        const due = f ? f.reste_a_payer : Math.max(0, amount - paid);
+        return `<tr><th scope="row">${esc(cyc(month))}</th><td class="money">${!f && old.anomalie ? 'À vérifier' : fcfa(amount)}</td><td class="money good">${fcfa(paid)}</td><td class="money">${!f && old.anomalie ? '—' : fcfa(due)}</td></tr>`;
+    }).join('')}</tbody></table><details id="invoice-checks"><summary>Informations et vérification des factures</summary>${acc.factures.map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn no-print" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>`;
+}
+
+document.getElementById('btn-details').onclick = () => { loadCustomerArchives(); document.getElementById('archive-panel').scrollIntoView({behavior:'smooth',block:'start'}); };
+document.getElementById('retry-archives').onclick = () => loadCustomerArchives(true);
+document.getElementById('hide-archives').onclick = () => { if (detailsView) { window.location.href = '../statistiques/stats.html'; return; } document.getElementById('archive-panel').hidden = true; archiveRequested = false; render(); document.getElementById('btn-details').focus(); };
+// Imprimer le relevé n'ouvre et ne télécharge jamais les archives.
+let printOpenDetails = null;
+window.addEventListener('beforeprint', () => { printOpenDetails = new Set([...document.querySelectorAll('details[open]')]); document.querySelectorAll('details:not(.row-actions)').forEach(el => { el.open = true; }); });
+window.addEventListener('afterprint', () => { if (printOpenDetails) document.querySelectorAll('details').forEach(el => { el.open = printOpenDetails.has(el); }); printOpenDetails = null; });
 
 function withMotif(title, label, onOk, explanation = '') {
     const m = UI.modal(`<h3>${esc(title)}</h3>${explanation ? `<p class="cui-sub">${esc(explanation)}</p>` : ''}<label for="mot">${esc(label)}</label><textarea id="mot" rows="3" maxlength="300"></textarea><div class="cui-err" id="err"></div><div class="cui-act"><button class="cui-ghost" id="no">Retour</button><button class="cui-primary" id="ok">Confirmer</button></div>`);
@@ -379,7 +488,7 @@ function openAdjustment() {
     };
 }
 
-document.getElementById('timeline').addEventListener('click', (e) => {
+document.querySelector('main').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.recu) window.open(`recu.html?p=${encodeURIComponent(b.dataset.recu)}`, '_blank');
@@ -394,7 +503,7 @@ document.getElementById('timeline').addEventListener('click', (e) => {
     }
 });
 document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
-    compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
+    installments: true, compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
     recuUrl: (pid) => `recu.html?p=${encodeURIComponent(pid)}`, onDone: render
 });
 document.getElementById('btn-adj').onclick = () => { setMenu(false); openAdjustment(); };
@@ -419,16 +528,22 @@ document.getElementById('mi-copy').onclick = () => {
     else actionFeedback('Numéro de compteur : ' + n);
 };
 
+function applyClientSnapshot(snap) {
+    releve = snap.exists() ? snap.val() : null;
+    releveLoaded = true; releveError = false;
+    const src = releve || (Object.values(UI.getState().factures).find(f => f.compteur_id === cid) || {});
+    document.getElementById('client').textContent = (releve ? releve.name : src.client) || 'Client';
+    setMeta(releve ? releve.numero_compteur : src.numero_compteur, releve ? releve.zone : src.zone);
+}
 async function loadClient() {
+    const version = releveVersion;
     releveError = false;
     try {
         const snap = await sget(ref(db, `${P.compteurs}/${cid}`));
-        releve = snap.exists() ? snap.val() : null;
-        releveLoaded = true;
-        const src = releve || (Object.values(UI.getState().factures).find(f => f.compteur_id === cid) || {});
-        document.getElementById('client').textContent = (releve ? releve.name : src.client) || 'Client';
-        setMeta(releve ? releve.numero_compteur : src.numero_compteur, releve ? releve.zone : src.zone);
-    } catch (e) {
+        if (version !== releveVersion) return;
+        applyClientSnapshot(snap);
+    } catch (_) {
+        if (version !== releveVersion) return;
         releveLoaded = false; releveError = true;
         if (!releve) document.getElementById('client').textContent = 'Fiche client';
         document.getElementById('meta').innerHTML = '<span class="chip">Relevé indisponible pour le moment</span>';
@@ -439,10 +554,13 @@ async function loadClient() {
 onAuthStateChanged(auth, async (user) => {
     if (!user) { if (window.handleFirebaseSessionLoss) window.handleFirebaseSessionLoss('releve.html'); return; }
     if (!cid) { document.getElementById('client').textContent = 'Aucun client sélectionné'; document.getElementById('meta').textContent = ''; document.getElementById('balance-state').textContent = 'Revenez aux statistiques et choisissez un client.'; document.getElementById('balance').setAttribute('aria-busy', 'false'); return; }
-    UI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
+    UI.init({ db, ref, get, update, push, onValue, P, session, customerFactures, getUid: () => auth.currentUser && auth.currentUser.uid });
     if (window.AsuforSync && !window.__relSyncOn) { window.__relSyncOn = true; window.AsuforSync.init({ db, ref, onValue, goOffline, goOnline }); }
     UI.subscribe(() => render());
     await loadClient();
+    const unsubscribe = onValue(ref(db, `${P.compteurs}/${cid}`), snap => { releveVersion++; applyClientSnapshot(snap); render(); }, () => { releveLoaded = false; releveError = true; render(); });
+    if (window.AsuforSync) window.AsuforSync.track('customer:releve', unsubscribe);
+    if (new URLSearchParams(location.search).get('vue') === 'factures') loadCustomerArchives();
 });
 </script>
 </body>
