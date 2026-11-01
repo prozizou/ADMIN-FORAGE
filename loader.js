@@ -146,7 +146,8 @@
     var API = {
         // Relance la synchronisation : reprise silencieuse (sync.js) si disponible, sinon rechargement de la page.
         retry: function () {
-            if (window.AsuforSync && typeof window.AsuforSync.resync === 'function') window.AsuforSync.resync('loader-retry', { force: true });
+            if (window.AsuforSync && typeof window.AsuforSync.retry === 'function') window.AsuforSync.retry('loader-retry');
+            else if (window.AsuforSync && typeof window.AsuforSync.resync === 'function') window.AsuforSync.resync('loader-retry', { force: true });
             else window.location.reload();
         },
         show: function (message) {

@@ -44,6 +44,8 @@ const setAt = (p, v) => { const parts = seg(p); let n = DB().tree; for (let i = 
 const snap = (path, val) => ({ key: seg(path).pop() || null, exists: () => val !== null && val !== undefined, val: () => (val == null ? null : JSON.parse(JSON.stringify(val))),
   forEach: (cb) => { if (val && typeof val === 'object') for (const k of Object.keys(val)) { if (cb(snap(path + '/' + k, val[k])) === true) return true; } return false; } });
 export const getDatabase = () => ({});
+export const goOffline = () => { DB().offlineCalls = (DB().offlineCalls || 0) + 1; DB().paused = true; (DB().connListeners || []).forEach(f => f()); };
+export const goOnline = () => { DB().onlineCalls = (DB().onlineCalls || 0) + 1; DB().paused = false; if (DB().recoverOnReopen) { DB().connected = true; DB().hangAll = false; DB().recoverOnReopen = false; } (DB().connListeners || []).forEach(f => f()); };
 export const ref = (db, path) => ({ path: path || '' });
 export const get = async (r) => { window.__DB.reads.push(r.path); if (DB().hangAll || (DB().hang || []).includes(r.path)) return new Promise(() => {}); if (DB().delays[r.path]) await new Promise(res => setTimeout(res, DB().delays[r.path])); if (DB().failReads.includes(r.path)) throw Object.assign(new Error('offline'), { code: 'NETWORK' }); const n = DB().reads.filter(x => x === r.path).length; if (window.__hook) window.__hook(r.path, n, { getAt, setAt }); return snap(r.path, JSON.parse(JSON.stringify(getAt(r.path)))); };
 export const update = async (r, updates) => { if (DB().denyWrites) throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'PERMISSION_DENIED' });
@@ -52,7 +54,7 @@ export const update = async (r, updates) => { if (DB().denyWrites) throw Object.
 export const set = async (r, v) => { setAt(r.path, v); for (const l of DB().listeners) l(); };
 export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1), path: r.path + '/-Pid' + DB().pushN });
 export const onValue = (r, cb, errCb) => {
-  if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
+  if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false && !DB().paused)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
   const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll) return; cb(snap(r.path, getAt(r.path))); };
   DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
 const childReg = (p) => { DB().child = DB().child || {}; DB().child[p] = (DB().child[p] || 0) + 1; let off = false; return () => { if (!off) { off = true; DB().child[p]--; } }; };

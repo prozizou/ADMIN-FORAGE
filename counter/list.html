@@ -220,7 +220,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onValue, onChildAdded, onChildChanged, onChildRemoved, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, goOffline, goOnline, ref, push, onValue, onChildAdded, onChildChanged, onChildRemoved, get, runTransaction } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification d'accès
@@ -249,7 +249,8 @@
             const cfgSnap = await sget(ref(db, P.config));
             const cfg = cfgSnap.exists() ? cfgSnap.val() : {};
             forageSiege = (cfg.siege || cfg.nom || 'SATIGUE EAU').toUpperCase();
-        } catch (_) { /* garde le repli générique */ }
+            return true;
+        } catch (_) { return false; /* garde le repli générique */ }
     }
 
     const msgEl  = document.getElementById('msg');
@@ -326,6 +327,7 @@
         }
 
         const agentsRef = ref(db, P.agents);
+        let ok = true;
         try {
             const snap = await sget(agentsRef);
             storeAgents = snap.val() || {};
@@ -333,6 +335,7 @@
             renderAgentOptions();
             if (window.AsuforLoader) AsuforLoader.hide();
         } catch (err) {
+            ok = false;
             console.error('Firebase db_agents :', err.code, err.message);
             if (!cached && window.AsuforLoader) {
                 AsuforLoader.fail('Impossible de charger les agents (' + (err.code || 'réseau') + '). Vérifiez la connexion.', {
@@ -363,6 +366,7 @@
             })
         ];
         if (window.AsuforSync) window.AsuforSync.track('counter:agents', () => unsubs.forEach(u => u()));
+        return ok;
     }
 
     // On attend la confirmation du jeton Firebase avant toute lecture.
@@ -370,8 +374,8 @@
         if (user) {
             if (window.AsuforSync && !window.__listSyncOn) {
                 window.__listSyncOn = true;
-                window.AsuforSync.init({ db, ref, onValue });
-                window.AsuforSync.onResync(() => Promise.all([loadForageSiege(), loadAgents()]));
+                window.AsuforSync.init({ db, ref, onValue, goOffline, goOnline });
+                window.AsuforSync.onResync(async () => (await Promise.all([loadForageSiege(), loadAgents()])).every(Boolean));
             }
             loadForageSiege();
             loadAgents();
