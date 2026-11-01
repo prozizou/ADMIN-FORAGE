@@ -24,6 +24,14 @@ Objectif : aucune page ne reste en chargement infini, et aucune ne demande de vi
 
 ## Tests
 
+### Reprise de la page Impression
+
+L'historique des archives est suivi par une seule écoute `onValue`, conservée à la reconnexion. Le chargement du mois courant démarre en parallèle. Une reprise rattache immédiatement les relevés et réutilise l'écoute des archives ; aucun `get()` de l'historique complet ne bloque ce rattachement.
+
+Avant réception des archives, des relevés et de la comptabilité complète, la page montre les identités des clients et un message de vérification. Les montants, statuts et actions d'impression attendent ces données. Une lecture lente reste active ; après 12 s un message le signale sans abandonner son résultat tardif. Une erreur de lecture propose un réessai qui remplace l'écoute en échec.
+
+`CHROMIUM_PATH=/chemin/vers/chromium node scripts/smoke/print-resync.test.js` couvre un `get()` d'archives bloqué, les reconnexions répétées sans doublon d'écoute, des archives retardées et une erreur suivie d'un réessai. Le serveur Firebase est simulé.
+
 ### Chargement des statistiques
 
 Les montants, les statuts de paiement et les exports attendent la lecture des relevés de la période, des archives et du grand livre complet. Avant cela, les noms des clients restent accessibles et les montants affichent « — » avec un message de vérification. Une copie locale partielle ne sert pas à présenter des chiffres définitifs. Les données complètes mais vides donnent bien des zéros.
