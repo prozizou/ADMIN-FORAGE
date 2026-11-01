@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, goOffline, goOnline, ref, onValue, onChildAdded, onChildChanged, onChildRemoved, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -567,7 +567,7 @@ window.startSync = function() {
     if (syncStarted) return;      // onAuthStateChanged peut se redéclencher : une seule mise en place
     syncStarted = true;
     if (Sync) {
-        Sync.init({ db, ref, onValue });
+        Sync.init({ db, ref, onValue, goOffline, goOnline });
         Sync.onResync(resyncAll);
     }
     // ✅ v7 : grand livre comptable (lecture continue ; écritures via compta.js).
@@ -1436,4 +1436,3 @@ window.exportPDFImpayes = function() {
     doc.save(`SatigueEau_Impayes_${dateStr}.pdf`);
     showToast("✅ Fichier PDF des impayés généré avec succès !");
 };
-

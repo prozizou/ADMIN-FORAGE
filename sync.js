@@ -12,7 +12,7 @@
  *   safeGet(getFn, ref, opts)   get() avec délai maximal + nouvelles tentatives à délai croissant.
  *                               Rejette (code 'TIMEOUT' ou celui de Firebase) après la dernière tentative ;
  *                               PERMISSION_DENIED n'est jamais retenté.
- *   init({ db, ref, onValue })  suit /.info/connected, affiche le badge d'état, branche les reprises
+ *   init({ db, ref, onValue, goOffline, goOnline }) suit /.info/connected, affiche le badge d'état, branche les reprises
  *                               (pageshow, visibilitychange, online).
  *   onResync(fn)                enregistre un rafraîchissement SILENCIEUX (fn(reason) → Promise) ; renvoie
  *                               la fonction de désinscription.
@@ -22,14 +22,15 @@
  *                               (jamais de doublon ni de listener zombie).
  *   untrack(key) / untrackPrefix(p) / trackedCount()
  *   markSynced() / status() / lastSync()
+ *   retry(reason)              rouvre une connexion bloquée puis relit les données (sans vider le cache).
  *   onState(fn)                 fn({status, lastSync, connected}) à chaque changement.
  *
- * Réglages (tests) : window.__ASUFOR_SYNC = { timeout, retries, backoff:[…], staleMs, offlineAfter, debounce }
+ * Réglages (tests) : window.__ASUFOR_SYNC = { timeout, retries, backoff:[…], staleMs, offlineAfter, debounce, recoveryDelay, recoveryMax, resyncTimeout }
  */
 (function (root) {
     'use strict';
 
-    var DEFAULTS = { timeout: 9000, retries: 2, backoff: [700, 1800, 4000], staleMs: 60000, offlineAfter: 8000, debounce: 800, minResume: 1500 };
+    var DEFAULTS = { timeout: 9000, retries: 2, backoff: [700, 1800, 4000], staleMs: 60000, offlineAfter: 8000, debounce: 800, minResume: 1500, recoveryDelay: 30000, recoveryMax: 120000, resyncTimeout: 45000 };
     function cfg(k) {
         var o = (root && root.__ASUFOR_SYNC) || {};
         return o[k] != null ? o[k] : DEFAULTS[k];
@@ -40,8 +41,10 @@
     var resyncHandlers = [];
     var tracked = {};
     var inited = false;
-    var resyncTimer = null, resyncRunning = null, pendingReason = null, pendingForce = false;
+    var resyncTimer = null, pendingReason = null;
     var offlineTimer = null;
+    var connection = null, recoveryTimer = null, recoveryAttempts = 0, lastRecovery = 0;
+    var connectionEpoch = 0;
     var api = {};
 
     function now() { return Date.now(); }
@@ -68,17 +71,19 @@
         var backoff = opts.backoff || cfg('backoff');
         var attempt = 0;
         function once() {
+            var epoch = connectionEpoch;
             var p;
             try { p = getFn(refObj); } catch (e) { p = Promise.reject(e); }
             return withTimeout(p, timeout).then(function (snap) {
-                markSynced();
+                // get() peut rendre le cache du SDK hors ligne : ce n'est pas une synchro serveur.
+                if (epoch === connectionEpoch && state.connected !== false) markSynced();
                 return snap;
             }, function (err) {
                 if (isDenied(err) || attempt >= retries) {
-                    if (!isDenied(err)) setFailing(true);
+                    if (!isDenied(err) && epoch === connectionEpoch) setFailing(true);
                     throw err;
                 }
-                setFailing(true);
+                if (epoch === connectionEpoch) setFailing(true);
                 var wait = backoff[Math.min(attempt, backoff.length - 1)] || 1000;
                 attempt++;
                 return sleep(wait + Math.floor(Math.random() * 150)).then(once);
@@ -90,11 +95,13 @@
     // ── État de connexion ──────────────────────────────────────────────────────────────────────
     function status() {
         var offNav = state.online === false;
-        if (offNav) return 'offline';
+        // Une connexion Firebase active est une preuve plus forte que navigator.onLine.
+        if (offNav && state.connected !== true) return 'offline';
         if (state.connected === false) {
             return (now() - state.connectedFalseAt) >= cfg('offlineAfter') ? 'offline' : 'reconnecting';
         }
         if (state.failing) return 'reconnecting';
+        if (inited && state.connected === null) return 'reconnecting';
         return 'synced';
     }
     var lastEmitted = '';
@@ -107,10 +114,15 @@
         renderBadge(snapshot);
         stateListeners.slice().forEach(function (f) { try { f(snapshot); } catch (e) { console.error(e); } });
     }
-    function setFailing(v) { if (state.failing !== v) { state.failing = v; emit(); } }
+    function setFailing(v) {
+        if (state.failing !== v) { state.failing = v; emit(); }
+        if (v) scheduleRecovery();
+    }
     function markSynced() {
+        if (state.connected === false) return; // aucune lecture locale ne prouve un retour en ligne
         state.lastSync = now();
         state.failing = false;
+        if (state.connected === true) { clearTimeout(recoveryTimer); recoveryTimer = null; recoveryAttempts = 0; }
         emit();
     }
     function setConnected(v) {
@@ -121,11 +133,48 @@
             clearTimeout(offlineTimer);
             offlineTimer = setTimeout(emit, cfg('offlineAfter') + 50);   // bascule « Reconnexion » → « Hors ligne »
         } else if (v === true) {
+            if (was !== true) connectionEpoch++;
             clearTimeout(offlineTimer);
+            clearTimeout(recoveryTimer); recoveryTimer = null; recoveryAttempts = 0;
             state.failing = false;
             if (was === false) resync('reconnect', { force: true });    // retour du réseau : rafraîchissement automatique
         }
         emit();
+        if (v === false) scheduleRecovery();
+    }
+
+    function refreshOnline() {
+        if (typeof navigator !== 'undefined') state.online = navigator.onLine !== false;
+    }
+    function canRecover() {
+        return state.online !== false && (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+    }
+    function scheduleRecovery() {
+        if (!inited || !connection || recoveryTimer || (state.connected === true && !state.failing)) return;
+        var delay = Math.min(cfg('recoveryMax'), cfg('recoveryDelay') * Math.pow(2, Math.min(recoveryAttempts, 4)));
+        recoveryTimer = setTimeout(function () {
+            recoveryTimer = null;
+            refreshOnline();
+            if (canRecover()) retryConnection('recovery');
+            scheduleRecovery();
+        }, delay);
+        if (recoveryTimer && recoveryTimer.unref) recoveryTimer.unref();
+    }
+    function retryConnection(reason) {
+        refreshOnline();
+        var manual = reason === 'badge' || reason === 'loader-retry';
+        if (!manual && !canRecover()) { emit(); scheduleRecovery(); return Promise.resolve(false); }
+        if (state.connected !== true && connection && connection.goOffline && connection.goOnline &&
+            (!lastRecovery || now() - lastRecovery >= cfg('recoveryDelay'))) {
+            lastRecovery = now(); recoveryAttempts++;
+            try {
+                // Le SDK conserve ses écritures en attente pendant cette réouverture.
+                connection.goOffline(connection.db);
+                connection.goOnline(connection.db);
+            } catch (err) { console.warn('[sync] réouverture :', err && (err.code || err.message)); }
+        }
+        emit();
+        return resync(reason || 'retry', { force: true });
     }
     function onState(fn) { stateListeners.push(fn); return function () { stateListeners = stateListeners.filter(function (f) { return f !== fn; }); }; }
 
@@ -151,33 +200,41 @@
         o = o || {};
         if (!o.force && !isStale() && status() === 'synced') return Promise.resolve(false);
         pendingReason = reason || pendingReason || 'manual';
-        pendingForce = pendingForce || !!o.force;
         if (pendingPromise) return pendingPromise;          // une reprise est déjà planifiée : on la partage
         pendingPromise = new Promise(function (resolve) {
             resyncTimer = setTimeout(function () {
-                var why = pendingReason; pendingReason = null; pendingForce = false;
+                var why = pendingReason; pendingReason = null;
+                var epoch = connectionEpoch;
                 var run = function () {
                     return Promise.all(resyncHandlers.slice().map(function (h) {
-                        try { return Promise.resolve(h(why)).then(function () { return true; }, function (e) { console.warn('[sync] reprise :', e && (e.code || e.message)); return false; }); }
+                        try { return Promise.resolve(h(why)).then(function (result) { return result !== false; }, function (e) { console.warn('[sync] reprise :', e && (e.code || e.message)); return false; }); }
                         catch (e) { return Promise.resolve(false); }
                     }));
                 };
-                // si une reprise tourne encore (rare), on attend sa fin puis on relance avec les données les plus récentes
-                Promise.resolve(resyncRunning).then(run).then(function (rs) {
-                    if (rs.length && rs.every(Boolean)) markSynced();
-                    resolve(true);
-                }, function () { resolve(false); }).then(function () { pendingPromise = null; resyncRunning = null; });
-                resyncRunning = pendingPromise;
+                // Un handler bloqué ne doit pas neutraliser toutes les reprises suivantes.
+                withTimeout(Promise.resolve().then(run), cfg('resyncTimeout')).then(function (rs) {
+                    var ok = rs.length > 0 && rs.every(Boolean);
+                    if (epoch === connectionEpoch) {
+                        if (ok) markSynced(); else if (rs.length) setFailing(true);
+                    }
+                    return ok;
+                }, function (err) {
+                    console.warn('[sync] reprise interrompue :', err && err.code);
+                    if (epoch === connectionEpoch) setFailing(true);
+                    return false;
+                }).then(function (ok) { pendingPromise = null; resolve(ok); });
             }, cfg('debounce'));
         });
         return pendingPromise;
     }
 
     function onResume(reason) {
+        refreshOnline(); emit();
         var t = now();
         if (t - state.lastResume < cfg('minResume')) return;
         state.lastResume = t;
-        resync(reason);
+        if (state.connected === false) retryConnection(reason);
+        else resync(reason);
     }
 
     // ── Badge d'état discret ───────────────────────────────────────────────────────────────────
@@ -208,7 +265,7 @@
             el = document.createElement('div');
             el.id = BADGE_ID;
             el.setAttribute('role', 'status');
-            el.addEventListener('click', function () { if (status() !== 'synced') resync('badge', { force: true }); });
+            el.addEventListener('click', function () { if (status() !== 'synced') retryConnection('badge'); });
             document.body.appendChild(el);
         }
         var h = hhmm(s.lastSync);
@@ -223,9 +280,10 @@
     function init(o) {
         if (inited) return api;
         inited = true;
+        connection = o || null;
         state.online = (typeof navigator !== 'undefined' && navigator.onLine === false) ? false : true;
         if (typeof window !== 'undefined') {
-            window.addEventListener('online', function () { state.online = true; emit(); resync('online', { force: true }); });
+            window.addEventListener('online', function () { state.online = true; emit(); retryConnection('online'); });
             window.addEventListener('offline', function () { state.online = false; emit(); });
             window.addEventListener('pageshow', function (e) { onResume(e && e.persisted ? 'pageshow-bfcache' : 'pageshow'); });
             document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') onResume('visible'); });
@@ -238,11 +296,12 @@
         if (typeof document !== 'undefined') {
             if (document.body) renderBadge({ status: status(), lastSync: state.lastSync }); else document.addEventListener('DOMContentLoaded', function () { renderBadge({ status: status(), lastSync: state.lastSync }); });
         }
+        scheduleRecovery();
         return api;
     }
 
     api = {
-        safeGet: safeGet, init: init, onResync: onResync, resync: resync, track: track, untrack: untrack, untrackPrefix: untrackPrefix,
+        safeGet: safeGet, init: init, onResync: onResync, resync: resync, retry: retryConnection, track: track, untrack: untrack, untrackPrefix: untrackPrefix,
         trackedCount: trackedCount, markSynced: markSynced, status: status, lastSync: function () { return state.lastSync; }, onState: onState,
         isStale: isStale, _state: state, _setConnected: setConnected
     };

@@ -562,7 +562,7 @@
 ════════════════════════════════════════════════════ -->
 <script type="module">
     import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue, get, set, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, goOffline, goOnline, ref, onValue, get, set, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
     import { getAuth, onAuthStateChanged }    from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     // ✅ Vérification de la session
@@ -1130,7 +1130,7 @@
             // ✅ v7 : grand livre (lecture continue) — re-rendu dès qu'il est chargé ou qu'il change.
             window.ComptaUI.init({ db, ref, get, update, push, onValue, P, session, getUid: () => auth.currentUser && auth.currentUser.uid });
             window.ComptaUI.subscribe((st, mig, ready) => { if (ready && lastSnap) renderData(lastSnap); });
-            if (Sync && !window.__impSyncOn) { window.__impSyncOn = true; Sync.init({ db, ref, onValue }); Sync.onResync(resyncAll); }
+            if (Sync && !window.__impSyncOn) { window.__impSyncOn = true; Sync.init({ db, ref, onValue, goOffline, goOnline }); Sync.onResync(resyncAll); }
             initMonthFilter();
         } else {
             // ✅ CORRECTION v4 : nettoyer aussi 'asufor_session' (sinon il reste
