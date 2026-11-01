@@ -501,3 +501,9 @@ body {
 /* « Non payé » (archive, président) : remet un mois marqué payé en impayé */
 .citem-actions .btn-unpay { background: rgba(185, 28, 28, .08); color: #b91c1c; border: 1px solid rgba(185, 28, 28, .4); }
 .citem-actions .btn-unpay:active { transform: scale(.97); }
+
+.stats-loading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; background: rgba(2, 132, 199, .08); color: var(--text-sub); font-size: .8rem; }
+.stats-loading[hidden] { display: none; }
+.stats-loading button { flex: none; border: 1px solid currentColor; border-radius: 8px; padding: 5px 8px; background: transparent; color: inherit; cursor: pointer; }
+.stats-pending-note { margin: 8px 0 0; color: var(--text-sub); font-size: .8rem; }
+[data-requires-statistics]:disabled { opacity: .5; cursor: wait; }

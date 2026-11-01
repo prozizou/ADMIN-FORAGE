@@ -24,6 +24,14 @@ Objectif : aucune page ne reste en chargement infini, et aucune ne demande de vi
 
 ## Tests
 
+### Chargement des statistiques
+
+Les montants, les statuts de paiement et les exports attendent la lecture des relevés de la période, des archives et du grand livre complet. Avant cela, les noms des clients restent accessibles et les montants affichent « — » avec un message de vérification. Une copie locale partielle ne sert pas à présenter des chiffres définitifs. Les données complètes mais vides donnent bien des zéros.
+
+Les notifications reçues dans une même image sont regroupées pour éviter les recalculs successifs au chargement. L'index des archives et les fenêtres de périodes sont réutilisés entre les recherches, puis invalidés après une nouvelle lecture ou une correction d'archive. Une réponse tardive d'une ancienne sélection ne remplace pas la sélection courante.
+
+`CHROMIUM_PATH=/chemin/vers/chromium node scripts/smoke/stats-loading.test.js` vérifie les archives, la comptabilité et les relevés retardés, une panne comptable suivie d'une reprise, les données vides, le changement de période et la réutilisation de l'index pendant la recherche.
+
 - `node scripts/sync.test.js` : délais, nouvelles tentatives, réponse tardive, détachement, état de connexion, reprises fusionnées.
 - `node scripts/sync-recovery.test.js` : signal navigateur périmé, lecture du cache, reprise bloquée, réouverture automatique et manuelle, absence de réouverture d'une connexion saine.
 - `CHROMIUM_PATH=/chemin/vers/chromium node scripts/smoke/recovery.test.js` : la vraie page Statistiques passe d'une copie locale ancienne aux données fraîches simulées, automatiquement, via le badge et au retour au premier plan, sans écriture.
