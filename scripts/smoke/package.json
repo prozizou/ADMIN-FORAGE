@@ -4,7 +4,7 @@
   "private": true,
   "description": "Test de fumée navigateur des pages Statistiques / Impression / Maintenance (Firebase simulé)",
   "scripts": {
-    "test": "node smoke.test.js && node recovery.test.js"
+    "test": "node smoke.test.js && node recovery.test.js && node stats-loading.test.js"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"

@@ -45,12 +45,21 @@ let currentActivePath = "";
 
 // Cache de l'arbre complet asufor_backup (pour billing.js : arriérés + cascade paiement)
 let allBackupsCache = {};
+let backupIndex = null;
+let backupWindows = null;
+
+function invalidateBackupCalculations() { backupIndex = null; backupWindows = null; }
+function getBackupIndex() { return backupIndex || (backupIndex = window.Billing.indexBackups(allBackupsCache)); }
+function getBackupWindows() { return backupWindows || (backupWindows = Compta.cycleWindows(allBackupsCache)); }
 // ✅ Vrai UNIQUEMENT quand les archives ont été lues EN ENTIER. Tant que ce n'est pas
 // le cas, l'encaissement est bloqué : régulariser un paiement sans connaître les cycles
 // impayés laisserait des arriérés ouverts sans que personne ne le voie.
 let backupsLoaded = false;
 // ✅ v7 : grand livre (factures / paiements / affectations / ajustements) entièrement chargé.
 let ledgerReady = false;
+let relevesReady = false;
+let relevesLoadVersion = 0;
+let statisticsRenderQueued = false;
 const Compta = window.Compta;
 const ComptaUI = window.ComptaUI;
 
@@ -261,6 +270,7 @@ window.openReleve = function(key) {
 
 // --- EXPORT CSV ---
 window.exportCSV = function() {
+    if (!statisticsReady()) { showToast('Les montants sont encore en cours de vérification.', true); return; }
     if (currentFilteredData.length === 0) {
         showToast("La liste est vide, rien à exporter.", true);
         return;
@@ -334,6 +344,7 @@ function loadBackups(monthSelect, attempt) {
         let optionsHtml = '<option value="actuel">Données actuelles</option>';
 
         allBackupsCache = snapshot.exists() ? snapshot.val() : {};   // conservé pour billing.js (arriérés + cascade paiement)
+        invalidateBackupCalculations();
         Object.keys(allBackupsCache).sort().reverse().forEach(month => {
             optionsHtml += `<option value="${month}">${monthLabelFR(month)} — Archive</option>`;
         });
@@ -344,7 +355,7 @@ function loadBackups(monthSelect, attempt) {
         backupsLoaded = true;
         // Les arriérés dépendent des archives : recalcul maintenant qu'elles sont là
         // (et déblocage des boutons d'encaissement).
-        window.applyFilter();
+        scheduleStatisticsRender();
     }).catch((error) => {
         backupsInFlight = false;
         console.error("Erreur lors du chargement des périodes:", error);
@@ -367,8 +378,9 @@ let relevesRetryTimer = null;
 async function loadDataForMonth(selection, opts) {
     // silent = resynchronisation en arrière-plan : on ne vide RIEN (ni données, ni liste, ni écran de chargement).
     const silent = !!(opts && opts.silent);
+    const loadVersion = ++relevesLoadVersion;
     clearTimeout(relevesRetryTimer);
-    if (!silent) storeReleves = {};
+    if (!silent) { storeReleves = {}; relevesReady = false; }
 
     const dbPath = (selection === "actuel") ? P.compteurs : `${P.backup}/${selection}/donnees`;
     const changedPath = dbPath !== currentActivePath;
@@ -379,6 +391,7 @@ async function loadDataForMonth(selection, opts) {
     // (bandeau + libellé du bilan), au lieu d'un simple sélecteur technique.
     isArchiveView = (selection !== "actuel");
     currentSelection = selection;
+    if (!silent) renderPendingStatistics();
     const banner = document.getElementById('archive-banner');
     if (banner) banner.classList.toggle('visible', isArchiveView);
     // ✅ Le président peut corriger les relevés (index, facteur…) d'une
@@ -404,12 +417,13 @@ async function loadDataForMonth(selection, opts) {
             document.getElementById('skeleton-loader').style.display = "none";
             document.getElementById('releves-list').innerHTML = "";
             if (window.AsuforLoader) AsuforLoader.hide();
-            window.applyFilter();
+            scheduleStatisticsRender();
         } else {
             document.getElementById('skeleton-loader').style.display = "flex";
             document.getElementById('releves-list').innerHTML = "";
         }
     }
+    scheduleStatisticsRender();
     const displayed = silent ? (haveData || !!cached) : !!cached;
 
     const dataRef = ref(db, dbPath);
@@ -418,14 +432,15 @@ async function loadDataForMonth(selection, opts) {
 
     try {
         const snap = await sget(dataRef);
-        if (currentActivePath !== thisPath) return; // l'utilisateur a changé de mois pendant le chargement
+        if (loadVersion !== relevesLoadVersion || currentActivePath !== thisPath) return;
         storeReleves = snap.val() || {};
+        relevesReady = !Sync || Sync._state.connected !== false;
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         document.getElementById('skeleton-loader').style.display = "none";
         if (window.AsuforLoader) AsuforLoader.hide();
-        window.applyFilter();
+        scheduleStatisticsRender();
     } catch (err) {
-        if (currentActivePath !== thisPath) return;
+        if (loadVersion !== relevesLoadVersion || currentActivePath !== thisPath) return;
         failed = true;
         console.error('Firebase relevés :', err.code, err.message);
         if (displayed) {
@@ -452,19 +467,19 @@ async function loadDataForMonth(selection, opts) {
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
         if (window.AsuforLoader && failed) AsuforLoader.hide();
         document.getElementById('skeleton-loader').style.display = "none";
-        window.applyFilter();
+        scheduleStatisticsRender();
     });
     const unsubChange = onChildChanged(dataRef, (snap) => {
         if (currentActivePath !== thisPath) return;
         storeReleves[snap.key] = snap.val();
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        window.applyFilter();
+        scheduleStatisticsRender();
     });
     const unsubRemove = onChildRemoved(dataRef, (snap) => {
         if (currentActivePath !== thisPath) return;
         delete storeReleves[snap.key];
         if (window.AsuforCache) window.AsuforCache.write(cacheKey, storeReleves);
-        window.applyFilter();
+        scheduleStatisticsRender();
     });
     const detach = () => { unsubAdd(); unsubChange(); unsubRemove(); };
     if (Sync) Sync.track(key, detach);
@@ -569,13 +584,14 @@ window.startSync = function() {
     if (Sync) {
         Sync.init({ db, ref, onValue, goOffline, goOnline });
         Sync.onResync(resyncAll);
+        Sync.onState(() => { if (!statisticsReady()) scheduleStatisticsRender(); });
     }
     // ✅ v7 : grand livre comptable (lecture continue ; écritures via compta.js).
     ComptaUI.init({ db, ref, get, update, push, onValue, P, session: JSON.parse(localStorage.getItem('asufor_session') || '{}'), getUid: () => auth.currentUser && auth.currentUser.uid });
     ComptaUI.subscribe((st, mig, ready, info) => {
-        ledgerReady = ready;
+        ledgerReady = ready && (!info || info.status === 'ready');
         renderLedgerStatus(info);
-        if (ready) window.applyFilter();
+        scheduleStatisticsRender();
     });
     // ✅ Les agents et les relevés se chargent en PARALLÈLE (l'un n'attend
     // pas l'autre) : chacun affiche sa propre copie en cache instantanément
@@ -641,8 +657,66 @@ function zoneOf(item) {
 }
 
 // --- MOTEUR DE FILTRAGE ET TENDANCES ---
+function statisticsReady() {
+    return relevesReady && backupsLoaded && ledgerReady;
+}
+
+function scheduleStatisticsRender() {
+    if (statisticsRenderQueued) return;
+    statisticsRenderQueued = true;
+    requestAnimationFrame(() => { statisticsRenderQueued = false; window.applyFilter(); });
+}
+
+window.retryStatistics = function () {
+    if (Sync) Sync.retry('badge');
+};
+
+function setStatisticsAvailability(ready) {
+    document.getElementById('stats-summary').setAttribute('aria-busy', String(!ready));
+    document.getElementById('releves-list').setAttribute('aria-busy', String(!ready));
+    document.getElementById('stats-loading').hidden = ready;
+    document.querySelectorAll('[data-requires-statistics]').forEach(button => { button.disabled = !ready; });
+}
+
+function renderPendingList() {
+    const selectedId = document.getElementById('agent-spinner').value || 'all';
+    const search = document.getElementById('search-client').value.trim();
+    const rows = Object.entries(storeReleves).map(([key, item]) => ({ key, ...item })).reverse().filter(item =>
+        (selectedId === 'all' || item.agent_id === selectedId) &&
+        (isFuzzyMatch(search, item.name || '') || (search && String(item.numero_compteur || '').includes(search))));
+    const list = document.getElementById('releves-list');
+    list.innerHTML = rows.slice(0, displayLimit).map(item => `<div class="item bg-non-releve citem-pending">
+        <div class="citem-main"><span class="citem-name">${escHtml(item.name || 'Inconnu')}</span></div>
+        <div class="citem-sub"><span>Compteur n°${escHtml(item.numero_compteur || 'N/A')}</span></div>
+        <p class="stats-pending-note">Montants en cours de vérification…</p>
+    </div>`).join('');
+    document.getElementById('item-count').textContent = rows.length ? `${rows.length} client(s) — calcul en cours` : 'Chargement des relevés…';
+    document.getElementById('btn-load-more').style.display = rows.length > displayLimit ? 'block' : 'none';
+}
+
+function renderPendingStatistics() {
+    setStatisticsAvailability(false);
+    currentFilteredData = [];
+    for (const id of ['total-money', 'total-debt', 'rc-facture', 'rc-arrieres', 'rc-avances', 'rc-ajust', 'rc-problemes', 'recap-pct', 'releves-ratio', 'releves-progress-pct']) {
+        document.getElementById(id).textContent = '—';
+    }
+    document.getElementById('rc-source').textContent = '';
+    document.getElementById('recap-story').textContent = 'Les montants seront affichés après vérification des données.';
+    document.getElementById('recap-bar-fill').style.width = '0%';
+    document.getElementById('releves-bar-fill').style.width = '0%';
+    document.getElementById('trend-money').textContent = '';
+    document.getElementById('trend-debt').textContent = '';
+    document.getElementById('top-quartiers').innerHTML = '<p class="muted-note">Chargement des statistiques…</p>';
+    document.getElementById('stats-loading-message').textContent = Sync && Sync.status() === 'offline'
+        ? 'Données locales affichées. Reconnectez-vous pour vérifier les montants.'
+        : 'Vérification des montants en cours…';
+    renderPendingList();
+}
+
 window.applyFilter = function() {
-    const selectedId = document.getElementById('agent-spinner').value;
+    if (!statisticsReady()) { renderPendingStatistics(); return; }
+    setStatisticsAvailability(true);
+    const selectedId = document.getElementById('agent-spinner').value || 'all';
     const searchQuery = document.getElementById('search-client').value.trim();
     const sortOption = document.getElementById('sort-spinner').value;
     
@@ -650,7 +724,7 @@ window.applyFilter = function() {
     
     const monthSel = (document.getElementById('month-filter') || {}).value || 'actuel';
     const beforeCycle = (monthSel === 'actuel') ? '9999-99' : monthSel;
-    const indexedBackups = window.Billing.indexBackups(allBackupsCache);
+    const indexedBackups = getBackupIndex();
     const currentKeys = {};
     Object.keys(storeReleves).forEach(k => { currentKeys[k] = true; });
 
@@ -828,7 +902,7 @@ function previousCycleOf(sel) {
  * @param {object|null} ids - {compteurId:true} pour restreindre (filtre agent/recherche) ; null = tous
  */
 function periodFigures(sel, items, ids, S, ledger) {
-    const W = Compta.cycleWindows(allBackupsCache);
+    const W = getBackupWindows();
     if (ledger) {
         const isOpen = sel === 'actuel';
         const w = isOpen ? { start: W.openStart, end: Infinity } : (W.windows[sel] || { start: 0, end: Infinity });
@@ -857,7 +931,7 @@ function periodFigures(sel, items, ids, S, ledger) {
     }
     // Historique : relevés de la période (archive ou actuel avant migration)
     const rows = items || Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r }));
-    const idx = window.Billing.indexBackups(allBackupsCache);
+    const idx = getBackupIndex();
     let facture = 0, encaisse = 0, arrieres = 0, problemes = 0;
     rows.forEach(it => {
         if (ids && !ids[it.key]) return;
@@ -954,6 +1028,7 @@ function comptaButtons(item, due) {
 }
 
 function renderList() {
+    if (!statisticsReady()) { renderPendingList(); return; }
     // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
     const esc = escHtml;
     const listDiv = document.getElementById('releves-list');
@@ -1293,7 +1368,7 @@ function nextCycleTarget(cycle, key) {
 
 function patchBackupCache(cycle, key, fields) {
     const donnees = allBackupsCache[cycle] && allBackupsCache[cycle].donnees;
-    if (donnees && donnees[key]) donnees[key] = { ...donnees[key], ...fields };
+    if (donnees && donnees[key]) { donnees[key] = { ...donnees[key], ...fields }; invalidateBackupCalculations(); }
 }
 
 // Fermer le modal en cliquant sur l'overlay
@@ -1347,6 +1422,7 @@ onAuthStateChanged(auth, (user) => {
 
 // --- EXPORT PDF DES IMPAYÉS ---
 window.exportPDFImpayes = function() {
+    if (!statisticsReady()) { showToast('Les montants sont encore en cours de vérification.', true); return; }
     if (typeof window.jspdf === 'undefined') {
         showToast("Erreur : La bibliothèque PDF n'est pas chargée.", true);
         return;

@@ -56,7 +56,7 @@ export const push = (r) => ({ key: '-Pid' + (DB().pushN = (DB().pushN || 0) + 1)
 export const onValue = (r, cb, errCb) => {
   if (r.path === '.info/connected') { const fire = () => cb(snap(r.path, DB().connected !== false && !DB().paused)); DB().connListeners = (DB().connListeners || []).concat([fire]); setTimeout(fire, 0); return () => { DB().connListeners = DB().connListeners.filter(x => x !== fire); }; }
   const fire = () => { if (DB().failListen && DB().failListen.includes(r.path)) { if (errCb) errCb(Object.assign(new Error('listen'), { code: 'NETWORK' })); return; } if (DB().hangAll) return; cb(snap(r.path, getAt(r.path))); };
-  DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
+  DB().listeners.push(fire); DB().onValueCount = (DB().onValueCount || 0) + 1; setTimeout(fire, (DB().listenDelays || {})[r.path] || 0); return () => { DB().listeners = DB().listeners.filter(x => x !== fire); }; };
 const childReg = (p) => { DB().child = DB().child || {}; DB().child[p] = (DB().child[p] || 0) + 1; let off = false; return () => { if (!off) { off = true; DB().child[p]--; } }; };
 export const onChildAdded = (r) => childReg(r.path + '#add'); export const onChildChanged = (r) => childReg(r.path + '#chg'); export const onChildRemoved = (r) => childReg(r.path + '#rem');
 export const runTransaction = async () => ({ committed: true });
@@ -137,7 +137,7 @@ function migratedSeed(t) {
 }
 const num = (t) => parseInt(String(t).replace(/[^\d-]/g, ''), 10) || 0;
 
-module.exports = { server, newPage, seed, FA, chromium };
+module.exports = { server, newPage, seed, migratedSeed, FA, chromium };
 async function main() {
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const base = 'http://127.0.0.1:' + server.address().port;
@@ -415,6 +415,7 @@ async function main() {
             await page.evaluate(() => window.encaisser('c1'));
             await page.waitForSelector('#cui-montant', { timeout: 8000 });
             assert.strictEqual(await page.inputValue('#cui-montant'), '7500');
+            await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'cui-montant');
             await page.fill('#cui-montant', '7000');
             await page.fill('#cui-ref', 'TX-42');
             const prev = await page.textContent('#cui-prev');

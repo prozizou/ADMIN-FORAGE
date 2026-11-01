@@ -68,10 +68,10 @@
                 <h2 id="forage-title">Satigué Eau</h2>
             </div>
             <div class="header-actions">
-                <button class="btn-export" onclick="exportPDFImpayes()" title="Exporter les impayés en PDF">
+                <button class="btn-export" onclick="exportPDFImpayes()" title="Exporter les impayés en PDF" data-requires-statistics disabled>
                     <i class="fa-solid fa-file-pdf"></i> PDF
                 </button>
-                <button class="btn-export" onclick="exportCSV()" title="Exporter en CSV">
+                <button class="btn-export" onclick="exportCSV()" title="Exporter en CSV" data-requires-statistics disabled>
                     <i class="fa-solid fa-file-excel"></i> CSV
                 </button>
             </div>
@@ -79,7 +79,7 @@
 
         <div class="filters-line">
             <div class="select-wrapper">
-                <select id="agent-spinner" onchange="applyFilter()" title="Agent"></select>
+                <select id="agent-spinner" onchange="applyFilter()" title="Agent"><option value="all">Tous les agents</option></select>
             </div>
 
             <div class="select-wrapper">
@@ -105,17 +105,21 @@
         <div id="compta-migration" style="display:none"></div>
         <div id="compta-status" class="compta-status" style="display:none" role="status"></div>
 
-        <div class="recap-card">
+        <div id="stats-loading" class="stats-loading" role="status">
+            <span id="stats-loading-message">Vérification des montants en cours…</span>
+            <button type="button" onclick="retryStatistics()">Réessayer</button>
+        </div>
+        <div class="recap-card" id="stats-summary" aria-busy="true">
             <div class="recap-title" id="recap-title">Bilan du mois</div>
             <div class="recap-row">
                 <div class="recap-cell">
                     <span class="recap-lbl">Encaissé</span>
-                    <span class="recap-val recap-val-good" id="total-money">0 CFA</span>
+                    <span class="recap-val recap-val-good" id="total-money">—</span>
                     <div id="trend-money" class="trend-indicator"></div>
                 </div>
                 <div class="recap-cell">
                     <span class="recap-lbl">À réclamer</span>
-                    <span class="recap-val recap-val-bad" id="total-debt">0 CFA</span>
+                    <span class="recap-val recap-val-bad" id="total-debt">—</span>
                     <div id="trend-debt" class="trend-indicator"></div>
                 </div>
             </div>
@@ -130,7 +134,7 @@
             <p class="recap-source" id="rc-source"></p>
             <div class="recap-barline">
                 <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
-                <div class="recap-pct" id="recap-pct">0 % encaissé</div>
+                <div class="recap-pct" id="recap-pct">—</div>
             </div>
             <p class="recap-story" id="recap-story">—</p>
         </div>
@@ -150,9 +154,9 @@
              qu'"Anomalies"), onglets agrandis et mieux espacés. -->
         <div class="tabs">
             <button class="tab-btn active" id="tab-all"       onclick="setTab('all')"><i class="fa-solid fa-list-ul"></i> Tous</button>
-            <button class="tab-btn"        id="tab-paye"      onclick="setTab('paye')"><i class="fa-solid fa-circle-check"></i> Payés</button>
-            <button class="tab-btn"        id="tab-impaye"    onclick="setTab('impaye')"><i class="fa-solid fa-circle-exclamation"></i> Impayés</button>
-            <button class="tab-btn"        id="tab-anomalies" onclick="setTab('anomalies')"><i class="fa-solid fa-triangle-exclamation"></i> Problèmes</button>
+            <button class="tab-btn"        id="tab-paye"      onclick="setTab('paye')" data-requires-statistics disabled><i class="fa-solid fa-circle-check"></i> Payés</button>
+            <button class="tab-btn"        id="tab-impaye"    onclick="setTab('impaye')" data-requires-statistics disabled><i class="fa-solid fa-circle-exclamation"></i> Impayés</button>
+            <button class="tab-btn"        id="tab-anomalies" onclick="setTab('anomalies')" data-requires-statistics disabled><i class="fa-solid fa-triangle-exclamation"></i> Problèmes</button>
         </div>
 
         <div id="releves-progress-card" style="display:none;">
@@ -203,7 +207,7 @@
             <div class="skeleton-item"><div class="skeleton-text" style="width:60%"></div><div class="skeleton-text" style="width:90%"></div></div>
         </div>
 
-        <div id="releves-list"></div>
+        <div id="releves-list" aria-busy="true"></div>
 
         <button id="btn-load-more" class="load-more" onclick="loadMore()" style="display:none;">
             ⬇️ Charger plus (100)
