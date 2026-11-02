@@ -310,6 +310,25 @@ test('statistiques : une facture de juin réglée en octobre réduit l\'arriér�
     assert.strictEqual(juinApres.arrieres, 5000); assert.strictEqual(juinApres.encaisse, 0);
 });
 
+test('versements du mois : borne initiale incluse, total et détail identiques, annulés et dates hors période exclus', () => {
+    const S=C.emptyState();
+    const receipt=(cid,montant,date,statut='valide')=>({compteur_id:cid,montant,date_paiement:date,statut});
+    S.paiements={
+        old:receipt('c1',45000,'2026-10-31T23:59:59.999Z'),
+        midnight:receipt('c1',1000,'2026-11-01T00:00:00.000Z'),
+        partial:receipt('c2',2000,'2026-11-02T09:00:00Z'),
+        cancelled:receipt('c1',7000,'2026-11-01T08:00:00Z','annule'),
+        future:receipt('c1',9000,'2026-12-01T00:00:00Z'),
+        invalid:receipt('c1',5000,'date inconnue')
+    };
+    const period={start:Date.parse('2026-11-01T00:00:00Z'),end:Date.parse('2026-11-02T12:00:00Z'),startInclusive:true,cycle:'__ouvert__'};
+    assert.deepStrictEqual(C.periodPayments(S,period).map(p=>p.montant),[1000,2000]);
+    assert.deepStrictEqual([C.periodStats(S,period).encaisse,C.periodStats(S,period).nb_paiements],[3000,2]);
+    const filtered={...period,compteurIds:{c1:true}};
+    assert.deepStrictEqual([C.periodPayments(S,filtered).length,C.periodStats(S,filtered).encaisse],[1,1000]);
+    assert.deepStrictEqual(C.periodPayments(S,{...filtered,startInclusive:false}).map(p=>p.montant),[]);
+});
+
 test('statistiques : un paiement annulé ne compte pas dans l\'encaissé ; avances comptées une seule fois', () => {
     const db = newDb();
     close(db, '2026-06', { c1: rel(0, 20) });

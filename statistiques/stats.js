@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push, query, orderByKey, limitToLast, endBefore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v79';
+const STATS_BUILD = 'v80';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -102,8 +102,6 @@ function getBackupWindows() { return backupWindows || (backupWindows = Compta.cy
 let backupsLoaded = false;
 let archivesRequested = false;
 let openLatestArchive = false;
-let currentCycleStart = null;
-let cycleLookupGeneration = 0;
 // ✅ v7 : grand livre (factures / paiements / affectations / ajustements) entièrement chargé.
 let ledgerReady = false;
 let relevesReady = false;
@@ -490,49 +488,65 @@ window.changeMonth = function() {
     refreshSourceRequirements();
 };
 
-// Le journal contient la date de TOUTE clôture, même sans facture (consommation nulle).
-// Pages de 64 événements, ordonnées par les clés push Firebase : aucune lecture de backup.
-window.retryCurrentCycle = () => loadCurrentCycle(true);
-function loadCurrentCycle(force) {
-    const auditPath = ComptaUI.paths().audit;
-    const pageSize = 64;
-    const head = query(ref(db, auditPath), orderByKey(), limitToLast(pageSize));
-    watchStatsSource('cycle', auditPath, snapshot => {
-        const generation = ++cycleLookupGeneration;
-        currentCycleStart = null;
-        if (liveSources.cycle.connectedAtReceive === false) return;
-        if (Sync) Sync.untrack('stats:cycle-page');
-        let latest = 0;
-        let chronological = true;
-        function inspect(snap, cursor) {
-            if (generation !== cycleLookupGeneration) return;
-            const events = snap.val() || {};
-            const keys = Object.keys(events).sort();
-            let found = false;
-            for (const key of keys) {
-                const event = events[key];
-                if (event.action !== 'CLOTURE_EFFECTUEE') continue;
-                const date = Date.parse(event.date);
-                if (!Number.isFinite(date)) throw Object.assign(new Error('Date de clôture invalide'), { code: 'INVALID_CLOSURE_DATE' });
-                latest = Math.max(latest, date); found = true;
-            }
-            // Les identifiants non standard sont parcourus en entier pour ne pas déduire leur chronologie.
-            chronological = chronological && keys.every(key => /^[-0-9A-Z_a-z]{20}$/.test(key));
-            if ((found && chronological) || keys.length < pageSize) {
-                currentCycleStart = latest;
-                const completed = liveSources['cycle-page'];
-                queueMicrotask(() => { if (generation === cycleLookupGeneration && completed && completed === liveSources['cycle-page']) { if (Sync) Sync.untrack('stats:cycle-page'); else completed.stop(); } });
-                scheduleStatisticsRender();
-                return;
-            }
-            const before = keys[0];
-            if (!before || before === cursor) return;
-            const older = query(ref(db, auditPath), orderByKey(), endBefore(before), limitToLast(pageSize));
-            watchStatsSource('cycle-page', auditPath + ':' + before, page => inspect(page, before), true, older);
-        }
-        inspect(snapshot);
-    }, !!force, head);
+// Le mois civil de l'application (Sénégal, UTC) ne dépend pas de la date de clôture.
+function receiptMonthWindow(now = Date.now()) {
+    const date = new Date(now);
+    return {
+        start: Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1), end: now, startInclusive: true,
+        label: date.toLocaleDateString('fr-FR', {month:'long', year:'numeric', timeZone:'Africa/Dakar'})
+    };
 }
+let receiptMonthTimer;
+function scheduleReceiptMonth() {
+    clearTimeout(receiptMonthTimer);
+    const now = new Date();
+    const next = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+    receiptMonthTimer = setTimeout(() => { scheduleStatisticsRender(); scheduleReceiptMonth(); }, Math.min(next - now.getTime() + 50, 86400000));
+}
+scheduleReceiptMonth();
+let receiptDetails = null;
+let receiptModal = null;
+function closeReceiptDetails() {
+    if (receiptModal) receiptModal.close();
+    receiptModal = null;
+    document.getElementById('show-receipts').focus({preventScroll:true});
+}
+function renderReceiptDetails() {
+    if (!receiptModal || !receiptModal.el.isConnected) { receiptModal = null; return; }
+    if (!receiptDetails) { closeReceiptDetails(); return; }
+    const {payments, encaisse, periodLabel} = receiptDetails;
+    const money = amount => Math.round(Number(amount) || 0).toLocaleString('fr-FR') + ' F';
+    const rows = [...payments].sort((a,b) => Date.parse(b.date_paiement) - Date.parse(a.date_paiement)).map(payment => {
+        const record = storeReleves[payment.compteur_id] || {};
+        const client = payment.client || record.name || 'Client non renseigné';
+        const date = new Date(payment.date_paiement).toLocaleString('fr-FR', {day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Dakar'});
+        return `<li><div><strong>${escHtml(client)}</strong><span>${escHtml(date)}</span></div><b>${money(payment.montant)}</b></li>`;
+    }).join('');
+    const html = `<h3 id="receipt-title">Versements encaissés</h3><p class="cui-sub">${escHtml(periodLabel)}</p><p class="receipt-total">${payments.length} versement${payments.length === 1 ? '' : 's'} · <strong>${money(encaisse)}</strong></p><p class="cui-sub">Comprend les paiements partiels et les règlements d’anciennes factures. « Payés » affiche les factures entièrement réglées.</p><ul class="receipt-list">${rows || '<li>Aucun versement pour cette période.</li>'}</ul><div class="cui-act"><button type="button" class="cui-primary" id="close-receipts">Fermer</button></div>`;
+    if (receiptModal.markup === html) return;
+    const box = receiptModal.q('.cui-box'), scroll = box.scrollTop, focused = document.activeElement && document.activeElement.id === 'close-receipts';
+    box.innerHTML = html; receiptModal.markup = html; box.scrollTop = scroll;
+    if (focused) receiptModal.q('#close-receipts').focus({preventScroll:true});
+}
+function updateReceiptDetails(fig) {
+    receiptDetails = fig && Array.isArray(fig.payments) && fig.encaisse !== null ? fig : null;
+    const button = document.getElementById('show-receipts');
+    button.hidden = !receiptDetails;
+    button.disabled = !receiptDetails;
+    if (receiptDetails) button.textContent = `Voir les versements (${receiptDetails.payments.length})`;
+    renderReceiptDetails();
+}
+document.getElementById('show-receipts').addEventListener('click', () => {
+    if (!receiptDetails || receiptModal && receiptModal.el.isConnected) return;
+    receiptModal = ComptaUI.modal('');
+    receiptModal.el.setAttribute('aria-labelledby','receipt-title');
+    receiptModal.el.addEventListener('click', event => { if (event.target.closest('#close-receipts')) closeReceiptDetails(); });
+    receiptModal.el.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); closeReceiptDetails(); }
+        else if (event.key === 'Tab') { event.preventDefault(); receiptModal.q('#close-receipts').focus(); }
+    });
+    renderReceiptDetails(); receiptModal.q('#close-receipts').focus();
+});
 
 function cacheKeyFor(dbPath) {
     return 'releves:' + dbPath;
@@ -633,7 +647,6 @@ function resyncAll(reason) {
     loadDataForMonth(currentSelection, { silent: true, force });
     syncAgents(force);
     if (archivesRequested) loadBackups(document.getElementById('month-filter'), force);
-    loadCurrentCycle(force);
     return requiredStatsSources().every(key => liveSources[key] && liveSources[key].status !== 'error');
 }
 
@@ -669,7 +682,6 @@ window.startSync = function() {
     // pas l'autre) : chacun affiche sa propre copie en cache instantanément
     // pendant que sa version fraîche arrive en tâche de fond.
     syncAgents();
-    loadCurrentCycle();
     window.initMonthFilter();
 }
 
@@ -746,9 +758,6 @@ function scheduleStatisticsRender() {
     requestAnimationFrame(() => {
         statisticsRenderQueued = false;
         archiveStatus();
-        const cycleStatus = document.getElementById('cycle-status');
-        if (cycleStatus) cycleStatus.hidden = isArchiveView || !ComptaUI.isMigrated() || currentCycleStart !== null ||
-            !['cycle', 'cycle-page'].some(key => liveSources[key] && ['slow', 'error'].includes(liveSources[key].status));
         window.applyFilter();
     });
 }
@@ -764,7 +773,7 @@ window.asuforDiagnostics = function () {
     }
     return { build: STATS_BUILD, page: 'statistiques', navigatorOnline: navigator.onLine, visibility: document.visibilityState,
         firebaseConnected: Sync ? Sync._state.connected : null, calculationsReady: statisticsReady(), readingsVerified: relevesReady,
-        archivesReceived: backupsLoaded, archivesRequested, migrated: ComptaUI.isMigrated(), cycleStartKnown: currentCycleStart !== null, sources, ledger: ComptaUI.getStatus() };
+        archivesReceived: backupsLoaded, archivesRequested, migrated: ComptaUI.isMigrated(), receiptsPeriod: receiptMonthWindow().label, sources, ledger: ComptaUI.getStatus() };
 };
 window.showStatsDiagnostic = () => { console.info('[ASUFOR diagnostic]', JSON.stringify(window.asuforDiagnostics())); showToast('Diagnostic affiché dans la console F12.'); };
 
@@ -794,6 +803,7 @@ function renderPendingList() {
 function renderPendingStatistics() {
     setStatisticsAvailability(false);
     currentFilteredData = [];
+    updateReceiptDetails(null);
     for (const id of ['total-money', 'total-debt', 'recap-pct', 'releves-ratio', 'releves-progress-pct']) {
         document.getElementById(id).textContent = '—';
     }
@@ -949,7 +959,8 @@ window.applyFilter = function() {
     document.getElementById('total-debt').innerText = F(aReclamer);
     setTxt('rc-source', fig.historique
         ? 'Chiffres reconstitués depuis les archives (avant la comptabilité).'
-        : (migrated ? (currentCycleStart === null && monthSel === 'actuel' ? 'Soldes vérifiés. Date de dernière clôture en cours de vérification ; encaissé et ajustements indisponibles.' : 'Paiements reçus depuis la dernière clôture.') : (!backupsLoaded ? 'Mois courant uniquement. Arriérés historiques indisponibles avant consultation des archives ou migration comptable.' : '')));
+        : (ledgerMode ? fig.periodLabel : (!backupsLoaded ? 'Mois courant uniquement. Arriérés historiques indisponibles avant consultation des archives ou migration comptable.' : '')));
+    updateReceiptDetails(fig);
 
     const recapKnown = fig.encaisse !== null && aReclamer !== null;
     const recapTotal = recapKnown ? fig.encaisse + aReclamer : 0;
@@ -982,7 +993,7 @@ window.applyFilter = function() {
         const qualifier = isGood ? 'Plutôt bien' : 'À surveiller';
         el.innerHTML = `<span class="${colorClass}">${arrow} ${qualifier} <span class="trend-detail">(${sign}${diff.toFixed(1)}% vs mois précédent)</span></span>`;
     };
-    calcTrend(fig.encaisse, prevFig && prevFig.encaisse, 'trend-money', true);
+    calcTrend(fig.encaisse, monthSel === 'actuel' ? null : prevFig && prevFig.encaisse, 'trend-money', true);
     calcTrend(fig.arrieres, prevFig && prevFig.arrieres, 'trend-debt', false);
 
     renderMigrationBanner();
@@ -1009,8 +1020,11 @@ function periodFigures(sel, items, ids, S, ledger) {
     const W = getBackupWindows();
     if (ledger) {
         const isOpen = sel === 'actuel';
-        const w = isOpen ? { start: currentCycleStart === null ? 0 : currentCycleStart, end: Infinity } : (W.windows[sel] || { start: 0, end: Infinity });
-        const st = Compta.periodStats(S, { cycle: isOpen ? '__ouvert__' : sel, start: w.start, end: w.end, compteurIds: ids || undefined });
+        const w = isOpen ? receiptMonthWindow() : (W.windows[sel] || { start: 0, end: Infinity });
+        const period = { cycle: isOpen ? '__ouvert__' : sel, start: w.start, end: w.end, startInclusive: !!w.startInclusive, compteurIds: ids || undefined };
+        const st = Compta.periodStats(S, period);
+        const payments = Compta.periodPayments(S, period);
+        const periodLabel = isOpen ? 'Versements reçus en ' + w.label + '.' : 'Versements reçus pendant le cycle ' + monthLabelFR(sel) + '.';
         let problemes = st.problemes;
         let facture = st.facture, previsionnel = false;
         const rows = items || (isOpen ? null : Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r })));
@@ -1031,7 +1045,7 @@ function periodFigures(sel, items, ids, S, ledger) {
                 if ((!ids || ids[f.compteur_id]) && f.probleme && f.probleme.actif && !f.probleme.resolu) problemes++;
             });
         }
-        return { facture, previsionnel, encaisse: isOpen && currentCycleStart === null ? null : st.encaisse, arrieres: st.arrieres, avances: st.avances, ajustements: isOpen && currentCycleStart === null ? null : st.ajustements, problemes, historique: false };
+        return { facture, previsionnel, encaisse: st.encaisse, payments, periodLabel, arrieres: st.arrieres, avances: st.avances, ajustements: st.ajustements, problemes, historique: false };
     }
     // Historique : relevés de la période (archive ou actuel avant migration)
     const rows = items || Object.entries((allBackupsCache[sel] || {}).donnees || {}).map(([key, r]) => ({ key, ...r }));
