@@ -4,6 +4,7 @@ const C = require('../../compta.js');
 const { server, newPage, migratedSeed, FA, chromium } = require('./smoke.test.js');
 const root = 'Asufor/' + FA;
 const num = text => Number(text.replace(/−/g, '-').replace(/[^\d-]/g, ''));
+const paid = async page => (await page.locator('#payments-table tbody tr:not(.payment-cancelled) td:nth-child(2)').allTextContents()).reduce((sum,text)=>sum+num(text),0);
 const archiveReads = page => page.evaluate(root => ({ records: window.__DB.reads.filter(p => p === root + '/backup' || p.startsWith(root + '/backup/')), listeners: (window.__DB.onValuePaths || []).filter(p => p === root + '/backup' || p.startsWith(root + '/backup/')), shallow: (window.__DB.shallowReads || []).filter(path => path === root + '/backup') }), root);
 function example(arrears = 0) {
     const tree = migratedSeed(), f = tree.Asufor[FA];
@@ -44,7 +45,7 @@ async function versement(page, amount) {
         {
             const { page, ctx, errors } = await open(browser, base);
             await page.setViewportSize({ width: 320, height: 780 });
-            assert.equal(num(await page.locator('#past-total').innerText()), 6000);
+            assert.equal(num(await page.locator('#total-due').innerText()), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             await page.click('#btn-pay');
             await page.click('#cui-ok');
@@ -56,11 +57,11 @@ async function versement(page, amount) {
             await page.click('#cui-cancel');
             await versement(page, 2000);
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '4 000 F');
-            assert.equal(num(await page.locator('#t-paye').innerText()), 2000);
+            assert.equal(await paid(page), 2000);
             await versement(page, 3000);
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '1 000 F');
-            assert.equal(num(await page.locator('#t-paye').innerText()), 5000);
-            assert.deepEqual(await page.locator('#payments-table tbody tr').evaluateAll(rows => rows.map(row => row.cells[2].textContent.trim())), ['2 000 F', '5 000 F']);
+            assert.equal(await paid(page), 5000);
+            assert.deepEqual(await page.locator('#payments-table tbody tr').evaluateAll(rows => rows.map(row => row.cells[1].textContent.trim())), ['2 000 F', '3 000 F']);
             for (const width of [320, 360, 390, 768, 1024, 1440]) {
                 await page.setViewportSize({ width, height: 900 });
                 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'pas de débordement à ' + width);
@@ -76,7 +77,7 @@ async function versement(page, amount) {
             const saved = await page.evaluate(() => window.__DB.tree);
             const reopened = await open(browser, base, saved);
             assert.equal(num(await reopened.page.locator('#total-due').innerText()), 1000);
-            assert.equal(num(await reopened.page.locator('#t-paye').innerText()), 5000);
+            assert.equal(await paid(reopened.page), 5000);
             await versement(reopened.page,1000);
             assert.equal(num(await reopened.page.locator('#total-due').innerText()),0);
             assert.equal(await reopened.page.locator('#btn-pay').isDisabled(),true,'le relevé courant ne permet pas un nouveau versement');
@@ -100,15 +101,15 @@ async function versement(page, amount) {
                 }
                 window.__DB.listeners.slice().forEach(fn => fn());
             }, root);
-            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('past-total').textContent === '12 000 F');
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('total-due').textContent === '7 000 F');
             await page.click('#cui-ok');
             await page.waitForSelector('#cui-close');
             assert.equal(num(await page.locator('.cui-remaining').innerText()), 6000, 'une nouvelle clôture émet une nouvelle facture, sans la prépayer');
             await page.click('#cui-close');
             await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('total-due').textContent === '6 000 F');
             assert.equal(num(await page.locator('#total-due').innerText()), 6000, 'le nouveau relevé clôturé devient payable une seule fois');
-            assert.equal(num(await page.locator('#past-total').innerText()), 12000);
-            assert.equal(num(await page.locator('#t-paye').innerText()), 6000);
+            assert.equal(await page.locator('#past-total,#t-paye').count(),0);
+            assert.equal(await paid(page), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             assert.deepEqual(errors, []);
             console.log('✓ 6 000 − 2 000 − 3 000 = 1 000, cumul persistant, solde final, thème clair et mise en page 320–1440 px');
@@ -131,7 +132,7 @@ async function versement(page, amount) {
             await page.waitForFunction(() => document.getElementById('cui-err').textContent.includes('Coupure simulée'));
             assert.equal(await page.evaluate(() => window.__DB.writes.length), 1);
             await page.click('#cui-ok'); await page.waitForSelector('#cui-close'); await page.click('#cui-close');
-            await page.waitForFunction(() => document.getElementById('t-paye').textContent === '2 000 F');
+            await page.waitForFunction(() => document.querySelector('#payments-table td:nth-child(2)')?.textContent === '2 000 F');
             assert.equal(num(await page.locator('#total-due').innerText()), 4000);
             assert.equal(await page.evaluate(() => Object.keys(window.__DB.tree.Asufor.Asufor_a.paiements).length), 1);
             assert.equal(await page.evaluate(() => window.__DB.writes.length), 1);
@@ -141,17 +142,17 @@ async function versement(page, amount) {
         }
         {
             const { page, ctx, errors } = await open(browser, base, example(2000));
-            assert.equal(num(await page.locator('#past-total').innerText()), 8000);
+            assert.equal(num(await page.locator('#total-due').innerText()), 8000);
             await versement(page, 2000);
             await versement(page, 3000);
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '3 000 F');
             const f = await page.evaluate(() => window.__DB.tree.Asufor.Asufor_a);
             assert.equal(f.factures['2026-09_c1'].montant_paye, 2000);
             assert.equal(f.factures['2026-09_c1'].reste_a_payer, 0, 'les arriérés sont réglés en premier');
-            assert.equal(num(await page.locator('#t-paye').innerText()), 5000);
+            assert.equal(await paid(page), 5000);
             // Annuler un versement retire son montant du cumul, sans supprimer sa trace.
             await page.locator('[data-cancel]').first().click();
-            await page.waitForFunction(() => document.getElementById('t-paye').textContent === '3 000 F');
+            await page.waitForFunction(() => document.getElementById('total-due').textContent === '5 000 F');
             assert.equal(num(await page.locator('#total-due').innerText()), 5000);
             assert.equal(await page.locator('#payments-table tbody tr').count(), 2);
             assert.deepEqual(errors, []);
@@ -214,7 +215,7 @@ async function versement(page, amount) {
                 const { page, ctx, errors } = await open(browser, base, tree);
                 assert.equal(await page.locator('#due-current').count(),0);
                 assert.equal(num(await page.locator('#total-due').innerText()),6000);
-                assert.match(await page.locator('#provisoire').innerText(), /consommation déjà relevée/);
+                assert.match(await page.locator('#reading-status').innerText(), /non saisi/);
                 assert.deepEqual(errors, []); await ctx.close();
             }
             console.log('✓ relevé du mois absent : état expliqué, aucun montant inventé');

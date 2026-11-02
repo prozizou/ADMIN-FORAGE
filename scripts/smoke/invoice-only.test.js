@@ -31,6 +31,9 @@ function apply(tree,updates) {
             assert.equal(await page.evaluate(()=>window.__DB.writes.length),0);
             await page.goto(base+'/compte/releve.html?c=c1');
             await page.waitForFunction(()=>document.getElementById('balance').getAttribute('aria-busy')==='false');
+            assert.equal(await page.locator('#amount-label').innerText(),'Total à payer');
+            assert.equal(money(await page.locator('#amount-arrears').innerText()),41750);
+            assert.equal(money(await page.locator('#amount-current').innerText()),250);
             assert.equal(money(await page.locator('#total-due').innerText()),42000,'41 750 F d’arriérés et 250 F du relevé sont inclus');
             await page.click('#btn-pay');
             assert.equal(money(await page.locator('#cui-prev').innerText()),42000);
@@ -101,7 +104,7 @@ function apply(tree,updates) {
             await page.evaluate(()=>window.openReleve('c1'));
             const customer=page.frameLocator('#customer-frame');
             await customer.locator('#balance[aria-busy="false"]').waitFor();
-            assert.equal(money(await customer.locator('#t-paye').innerText()),0,'une ancienne avance n’est pas présentée comme une facture réglée');
+            assert.equal(await customer.locator('#t-paye').count(),0,'les anciens cumuls ne sont pas affichés');
             assert.equal(money(await customer.locator('#t-credit').innerText()),45000);
             assert.equal(await customer.locator('#btn-pay').isDisabled(),true);
             assert.match(await customer.locator('#payments-table').innerText(),/non affectés aux factures/);
