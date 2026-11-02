@@ -460,7 +460,7 @@ async function main() {
             assert.match(await page.textContent('#cui-err'), /dépasse/);
             assert.strictEqual(await page.evaluate(()=>window.__DB.writes.length),0);
             await page.fill('#cui-montant', '7000');
-            assert.match(await page.textContent('#cui-prev'),/Reste à payer : 500 F/);
+            assert.match(await page.textContent('#cui-prev'),/Après ce versement : 500 F/);
         });
         await check('validation : paiement affecté aux deux factures et au relevé saisi, sans avance, en UNE écriture', async () => {
             const w0 = await page.evaluate(() => window.__DB.writes.length);
@@ -686,8 +686,8 @@ async function main() {
         await check('chronologie : 2 factures + 1 paiement (affectations), soldes cohérents', async () => {
             const t = await page.textContent('#timeline');
             assert.match(t, /7[\s  ]?000 F/);
-            assert.strictEqual(num(await page.textContent('#t-paye')), 6000);
-            assert.strictEqual(num(await page.textContent('#past-total')), 7500);
+            assert.strictEqual(await page.locator('#t-paye').count(),0);
+            assert.strictEqual(await page.locator('#past-total').count(),0);
             assert.strictEqual(num(await page.textContent('#total-due')), 500);
         });
         for (const width of [320, 360, 390]) {
@@ -724,7 +724,7 @@ async function main() {
         });
         await check('président : annulation motivée → paiement « annule » conservé, factures rouvertes', async () => {
             await page.click('[data-cancel]');
-            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('t-paye').textContent === '0 F', null, {timeout:8000});
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.querySelector('#payments-table tr.payment-cancelled'), null, {timeout:8000});
             const F = (await db(page)).Asufor[FA];
             const p = F.paiements[paiementId];
             assert.deepStrictEqual([p.statut, p.montant, p.motif_annulation], ['annule', 7000, 'Erreur de saisie — annulation depuis le relevé']);
@@ -741,7 +741,7 @@ async function main() {
         await page.waitForSelector('#timeline .ev', { timeout: 8000 });
         await check('trésorier : aucun menu supprimé ni commande d’annulation réservée au président', async () => {
             assert.strictEqual(await page.locator('#btn-print, #btn-more, #btn-adj, [data-cancel]').count(), 0);
-            assert.strictEqual(num(await page.textContent('#t-paye')), 6000);
+            assert.strictEqual(await page.locator('#t-paye').count(),0);
         });
         await page.context().close();
     }

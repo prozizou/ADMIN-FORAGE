@@ -256,7 +256,7 @@
         function values(amount) { return { compteurId: o.compteurId, releve: o.releve, client: o.client, montant: amount, mode: 'autre', numero_recu: receipt, reference: null, source: 'versement', paiementId: pid }; }
         function check(amount, due) {
             if (!Number.isInteger(amount) || amount <= 0) throw new Error('Saisissez un montant entier supérieur à 0.');
-            if (amount > due) throw new Error('Le montant dépasse le reste à payer (' + fcfa(due) + ').');
+            if (amount > due) throw new Error('Le montant dépasse la somme à payer (' + fcfa(due) + ').');
         }
         function remaining(result) {
             return C.accountAmountDue(result.apres,o.releve).total_du;
@@ -264,14 +264,14 @@
         function preview() {
             var amount = Number(m.q('#cui-montant').value);
             m.q('#cui-err').textContent = '';
-            m.q('#cui-prev').textContent = 'Reste à payer : ' + fcfa(du.total_du);
+            m.q('#cui-prev').textContent = 'Montant à payer : ' + fcfa(du.total_du);
             if (m.q('#cui-montant').value === '') return;
             try {
                 check(amount, du.total_du);
                 var result = C.buildInvoicePaymentOps(getState(), Object.assign({}, values(amount), {
                     paths: paths, user: user(), now: new Date().toISOString(), newId: function () { return 'apercu'; }
                 }));
-                m.q('#cui-prev').textContent = 'Reste à payer : ' + fcfa(remaining(result));
+                m.q('#cui-prev').textContent = 'Après ce versement : ' + fcfa(remaining(result));
             } catch (error) { m.q('#cui-err').textContent = error.message; }
         }
         m.q('#cui-montant').addEventListener('input', preview);
@@ -297,7 +297,7 @@
             }).then(function (result) {
                 saving = false;
                 var box = m.el.querySelector('.cui-box');
-                box.innerHTML = '<h3>Versement enregistré</h3><p class="cui-remaining">Reste à payer : <strong>' + fcfa(remaining(result)) + '</strong></p><div class="cui-act"><button type="button" class="cui-primary" id="cui-close">Fermer</button></div>';
+                box.innerHTML = '<h3>Versement enregistré</h3><p class="cui-remaining">Montant à payer : <strong>' + fcfa(remaining(result)) + '</strong></p><div class="cui-act"><button type="button" class="cui-primary" id="cui-close">Fermer</button></div>';
                 box.querySelector('#cui-close').addEventListener('click', m.close);
                 if (o.onDone) o.onDone(result);
             }, function (error) {
