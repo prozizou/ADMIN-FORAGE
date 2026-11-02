@@ -180,6 +180,33 @@
         }, 0));
     }
 
+    // Affectation au relevé déjà saisi : elle ne constitue pas un crédit pour un mois futur.
+    function reservedForReading(S, p, asOf) {
+        if (!isValidPayment(p) || !p.releve_affecte) return 0;
+        var used = 0;
+        Object.keys(S.affectations[p.paiement_id] || {}).forEach(function (fid) {
+            var a = S.affectations[p.paiement_id][fid];
+            if (a.statut !== 'annulee' && a.releve_courant && (!asOf || t(a.date) <= asOf)) used += Number(a.montant) || 0;
+        });
+        return Math.max(0, Math.min(r0(p.releve_affecte.montant - used), r0(p.montant - paymentAllocated(S, p.paiement_id, asOf))));
+    }
+    function readingPaid(account, record) {
+        if (!record) return 0;
+        return account.paiements.reduce(function (sum, p) {
+            return sum + (p.releve_affecte && Number(p.releve_affecte.ancien_index) === Number(record.last_index) ? p.affecte_releve : 0);
+        }, 0);
+    }
+    function validateReadingPayments(S, cid, record) {
+        var account = computeAccount(S, cid);
+        var paid = account.releve_paye;
+        if (!paid) return;
+        var matching = readingPaid(account, record);
+        var cur = Billing.computeCurrent(record || {});
+        var onlyPreviousIndex = record && !Object.prototype.hasOwnProperty.call(record,'new_index');
+        assert(matching === paid && (onlyPreviousIndex || !cur.anomalie && cur.montant >= paid),
+            'Ce relevé a déjà reçu ' + paid.toLocaleString('fr-FR') + ' F. Annulez les versements concernés avant de réduire ou remplacer ce relevé.');
+    }
+
     function sortFactures(a, b) {
         return a.cycle < b.cycle ? -1 : a.cycle > b.cycle ? 1 : (t(a.date_creation) - t(b.date_creation)) || (a.facture_id < b.facture_id ? -1 : 1);
     }
@@ -202,7 +229,8 @@
             .filter(function (p) { return p.compteur_id === cid && (!asOf || t(p.date_paiement) <= asOf); })
             .map(function (p) {
                 var aff = isValidPayment(p) ? paymentAllocated(S, p.paiement_id, asOf) : 0;
-                return Object.assign({}, p, { affecte: aff, disponible: isValidPayment(p) ? Math.max(0, r0(p.montant) - aff) : 0 });
+                var reserved = reservedForReading(S, p, asOf);
+                return Object.assign({}, p, { affecte: aff + reserved, affecte_factures: aff, affecte_releve: reserved, disponible: isValidPayment(p) ? Math.max(0, r0(p.montant) - aff - reserved) : 0 });
             })
             .sort(sortPaiements);
         var ajustements = vals(S.ajustements).filter(function (j) { return j.compteur_id === cid; })
@@ -219,13 +247,16 @@
                 if (plusAncienne === null || f.cycle < plusAncienne) plusAncienne = f.cycle;
             }
         });
+        var readingTotal = paiements.reduce(function (sum, p) { return sum + p.affecte_releve; }, 0);
+        // La part du relevé déjà réglée est reconnue ici, puis remplacée par sa facture à la clôture.
+        totalFacture += readingTotal;
         var totalPaye = paiements.reduce(function (s, p) { return s + (isValidPayment(p) ? r0(p.montant) : 0); }, 0);
         var avance = paiements.reduce(function (s, p) { return s + p.disponible; }, 0);
         return {
             compteur_id: cid, factures: factures, paiements: paiements, ajustements: ajustements,
             total_facture: r0(totalFacture), total_paye: r0(totalPaye), total_ajustements: r0(totalAjust),
             solde: r0(totalFacture + totalAjust - totalPaye), arrieres: r0(arrieres), avance: r0(avance),
-            plus_ancienne_dette: plusAncienne, nb_factures_impayees: nbImpayees
+            plus_ancienne_dette: plusAncienne, nb_factures_impayees: nbImpayees, releve_paye: r0(readingTotal)
         };
     }
 
@@ -349,8 +380,7 @@
     function releveStatusUpdates(tx, cid, releve) {
         if (!releve) return;
         var acc = computeAccount(tx.S, cid);
-        var cur = Billing.computeCurrent(releve);
-        var du = r0(acc.arrieres + (cur.anomalie ? 0 : cur.montant) - acc.avance);
+        var du = accountAmountDue(acc, releve).total_du;
         var paid = du <= 0 && (acc.total_paye > 0);
         var p = tx.paths.compteurs + '/' + cid;
         tx.set(p + '/status', paid ? 'paye' : 'impaye');
@@ -361,23 +391,18 @@
     }
 
     /** Somme due aujourd'hui pour un relevé en cours : arriérés + facture provisoire − avance. */
-    function amountDueNow(S, cid, releve) {
-        var acc = computeAccount(S, cid);
-        var cur = releve ? Billing.computeCurrent(releve) : { montant: 0, anomalie: true };
+    function accountAmountDue(acc, releve) {
+        var cur = releve ? Billing.computeCurrent(releve) : {montant:0,anomalie:true};
         var provisoire = cur.anomalie ? 0 : r0(cur.montant);
+        var paid = readingPaid(acc, releve);
         return {
-            arrieres: acc.arrieres, avance: acc.avance, facture_provisoire: provisoire,
-            total_du: Math.max(0, r0(acc.arrieres + provisoire - acc.avance)),
-            credit: Math.max(0, r0(acc.avance - acc.arrieres - provisoire)),
-            account: acc
+            arrieres:acc.arrieres, avance:acc.avance, facture_provisoire:provisoire, releve_paye:paid,
+            total_du:Math.max(0,r0(acc.arrieres + provisoire - paid - acc.avance)),
+            credit:Math.max(0,r0(acc.avance - acc.arrieres - Math.max(0,provisoire-paid))), account:acc
         };
     }
-
-    /** Versements autorisés uniquement sur les factures déjà émises, jamais sur un relevé provisoire. */
-    function invoiceAmountDue(S, cid) {
-        var account = computeAccount(S, cid);
-        return { total_du: Math.max(0, r0(account.arrieres - account.avance)), account: account };
-    }
+    function amountDueNow(S, cid, releve) { return accountAmountDue(computeAccount(S,cid),releve); }
+    function invoiceAmountDue(S, cid, releve) { return amountDueNow(S,cid,releve); }
 
     function buildInvoicePaymentOps(S, o) {
         return buildPaymentOps(S, Object.assign({}, o, { source: 'versement' }));
@@ -401,8 +426,10 @@
         assert(o.compteurId, 'Compteur inconnu.');
         if (o.source === 'versement') {
             assert(Number.isInteger(Number(o.montant)), 'Saisissez un montant entier.');
-            var due = invoiceAmountDue(S, o.compteurId).total_du;
-            assert(due > 0, 'Aucune facture des mois passés ne reste à payer.');
+            validateReadingPayments(S,o.compteurId,o.releve);
+            var budget = amountDueNow(S,o.compteurId,o.releve);
+            var due = budget.total_du;
+            assert(due > 0, 'Aucune facture ou consommation relevée ne reste à payer.');
             assert(montant <= due, 'Le montant dépasse le reste des factures à payer (' + due.toLocaleString('fr-FR') + ' F).');
         }
         var newId = makeIdGen(o.newId, 'ev');
@@ -415,15 +442,20 @@
             encaisse_par: tx.user.uid || 'inconnu', encaisse_par_nom: tx.user.nom || null, role: tx.user.role || null,
             statut: 'valide', source: o.source || 'encaissement', created_at: o.now
         };
+        if (o.source === 'versement') {
+            var forReading = Math.max(0,r0(montant - Math.max(0,budget.arrieres-budget.avance)));
+            if (forReading > 0) pay.releve_affecte = {ancien_index:Billing.toInt(o.releve.last_index),nouvel_index:Billing.toInt(o.releve.new_index),facteur:Billing.computeCurrent(o.releve).facteur,montant:forReading};
+        }
         if (o.client) pay.client = str(o.client);
         tx.S.paiements[pid] = pay;
         tx.set(o.paths.paiements + '/' + pid, pay);
         var plan = tx.allocate(o.compteurId).filter(function (x) { return x.paiement_id === pid; });
-        var dispo = montant - plan.reduce(function (s, x) { return s + x.montant; }, 0);
+        var reserved = reservedForReading(tx.S,pay);
+        var dispo = montant - reserved - plan.reduce(function (s, x) { return s + x.montant; }, 0);
         if (o.source === 'versement') assert(dispo === 0, 'Le versement doit être entièrement affecté aux factures.');
         tx.audit(newId, 'PAIEMENT_CREE', 'paiement', pid, o.compteurId, {
             montant: montant, mode: o.mode, numero_recu: pay.numero_recu,
-            affecte: montant - dispo, avance: dispo, factures: plan.map(function (x) { return x.facture_id; })
+            affecte: montant - dispo, affecte_releve: reserved, avance: dispo, factures: plan.map(function (x) { return x.facture_id; })
         });
         releveStatusUpdates(tx, o.compteurId, o.releve);
         var updates = tx.finish();
@@ -584,6 +616,7 @@
 
         var resume = { nb_factures: 0, total_facture: 0, anomalies: [], sans_consommation: 0, problemes: 0, avances_utilisees: 0 };
         Object.keys(o.compteurs || {}).forEach(function (cid) {
+            validateReadingPayments(tx.S,cid,o.compteurs[cid]);
             var built = buildFacture({ record: o.compteurs[cid], cycle: o.cycleKey, compteurId: cid, now: o.now, source: 'cloture' });
             if (!built.facture) {
                 if (built.anomalie) resume.anomalies.push({ compteur_id: cid, client: str(o.compteurs[cid].name), raison: built.raison });
@@ -597,6 +630,13 @@
             resume.nb_factures++; resume.total_facture += f.montant_initial;
             if (f.probleme) resume.problemes++;
             tx.audit(newId, 'FACTURE_CREEE', 'facture', f.facture_id, cid, { cycle: o.cycleKey, montant: f.montant_initial, source: 'cloture' });
+            computeAccount(tx.S,cid).paiements.forEach(function (payment) {
+                if (!(payment.affecte_releve > 0)) return;
+                var byPay = tx.S.affectations[payment.paiement_id] = tx.S.affectations[payment.paiement_id] || {};
+                var allocation = {facture_id:f.facture_id,cycle:f.cycle,montant:payment.affecte_releve,ordre:Object.keys(byPay).length+1,date:o.now,statut:'valide',compteur_id:cid,releve_courant:true};
+                byPay[f.facture_id] = allocation;
+                tx.set(o.paths.affectations+'/'+payment.paiement_id+'/'+f.facture_id,clone(allocation));
+            });
             var plan = tx.allocate(cid);
             resume.avances_utilisees += plan.reduce(function (s, x) { return s + x.montant; }, 0);
         });
@@ -838,7 +878,7 @@
         emptyState: emptyState, normState: normState, pathsFor: pathsFor, factureId: factureId,
         detectProbleme: detectProbleme, buildFacture: buildFacture,
         factureState: factureState, computeAccount: computeAccount, planAllocations: planAllocations,
-        amountDueNow: amountDueNow, invoiceAmountDue: invoiceAmountDue, soldeCache: soldeCache,
+        amountDueNow: amountDueNow, accountAmountDue: accountAmountDue, validateReadingPayments: validateReadingPayments, invoiceAmountDue: invoiceAmountDue, soldeCache: soldeCache,
         buildPaymentOps: buildPaymentOps, buildInvoicePaymentOps: buildInvoicePaymentOps, buildPaymentCancelOps: buildPaymentCancelOps,
         buildAdjustmentOps: buildAdjustmentOps, buildAdjustmentValidationOps: buildAdjustmentValidationOps,
         buildProblemResolutionOps: buildProblemResolutionOps, buildClosureOps: buildClosureOps,

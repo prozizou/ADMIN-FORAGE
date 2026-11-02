@@ -254,6 +254,22 @@ describe('Comptabilité v7 — opérations réelles (compta.js) sous les règles
         assert.strictEqual((await raw(`${CP.soldes}/c1`)).avance, 0);
     });
 
+    it('trésorier : arriérés + relevé saisi sans avance ; clôture puis annulation président sans double facture', async () => {
+        await as('presA').ref().update((await migrate('presA')).updates);
+        const record=await raw(`Asufor/${FA}/compteurs/c1`);
+        const result=Compta.buildInvoicePaymentOps(await S(),{paths:CP,compteurId:'c1',montant:7500,mode:'autre',numero_recu:'V-COURANT',releve:record,user:U('tresA'),now:now(),newId});
+        await assertSucceeds(as('tresA').ref().update(result.updates));
+        assert.strictEqual(Compta.amountDueNow(await S(),'c1',record).total_du,0);
+        assert.strictEqual((await raw(`${CP.soldes}/c1`)).avance,0);
+        const closure=Compta.buildClosureOps(await S(),{paths:CP,cycleKey:'2026-09',compteurs:await raw(`Asufor/${FA}/compteurs`),user:U('presA'),now:now(),dateLabel:'Septembre',newId});
+        await assertSucceeds(as('presA').ref().update(closure.updates));
+        assert.strictEqual((await raw(`${CP.factures}/2026-09_c1`)).montant_paye,2500);
+        assert.strictEqual(Compta.computeAccount(await S(),'c1').arrieres,0);
+        const cancel=Compta.buildPaymentCancelOps(await S(),{paths:CP,paiementId:result.paiementId,motif:'Erreur',releve:await raw(`Asufor/${FA}/compteurs/c1`),user:U('presA'),now:now(),newId});
+        await assertSucceeds(as('presA').ref().update(cancel.updates));
+        assert.strictEqual(Compta.computeAccount(await S(),'c1').arrieres,7500);
+    });
+
     it('factures : création président seulement ; champs figés ; le trésorier ne change ni montant net ni statut « annulee »', async () => {
         await as('presA').ref().update((await migrate('presA')).updates);
         const fp = `${CP.factures}/2026-06_c1`;

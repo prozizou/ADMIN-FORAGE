@@ -329,27 +329,49 @@ test('versements du mois : borne initiale incluse, total et détail identiques, 
     assert.deepStrictEqual(C.periodPayments(S,{...filtered,startInclusive:false}).map(p=>p.montant),[]);
 });
 
-test('versements sur factures : tranches FIFO, plafond des factures et aucune avance sur le relevé en cours', () => {
+test('42 000 F : arriérés 41 750 + relevé 250, tranches affectées sans avance ni double clôture', () => {
     const db=newDb();
-    close(db,'2026-06',{c1:rel(0,20)}); // 5 000 F
-    close(db,'2026-07',{c1:rel(20,24)}); // 1 000 F
-    const current=rel(24,30); // 1 500 F encore non facturés
-    const base={paths:P,compteurId:'c1',mode:'autre',numero_recu:'V-1',releve:current,user:USER_T,newId};
-    assert.strictEqual(C.invoiceAmountDue(state(db),'c1').total_du,6000);
+    close(db,'2026-10',{c1:rel(0,167)});
+    const current=rel(167,168);
+    const base={paths:P,compteurId:'c1',mode:'autre',numero_recu:'V-42',releve:current,user:USER_T,newId};
+    assert.strictEqual(C.invoiceAmountDue(state(db),'c1',current).total_du,42000);
     const unchanged=JSON.stringify(db.tree);
-    assert.throws(()=>C.buildInvoicePaymentOps(state(db),{...base,montant:6001,now:tick()}),/dépasse/);
+    assert.throws(()=>C.buildInvoicePaymentOps(state(db),{...base,montant:42001,now:tick()}),/dépasse/);
     assert.strictEqual(JSON.stringify(db.tree),unchanged);
-    for (const amount of [2000,3000,1000]) {
+    for (const amount of [10000,20000,12000]) {
         const result=C.buildInvoicePaymentOps(state(db),{...base,montant:amount,now:tick()});
-        assert.strictEqual(result.avance,0);
-        assert.strictEqual(result.affectations.reduce((sum,a)=>sum+a.montant,0),amount);
-        apply(db,result.updates);
+        assert.strictEqual(result.avance,0);apply(db,result.updates);
     }
-    assert.strictEqual(C.invoiceAmountDue(state(db),'c1').total_du,0);
-    assert.strictEqual(C.computeAccount(state(db),'c1').avance,0);
-    assert.strictEqual(C.amountDueNow(state(db),'c1',current).total_du,1500);
+    let account=C.computeAccount(state(db),'c1');
+    assert.strictEqual(account.total_paye,42000);assert.strictEqual(account.releve_paye,250);
+    assert.strictEqual(account.avance,0);assert.strictEqual(account.solde,0);
+    assert.deepStrictEqual(C.checkSoldes(state(db)),[]);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',current).total_du,0);
     assert.throws(()=>C.buildInvoicePaymentOps(state(db),{...base,montant:1,now:tick()}),/Aucune facture/);
-    assert.throws(()=>C.buildInvoicePaymentOps(C.emptyState(),{...base,montant:1000,now:tick()}),/Aucune facture/);
+    C.validateReadingPayments(state(db),'c1',{last_index:167});
+    assert.throws(()=>C.validateReadingPayments(state(db),'c1',{last_index:166}),/déjà reçu/);
+    assert.throws(()=>C.validateReadingPayments(state(db),'c1',rel(167,167)),/déjà reçu/);
+    close(db,'2026-11',{c1:current});
+    account=C.computeAccount(state(db),'c1');
+    assert.strictEqual(account.total_facture,42000);assert.strictEqual(account.total_paye,42000);
+    assert.strictEqual(account.releve_paye,0);assert.strictEqual(account.arrieres,0);assert.strictEqual(account.avance,0);
+    assert.strictEqual(C.factureState(state(db),state(db).factures['2026-11_c1']).montant_paye,250);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',rel(168,0)).total_du,0);
+    assert.deepStrictEqual(C.checkSoldes(state(db)),[]);
+    const last=account.paiements.at(-1);
+    apply(db,C.buildPaymentCancelOps(state(db),{paths:P,paiementId:last.paiement_id,motif:'Erreur',releve:rel(168,0),user:USER_P,now:tick(),newId}).updates);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',rel(168,0)).total_du,12000);
+});
+
+test('relevé saisi seul : paiement partiel, annulation avant clôture, aucun versement sur un relevé absent', () => {
+    const db=newDb(),record=rel(167,168);
+    const base={paths:P,compteurId:'c1',mode:'autre',numero_recu:'V-250',releve:record,user:USER_T,newId};
+    const first=C.buildInvoicePaymentOps(state(db),{...base,montant:100,now:tick()});apply(db,first.updates);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',record).total_du,150);
+    assert.strictEqual(C.computeAccount(state(db),'c1').avance,0);
+    apply(db,C.buildPaymentCancelOps(state(db),{paths:P,paiementId:first.paiementId,motif:'Erreur',releve:record,user:USER_P,now:tick(),newId}).updates);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',record).total_du,250);
+    assert.throws(()=>C.buildInvoicePaymentOps(C.emptyState(),{...base,releve:rel(167,0),montant:1,now:tick()}),/Aucune facture/);
 });
 
 test('statistiques : un paiement annulé ne compte pas dans l\'encaissé ; avances comptées une seule fois', () => {

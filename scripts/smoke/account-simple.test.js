@@ -7,7 +7,7 @@ const num = text => Number(text.replace(/−/g, '-').replace(/[^\d-]/g, ''));
 const archiveReads = page => page.evaluate(root => ({ records: window.__DB.reads.filter(p => p === root + '/backup' || p.startsWith(root + '/backup/')), listeners: (window.__DB.onValuePaths || []).filter(p => p === root + '/backup' || p.startsWith(root + '/backup/')), shallow: (window.__DB.shallowReads || []).filter(path => path === root + '/backup') }), root);
 function example(arrears = 0) {
     const tree = migratedSeed(), f = tree.Asufor[FA];
-    f.compteurs.c1 = { ...f.compteurs.c1, name: 'Client exemple', last_index: 0, new_index: 24, facteur: 250 };
+    f.compteurs.c1 = { ...f.compteurs.c1, name: 'Client exemple', last_index: 0, new_index: 0, facteur: 250 };
     f.factures = {}; f.paiements = {}; f.affectations = {}; f.ajustements = {}; f.soldes = {}; f.backup = {};
     f.factures['2026-10_c1'] = { facture_id:'2026-10_c1',compteur_id:'c1',cycle:'2026-10',montant_initial:6000,montant_net:6000,montant_paye:0,reste_a_payer:6000,statut:'ouverte',date_creation:'2026-10-31T12:00:00Z',source:'cloture',rev:1,ancien_index:0,nouvel_index:24,consommation:24,facteur:250 };
     if (arrears) {
@@ -91,7 +91,7 @@ async function versement(page, amount) {
             await page.fill('#cui-montant', '1000');
             await page.evaluate(root => {
                 const f = window.__DB.tree.Asufor.Asufor_a;
-                let id = 0;
+                let id = 0; f.compteurs.c1.new_index=24;
                 const result = window.Compta.buildClosureOps(window.Compta.normState(f), { paths: window.Compta.pathsFor(root), cycleKey: '2026-11', compteurs: f.compteurs, now: new Date().toISOString(), dateLabel: 'Novembre 2026', user: {uid:'u1',role:'président'}, newId: () => 'closure' + (++id) });
                 for (const [path, value] of Object.entries(result.updates)) {
                     const parts = path.split('/'); let node = window.__DB.tree;
@@ -214,7 +214,7 @@ async function versement(page, amount) {
                 const { page, ctx, errors } = await open(browser, base, tree);
                 assert.equal(await page.locator('#due-current').count(),0);
                 assert.equal(num(await page.locator('#total-due').innerText()),6000);
-                assert.match(await page.locator('#provisoire').innerText(), /après sa clôture/);
+                assert.match(await page.locator('#provisoire').innerText(), /consommation déjà relevée/);
                 assert.deepEqual(errors, []); await ctx.close();
             }
             console.log('✓ relevé du mois absent : état expliqué, aucun montant inventé');
