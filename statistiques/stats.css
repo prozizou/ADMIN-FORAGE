@@ -530,3 +530,5 @@ body.customer-view-open { overflow:hidden; }
 .receipt-list li div { min-width:0; overflow-wrap:anywhere; }
 .receipt-list li span { display:block; color:var(--text-sub,#64748b); font-size:.8rem; margin-top:4px; }
 .receipt-list li > b { flex:none; white-space:nowrap; color:#15803d; }
+
+.receipt-list li .receipt-warning { color:#9a3412; font-weight:600; }

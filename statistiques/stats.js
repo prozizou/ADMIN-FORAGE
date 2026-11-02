@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v80';
+const STATS_BUILD = 'v81';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -377,7 +377,7 @@ window.exportCSV = function() {
         return;
     }
     let csvContent = "\uFEFF"; 
-    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant Mois (CFA);Arriérés (CFA);Avance (CFA);Total dû (CFA);Statut;Dernière Modif;Par\n";
+    csvContent += "Client;N° Compteur;Zone;Ancien Index;Nouvel Index;Conso (m3);Facteur;Montant Mois (CFA);Arriérés (CFA);Versement non affecté (CFA);Total dû (CFA);Statut;Dernière Modif;Par\n";
 
     currentFilteredData.forEach(item => {
         const nIdx = parseFloat(item.new_index || 0);
@@ -519,10 +519,12 @@ function renderReceiptDetails() {
     const rows = [...payments].sort((a,b) => Date.parse(b.date_paiement) - Date.parse(a.date_paiement)).map(payment => {
         const record = storeReleves[payment.compteur_id] || {};
         const client = payment.client || record.name || 'Client non renseigné';
+        const accountPayment = Compta.computeAccount(ComptaUI.getState(), payment.compteur_id).paiements.find(p => p.paiement_id === payment.paiement_id);
+        const unallocated = accountPayment ? accountPayment.disponible : 0;
         const date = new Date(payment.date_paiement).toLocaleString('fr-FR', {day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Dakar'});
-        return `<li><div><strong>${escHtml(client)}</strong><span>${escHtml(date)}</span></div><b>${money(payment.montant)}</b></li>`;
+        return `<li><div><strong>${escHtml(client)}</strong><span>${escHtml(date)}</span>${unallocated > 0 ? `<span class="receipt-warning">À vérifier : ${money(unallocated)} non affectés aux factures.</span>` : ''}</div><b>${money(payment.montant)}</b></li>`;
     }).join('');
-    const html = `<h3 id="receipt-title">Versements encaissés</h3><p class="cui-sub">${escHtml(periodLabel)}</p><p class="receipt-total">${payments.length} versement${payments.length === 1 ? '' : 's'} · <strong>${money(encaisse)}</strong></p><p class="cui-sub">Comprend les paiements partiels et les règlements d’anciennes factures. « Payés » affiche les factures entièrement réglées.</p><ul class="receipt-list">${rows || '<li>Aucun versement pour cette période.</li>'}</ul><div class="cui-act"><button type="button" class="cui-primary" id="close-receipts">Fermer</button></div>`;
+    const html = `<h3 id="receipt-title">Versements encaissés</h3><p class="cui-sub">${escHtml(periodLabel)}</p><p class="receipt-total">${payments.length} versement${payments.length === 1 ? '' : 's'} · <strong>${money(encaisse)}</strong></p><p class="cui-sub">Les versements règlent les factures des mois passés, en une fois ou par tranches. Les anciennes sommes non affectées sont signalées pour vérification.</p><ul class="receipt-list">${rows || '<li>Aucun versement pour cette période.</li>'}</ul><div class="cui-act"><button type="button" class="cui-primary" id="close-receipts">Fermer</button></div>`;
     if (receiptModal.markup === html) return;
     const box = receiptModal.q('.cui-box'), scroll = box.scrollTop, focused = document.activeElement && document.activeElement.id === 'close-receipts';
     box.innerHTML = html; receiptModal.markup = html; box.scrollTop = scroll;
@@ -1128,7 +1130,8 @@ function updateRelevesProgress() {
 function comptaButtons(item, due) {
     // ✅ v8 : Encaisser et Annuler restent disponibles en archive (mois passé) — payer une vieille dette
     // ou corriger un paiement mal saisi ne dépend pas du mois affiché à l'écran.
-    const canPay = ComptaUI.canCollect() && due > 0 && !item.estSolde;
+    const invoiceDue = ComptaUI.isMigrated() ? Compta.invoiceAmountDue(ComptaUI.getState(), item.key).total_du : due;
+    const canPay = ComptaUI.canCollect() && invoiceDue > 0 && !item.estSolde;
     const ready = ledgerReady && (!isArchiveView || backupsLoaded) && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
@@ -1271,7 +1274,7 @@ function renderList() {
             const arriereNote = (arriere > 0
                 ? `<div class="citem-band band-danger"><i class="fa-solid fa-circle-exclamation"></i>Arriérés : <b>${arriere.toLocaleString()} F</b></div>`
                 : '') + ((item.avance || 0) > 0
-                ? `<div class="citem-band band-ok"><i class="fa-solid fa-circle-check"></i>Avance : <b>${item.avance.toLocaleString()} F</b></div>`
+                ? `<div class="citem-band band-danger"><i class="fa-solid fa-circle-exclamation"></i>Versement non affecté à vérifier : <b>${item.avance.toLocaleString()} F</b></div>`
                 : '');
             // ✅ "Saisir le relevé" est désormais l'action PRINCIPALE de cette
             // carte (bouton plein bleu, comme .btn-paye ailleurs) — c'est
@@ -1356,8 +1359,8 @@ function renderList() {
         const isPaid = !!item.estSolde;
         // Détail : mois + arriérés − avance (seulement quand il y a quelque chose à expliquer)
         const arriereHtml = !ComptaUI.isMigrated() && !backupsLoaded ? '<div class="stats-pending-note">Mois courant uniquement — arriérés historiques non chargés.</div>' : ((arriere > 0 || avance > 0) && !isPaid)
-            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">${isArchiveView ? 'Facture' : 'Mois'} : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F${avance > 0 ? ` − Avance : ${avance.toLocaleString()} F` : ''}</div>`
-            : (avance > 0 ? `<div style="font-size:0.8rem;color:var(--success);font-weight:700;">Avance disponible : ${avance.toLocaleString()} F</div>` : '');
+            ? `<div style="font-size:0.8rem;color:var(--danger);font-weight:700;">${isArchiveView ? 'Facture' : 'Mois'} : ${calculatedAmount.toLocaleString()} F + Arriérés : ${arriere.toLocaleString()} F${avance > 0 ? ` − Versement non affecté (à vérifier) : ${avance.toLocaleString()} F` : ''}</div>`
+            : (avance > 0 ? `<div style="font-size:0.8rem;color:#9a3412;font-weight:700;">Versement non affecté à vérifier : ${avance.toLocaleString()} F</div>` : '');
         const factStatut = item.factureStatut ? { payee: '✓ Facture payée', partielle: '◐ Facture partielle', ouverte: '✕ Facture ouverte', annulee: '⊘ Facture annulée' }[item.factureStatut] : null;
 
         // Fuite (> 100 m³) : consommation plausible mais suspecte — reste

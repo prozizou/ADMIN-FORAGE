@@ -373,6 +373,16 @@
         };
     }
 
+    /** Versements autorisés uniquement sur les factures déjà émises, jamais sur un relevé provisoire. */
+    function invoiceAmountDue(S, cid) {
+        var account = computeAccount(S, cid);
+        return { total_du: Math.max(0, r0(account.arrieres - account.avance)), account: account };
+    }
+
+    function buildInvoicePaymentOps(S, o) {
+        return buildPaymentOps(S, Object.assign({}, o, { source: 'versement' }));
+    }
+
     // ─────────────────────────────────────────────────────────────
     // OPÉRATIONS
     // ─────────────────────────────────────────────────────────────
@@ -389,6 +399,12 @@
         assert(MODES.indexOf(o.mode) !== -1, 'Mode de paiement invalide.');
         assert(str(o.numero_recu).trim().length > 0, 'Le numéro de reçu est obligatoire.');
         assert(o.compteurId, 'Compteur inconnu.');
+        if (o.source === 'versement') {
+            assert(Number.isInteger(Number(o.montant)), 'Saisissez un montant entier.');
+            var due = invoiceAmountDue(S, o.compteurId).total_du;
+            assert(due > 0, 'Aucune facture des mois passés ne reste à payer.');
+            assert(montant <= due, 'Le montant dépasse le reste des factures à payer (' + due.toLocaleString('fr-FR') + ' F).');
+        }
         var newId = makeIdGen(o.newId, 'ev');
         var tx = new Tx(S, o.paths, o.now, o.user);
         var pid = o.paiementId || newId();
@@ -404,6 +420,7 @@
         tx.set(o.paths.paiements + '/' + pid, pay);
         var plan = tx.allocate(o.compteurId).filter(function (x) { return x.paiement_id === pid; });
         var dispo = montant - plan.reduce(function (s, x) { return s + x.montant; }, 0);
+        if (o.source === 'versement') assert(dispo === 0, 'Le versement doit être entièrement affecté aux factures.');
         tx.audit(newId, 'PAIEMENT_CREE', 'paiement', pid, o.compteurId, {
             montant: montant, mode: o.mode, numero_recu: pay.numero_recu,
             affecte: montant - dispo, avance: dispo, factures: plan.map(function (x) { return x.facture_id; })
@@ -821,8 +838,8 @@
         emptyState: emptyState, normState: normState, pathsFor: pathsFor, factureId: factureId,
         detectProbleme: detectProbleme, buildFacture: buildFacture,
         factureState: factureState, computeAccount: computeAccount, planAllocations: planAllocations,
-        amountDueNow: amountDueNow, soldeCache: soldeCache,
-        buildPaymentOps: buildPaymentOps, buildPaymentCancelOps: buildPaymentCancelOps,
+        amountDueNow: amountDueNow, invoiceAmountDue: invoiceAmountDue, soldeCache: soldeCache,
+        buildPaymentOps: buildPaymentOps, buildInvoicePaymentOps: buildInvoicePaymentOps, buildPaymentCancelOps: buildPaymentCancelOps,
         buildAdjustmentOps: buildAdjustmentOps, buildAdjustmentValidationOps: buildAdjustmentValidationOps,
         buildProblemResolutionOps: buildProblemResolutionOps, buildClosureOps: buildClosureOps,
         buildMigrationOps: buildMigrationOps, buildArchiveCorrectionOps: buildArchiveCorrectionOps,
