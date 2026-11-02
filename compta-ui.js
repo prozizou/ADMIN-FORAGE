@@ -236,6 +236,7 @@
     // Le relevé par tranches ne demande que la somme effectivement reçue.
     function openInstallmentDialog(o) {
         var du = C.amountDueNow(getState(), o.compteurId, o.releve);
+        var statementReading = o.releve;
         var pid = newId();
         var receipt = defaultRecu() + '-' + pid.slice(-6);
         var saving = false;
@@ -247,12 +248,15 @@
             '<div class="cui-err" id="cui-err" role="alert"></div>' +
             '<div class="cui-act"><button type="button" class="cui-ghost" id="cui-cancel">Retour</button><button type="button" class="cui-primary" id="cui-ok">Enregistrer</button></div>'
         );
-        function values(amount) { return { compteurId: o.compteurId, releve: o.releve, client: o.client, montant: amount, mode: 'autre', numero_recu: receipt, reference: null, source: 'versement', paiementId: pid }; }
+        function values(amount) { statementReading = o.releve; return { compteurId: o.compteurId, releve: statementReading, client: o.client, montant: amount, mode: 'autre', numero_recu: receipt, reference: null, source: 'versement', paiementId: pid }; }
         function check(amount, due) {
             if (!Number.isInteger(amount) || amount <= 0) throw new Error('Saisissez un montant entier supérieur à 0.');
             if (amount > due) throw new Error('Le montant dépasse le reste à payer (' + fcfa(due) + ').');
         }
-        function remaining(result) { return Math.max(0, result.apres.arrieres + du.facture_provisoire - result.apres.avance); }
+        function remaining(result) {
+            var current = C.amountDueNow(C.emptyState(), o.compteurId, statementReading).facture_provisoire;
+            return Math.max(0, result.apres.arrieres + current - result.apres.avance);
+        }
         function preview() {
             var amount = Number(m.q('#cui-montant').value);
             m.q('#cui-err').textContent = '';
@@ -279,6 +283,7 @@
             m.q('#cui-err').textContent = '';
             run(function (S, base) {
                 // Après une coupure, réessayer ce même formulaire ne crée pas un second versement.
+                statementReading = o.releve;
                 var existing = S.paiements[pid];
                 if (existing) {
                     if (existing.compteur_id !== o.compteurId || existing.montant !== amount || existing.statut !== 'valide') throw new Error('Ce versement a déjà été traité. Revenez au relevé.');

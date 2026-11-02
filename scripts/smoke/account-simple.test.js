@@ -83,10 +83,8 @@ async function versement(page, amount) {
             await page.emulateMedia({ colorScheme: 'dark' });
             assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), 'light', 'la vue reste claire même si le téléphone préfère le mode sombre');
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
-            await versement(page, 1000);
-            await page.waitForFunction(() => document.getElementById('total-due').textContent === '0 F');
-            assert.equal(await page.locator('#btn-pay').isDisabled(), true);
-            assert.equal(num(await page.locator('#t-paye').innerText()), 6000);
+            await page.click('#btn-pay');
+            await page.fill('#cui-montant', '1000');
             await page.evaluate(root => {
                 const f = window.__DB.tree.Asufor.Asufor_a;
                 let id = 0;
@@ -99,6 +97,11 @@ async function versement(page, amount) {
                 window.__DB.listeners.slice().forEach(fn => fn());
             }, root);
             await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('past-total').textContent === '6 000 F');
+            await page.click('#cui-ok');
+            await page.waitForSelector('#cui-close');
+            assert.equal(num(await page.locator('.cui-remaining').innerText()), 0, 'le reçu simplifié reste exact si la clôture survient pendant la saisie');
+            await page.click('#cui-close');
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('total-due').textContent === '0 F');
             assert.equal(num(await page.locator('#total-due').innerText()), 0, 'la clôture et le nouveau relevé ne doublent pas la facture');
             assert.equal(num(await page.locator('#t-facture').innerText()), 6000);
             assert.equal(num(await page.locator('#t-paye').innerText()), 6000);

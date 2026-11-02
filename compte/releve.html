@@ -358,7 +358,7 @@ document.querySelector('main').addEventListener('click', (e) => {
     }
 });
 document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
-    installments: true, compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
+    installments: true, compteurId: cid, get releve() { return releve; }, client: releve && releve.name, numero: releve && releve.numero_compteur,
     onDone: render
 });
 document.getElementById('retry-account').onclick = () => { UI.retry(); loadClient(); };
