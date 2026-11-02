@@ -233,14 +233,89 @@
     /**
      * @param {object} o - { compteurId, releve (relevé courant ou null), client, numero, recuUrl(pid), onDone(result) }
      */
+    // Le relevé par tranches ne demande que la somme effectivement reçue.
+    function openInstallmentDialog(o) {
+        var du = C.amountDueNow(getState(), o.compteurId, o.releve);
+        var statementReading = o.releve;
+        var pid = newId();
+        var receipt = defaultRecu() + '-' + pid.slice(-6);
+        var saving = false;
+        var m = modal(
+            '<h3>Ajouter un versement</h3>' +
+            '<label for="cui-montant">Montant à encaisser (FCFA)</label>' +
+            '<input id="cui-montant" type="number" inputmode="numeric" min="1" step="1" max="' + du.total_du + '" aria-describedby="cui-prev" autocomplete="off">' +
+            '<p class="cui-remaining" id="cui-prev" role="status" aria-live="polite"></p>' +
+            '<div class="cui-err" id="cui-err" role="alert"></div>' +
+            '<div class="cui-act"><button type="button" class="cui-ghost" id="cui-cancel">Retour</button><button type="button" class="cui-primary" id="cui-ok">Enregistrer</button></div>'
+        );
+        function values(amount) { statementReading = o.releve; return { compteurId: o.compteurId, releve: statementReading, client: o.client, montant: amount, mode: 'autre', numero_recu: receipt, reference: null, source: 'versement', paiementId: pid }; }
+        function check(amount, due) {
+            if (!Number.isInteger(amount) || amount <= 0) throw new Error('Saisissez un montant entier supérieur à 0.');
+            if (amount > due) throw new Error('Le montant dépasse le reste à payer (' + fcfa(due) + ').');
+        }
+        function remaining(result) {
+            var current = C.amountDueNow(C.emptyState(), o.compteurId, statementReading).facture_provisoire;
+            return Math.max(0, result.apres.arrieres + current - result.apres.avance);
+        }
+        function preview() {
+            var amount = Number(m.q('#cui-montant').value);
+            m.q('#cui-err').textContent = '';
+            m.q('#cui-prev').textContent = 'Reste à payer : ' + fcfa(du.total_du);
+            if (m.q('#cui-montant').value === '') return;
+            try {
+                check(amount, du.total_du);
+                var result = C.buildPaymentOps(getState(), Object.assign({}, values(amount), {
+                    paths: paths, user: user(), now: new Date().toISOString(), newId: function () { return 'apercu'; }
+                }));
+                m.q('#cui-prev').textContent = 'Reste à payer : ' + fcfa(remaining(result));
+            } catch (error) { m.q('#cui-err').textContent = error.message; }
+        }
+        m.q('#cui-montant').addEventListener('input', preview);
+        m.q('#cui-cancel').addEventListener('click', m.close);
+        // Une fermeture involontaire pendant l'enregistrement ne doit pas inviter à ressaisir le paiement.
+        m.el.addEventListener('click', function (event) { if (saving && event.target === m.el) event.stopImmediatePropagation(); }, true);
+        m.q('#cui-ok').addEventListener('click', function () {
+            if (saving) return;
+            var amount = Number(m.q('#cui-montant').value);
+            try { check(amount, du.total_du); } catch (error) { m.q('#cui-err').textContent = error.message; return; }
+            saving = true;
+            m.q('#cui-ok').disabled = true; m.q('#cui-cancel').disabled = true; m.q('#cui-montant').disabled = true;
+            m.q('#cui-err').textContent = '';
+            run(function (S, base) {
+                // Après une coupure, réessayer ce même formulaire ne crée pas un second versement.
+                statementReading = o.releve;
+                var existing = S.paiements[pid];
+                if (existing) {
+                    if (existing.compteur_id !== o.compteurId || existing.montant !== amount || existing.statut !== 'valide') throw new Error('Ce versement a déjà été traité. Revenez au relevé.');
+                    return { updates: {}, paiementId: pid, apres: C.computeAccount(S, o.compteurId) };
+                }
+                check(amount, C.amountDueNow(S, o.compteurId, o.releve).total_du);
+                return C.buildPaymentOps(S, Object.assign({}, base, values(amount)));
+            }).then(function (result) {
+                saving = false;
+                var box = m.el.querySelector('.cui-box');
+                box.innerHTML = '<h3>Versement enregistré</h3><p class="cui-remaining">Reste à payer : <strong>' + fcfa(remaining(result)) + '</strong></p><div class="cui-act"><button type="button" class="cui-primary" id="cui-close">Fermer</button></div>';
+                box.querySelector('#cui-close').addEventListener('click', m.close);
+                if (o.onDone) o.onDone(result);
+            }, function (error) {
+                saving = false;
+                m.q('#cui-ok').disabled = false; m.q('#cui-cancel').disabled = false; m.q('#cui-montant').disabled = false;
+                m.q('#cui-err').textContent = error.message || String(error);
+            });
+        });
+        preview();
+        setTimeout(function () { var field = m.q('#cui-montant'); if (field) field.focus(); }, 60);
+    }
+
     function openPaymentDialog(o) {
         if (!canCollect()) { alert("Seuls le président et le trésorier peuvent encaisser."); return; }
         if (!isMigrated()) { alert("La migration comptable doit d'abord être effectuée par le président."); return; }
+        if (o.installments) return openInstallmentDialog(o);
         var S0 = getState();
         var du = C.amountDueNow(S0, o.compteurId, o.releve);
         var modes = C.MODES.map(function (m) { return '<option value="' + m + '">' + esc(C.MODES_LABEL[m]) + '</option>'; }).join('');
         var m = modal(
-            '<h3>' + (o.installments ? 'Ajouter un versement' : 'Encaisser') + '</h3>' +
+            '<h3>Encaisser</h3>' +
             '<p class="cui-sub">' + esc(o.client || '') + (o.numero ? ' — compteur n°' + esc(o.numero) : '') + '</p>' +
             '<div class="cui-due">' +
             '<span>Arriérés (factures échues)</span><b>' + fcfa(du.arrieres) + '</b>' +
@@ -248,7 +323,7 @@
             (du.avance ? '<span>Avance disponible</span><b>− ' + fcfa(du.avance) + '</b>' : '') +
             '<span><strong>Total dû</strong></span><b>' + fcfa(du.total_du) + '</b>' +
             '</div>' +
-            '<div class="cui-row"><div><label for="cui-montant">Montant encaissé (F)</label><input id="cui-montant" type="number" inputmode="numeric" min="1" step="1" value="' + (o.installments ? '' : (du.total_du || '')) + '"></div>' +
+            '<div class="cui-row"><div><label for="cui-montant">Montant encaissé (F)</label><input id="cui-montant" type="number" inputmode="numeric" min="1" step="1" value="' + (du.total_du || '') + '"></div>' +
             '<div><label for="cui-mode">Mode</label><select id="cui-mode">' + modes + '</select></div></div>' +
             '<div class="cui-row"><div><label for="cui-recu">N° de reçu</label><input id="cui-recu" type="text" maxlength="40" value="' + esc(defaultRecu()) + '"></div>' +
             '<div><label for="cui-ref">Référence (facultatif)</label><input id="cui-ref" type="text" maxlength="60" placeholder="ex. ID transaction"></div></div>' +

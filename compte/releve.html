@@ -63,7 +63,6 @@
         <button class="btn" id="retry-account" hidden>Réessayer le chargement</button>
         <button class="btn primary pay-action" id="btn-pay" hidden disabled><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i><span>Ajouter un versement</span></button>
         <p class="sub action-help" id="pay-help" hidden>Saisissez uniquement la somme reçue aujourd’hui.</p>
-        <button class="btn" id="btn-details" disabled>Détails — factures archivées</button>
     </section>
     <section class="card" id="payments-section" aria-labelledby="history-title">
         <h2 id="history-title">Versements du client</h2>
@@ -115,12 +114,14 @@ let archiveRecords = {};
 let archiveRequested = false;
 let archivePromise = null;
 
-const dt = (iso) => iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-const SOURCES = { cloture: 'clôture mensuelle', migration_backup: 'reprise des archives', correction_releve: 'relevé corrigé' };
 const TYPES = { remise: 'Réduction de facture', majoration: 'Montant ajouté', correction: 'Correction de facture', annulation: 'Annulation de facture' };
 const STATUTS = { ouverte: 'À payer', partielle: 'Payée en partie', payee: 'Payée', annulee: 'Annulée', valide: 'Enregistré', annule: 'Annulé', en_attente: 'En attente', rejete: 'Refusé' };
 
 function toast(msg) { alert(msg); }
+function paymentDate(iso) {
+    const date = new Date(iso);
+    return Number.isFinite(date.getTime()) ? date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Date inconnue';
+}
 function setMeta(numero, zone) {
     document.getElementById('meta').innerHTML =
         `<span class="chip"><i class="fa-solid fa-gauge"></i>Compteur n°${esc(numero || '—')}</span>` +
@@ -163,8 +164,6 @@ function render() {
     document.getElementById('btn-pay').hidden = detailsView || !UI.canCollect();
     document.getElementById('btn-pay').disabled = !showBalance || du.total_du <= 0;
     document.getElementById('pay-help').hidden = detailsView || !UI.canCollect() || (showBalance && du.total_du <= 0);
-    document.getElementById('btn-details').disabled = !ready;
-    document.getElementById('btn-details').hidden = detailsView;
     if (UI.isReady() && info.status === 'ready') {
         const migration = document.getElementById('compta-migration');
         migration.style.display = migrated ? 'none' : '';
@@ -172,23 +171,17 @@ function render() {
     }
 
     const tl = document.getElementById('timeline');
-    const openDetails = new Set([...tl.querySelectorAll('details[open]')].map(el => el.dataset.payment));
     let cumul = 0;
     const rows = acc.paiements.map(p => {
         const valid = p.statut === 'valide';
         if (valid) cumul += p.montant;
-        return `<tr class="ev paiement"><td><time datetime="${esc(p.date_paiement)}">${new Date(p.date_paiement).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'})}</time>
-            <details class="row-actions" data-payment="${esc(p.paiement_id)}"><summary>Reçu / actions</summary><div class="row-menu">
-                <button class="btn" data-recu="${esc(p.paiement_id)}">Voir le reçu</button>
-                ${valid && UI.isPresident() ? `<button class="btn danger" data-cancel="${esc(p.paiement_id)}">Annuler ce paiement</button>` : ''}
-                <p class="sub">Reçu n°${esc(p.numero_recu)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}</p>
-            </div></details>
-            ${valid ? '' : '<div class="sub">Paiement annulé</div>'}</td>
+        return `<tr class="ev paiement ${valid ? '' : 'payment-cancelled'}"><td><time datetime="${esc(p.date_paiement)}">${paymentDate(p.date_paiement)}</time>
+            ${valid && UI.isPresident() ? `<button class="btn danger cancel-payment" data-cancel="${esc(p.paiement_id)}">Annuler</button>` : ''}
+            ${valid ? '' : '<div class="sub">Versement annulé</div>'}</td>
             <td class="money ${valid ? 'good' : ''}">${fcfa(p.montant)}</td><td class="money">${fcfa(cumul)}</td></tr>`;
     }).join('');
     tl.innerHTML = !ready ? '<p class="empty">Vérification des paiements en cours…</p>' : !rows ? '<p class="empty">Aucun versement enregistré.</p>'
         : `<table class="simple-table" id="payments-table"><caption>Les versements s’additionnent. Un paiement annulé n’entre pas dans le cumul.</caption><thead><tr><th scope="col">Date</th><th scope="col" class="money">Versé</th><th scope="col" class="money">Cumul</th></tr></thead><tbody>${rows}</tbody></table>`;
-    tl.querySelectorAll('details').forEach(el => { el.open = openDetails.has(el.dataset.payment); });
     document.getElementById('corrections').innerHTML = !ready || !acc.ajustements.length ? '' : `<details><summary>Corrections de factures</summary>${acc.ajustements.map(j => `<div class="m">${esc(TYPES[j.type] || j.type)} · ${esc(cyc(j.cycle))} · ${fcfa(j.montant)} · ${esc(STATUTS[j.statut] || j.statut)}<p class="sub">${esc(j.motif)}</p>${j.statut === 'en_attente' && UI.isPresident() ? `<div class="actions"><button class="btn" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}</div>`).join('')}</details>`;
     if (archiveRequested && archiveState === 'ready') {
         document.getElementById('archive-content').setAttribute('aria-busy', String(!ready));
@@ -330,9 +323,8 @@ function renderArchives(acc) {
     }).join('')}</tbody></table><details id="invoice-checks"><summary>Informations et vérification des factures</summary>${acc.factures.map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>`;
 }
 
-document.getElementById('btn-details').onclick = () => { loadCustomerArchives(); document.getElementById('archive-panel').scrollIntoView({behavior:'smooth',block:'start'}); };
 document.getElementById('retry-archives').onclick = () => loadCustomerArchives(true);
-document.getElementById('hide-archives').onclick = () => { if (detailsView) { window.location.href = '../statistiques/stats.html'; return; } document.getElementById('archive-panel').hidden = true; archiveRequested = false; render(); document.getElementById('btn-details').focus(); };
+document.getElementById('hide-archives').onclick = () => { window.location.href = '../statistiques/stats.html'; };
 function withMotif(title, label, onOk, explanation = '') {
     const m = UI.modal(`<h3>${esc(title)}</h3>${explanation ? `<p class="cui-sub">${esc(explanation)}</p>` : ''}<label for="mot">${esc(label)}</label><textarea id="mot" rows="3" maxlength="300"></textarea><div class="cui-err" id="err"></div><div class="cui-act"><button class="cui-ghost" id="no">Retour</button><button class="cui-primary" id="ok">Confirmer</button></div>`);
     m.q('#mot').focus();
@@ -348,9 +340,15 @@ function withMotif(title, label, onOk, explanation = '') {
 document.querySelector('main').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.dataset.recu) window.open(`recu.html?p=${encodeURIComponent(b.dataset.recu)}`, '_blank');
-    else if (b.dataset.cancel) withMotif('Annuler ce paiement', "Pourquoi annuler ce paiement ? (obligatoire)", (motif) =>
-        UI.run((S, base) => C.buildPaymentCancelOps(S, { ...base, paiementId: b.dataset.cancel, motif, releve })), 'Le paiement sera marqué annulé et le montant correspondant sera de nouveau à payer.');
+    if (b.dataset.cancel) {
+        if (!UI.isPresident()) return;
+        const payment = UI.getState().paiements[b.dataset.cancel];
+        if (!payment || payment.statut !== 'valide') return;
+        if (!confirm(`Annuler le versement de ${fcfa(payment.montant)} du ${paymentDate(payment.date_paiement)} ? Le reste à payer sera recalculé.`)) return;
+        b.disabled = true;
+        UI.run((S, base) => C.buildPaymentCancelOps(S, { ...base, paiementId: payment.paiement_id, motif: 'Erreur de saisie — annulation depuis le relevé', releve }))
+            .then(render, error => { b.disabled = false; toast(error.message || String(error)); });
+    }
     else if (b.dataset.resolve) withMotif('Confirmer la vérification du relevé', 'Qu’avez-vous vérifié ? (obligatoire)', (motif) =>
         UI.run((S, base) => C.buildProblemResolutionOps(S, { ...base, factureId: b.dataset.resolve, motif })), 'Cette action signale que le relevé a été contrôlé. Elle ne règle pas la facture et ne change pas le montant à payer.');
     else if (b.dataset.validate || b.dataset.reject) {
@@ -360,8 +358,8 @@ document.querySelector('main').addEventListener('click', (e) => {
     }
 });
 document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
-    installments: true, compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
-    recuUrl: (pid) => `recu.html?p=${encodeURIComponent(pid)}`, onDone: render
+    installments: true, compteurId: cid, get releve() { return releve; }, client: releve && releve.name, numero: releve && releve.numero_compteur,
+    onDone: render
 });
 document.getElementById('retry-account').onclick = () => { UI.retry(); loadClient(); };
 
