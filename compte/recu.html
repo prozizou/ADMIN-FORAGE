@@ -85,7 +85,9 @@ onAuthStateChanged(auth, async (user) => {
         const S = C.normState({ factures: fSnap.val() || {}, paiements: { [pid]: p }, affectations: aSnap.val() || {}, ajustements: jSnap.val() || {} });
         const affs = Object.entries(S.affectations[pid] || {}).filter(([, a]) => a.statut !== 'annulee').sort((a, b) => (a[1].ordre || 0) - (b[1].ordre || 0));
         const affecte = affs.reduce((t, [, a]) => t + (Number(a.montant) || 0), 0);
-        const avance = p.statut === 'valide' ? Math.max(0, p.montant - affecte) : 0;
+        const accountPayment = C.computeAccount(S,p.compteur_id).paiements.find(payment => payment.paiement_id === pid);
+        const readingPaid = accountPayment ? accountPayment.affecte_releve : 0;
+        const avance = p.statut === 'valide' ? Math.max(0, p.montant - affecte - readingPaid) : 0;
         out.innerHTML = `<div class="recu">
             ${p.statut !== 'valide' ? '<div class="void">ANNULÉ</div>' : ''}
             <div class="head">
@@ -102,7 +104,8 @@ onAuthStateChanged(auth, async (user) => {
             ${p.reference ? `<div class="row"><span>Référence</span><b>${esc(p.reference)}</b></div>` : ''}
             <div class="row"><span>Encaissé par</span><b>${esc(p.encaisse_par_nom || p.role || '—')}</b></div>
             <table><thead><tr><th>Facture réglée</th><th>Montant</th></tr></thead><tbody>
-                ${affs.length ? affs.map(([, a]) => `<tr><td>${esc(cyc(a.cycle))}</td><td>${fcfa(a.montant)}</td></tr>`).join('') : '<tr><td colspan="2">Aucune facture échue : montant en avance</td></tr>'}
+                ${affs.length ? affs.map(([, a]) => `<tr><td>${esc(cyc(a.cycle))}</td><td>${fcfa(a.montant)}</td></tr>`).join('') : readingPaid > 0 ? '' : '<tr><td colspan="2">Aucune facture échue : montant non affecté</td></tr>'}
+                ${readingPaid > 0 ? `<tr><td>Relevé saisi (${esc(p.releve_affecte.ancien_index)} → ${esc(p.releve_affecte.nouvel_index)} m³)</td><td>${fcfa(readingPaid)}</td></tr>` : ''}
                 ${avance > 0 ? `<tr><td>Avance (crédit client)</td><td>${fcfa(avance)}</td></tr>` : ''}
             </tbody></table>
             ${p.statut !== 'valide' ? `<div class="foot" style="color:#b91c1c">Paiement annulé le ${dt(p.annule_le)} : ${esc(p.motif_annulation || '')}</div>` : ''}

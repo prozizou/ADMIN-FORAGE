@@ -241,7 +241,7 @@
      */
     // Le relevé par tranches ne demande que la somme effectivement reçue.
     function openInstallmentDialog(o) {
-        var du = C.invoiceAmountDue(getState(), o.compteurId);
+        var du = C.invoiceAmountDue(getState(), o.compteurId, o.releve);
         var pid = newId();
         var receipt = defaultRecu() + '-' + pid.slice(-6);
         var saving = false;
@@ -259,7 +259,7 @@
             if (amount > due) throw new Error('Le montant dépasse le reste à payer (' + fcfa(due) + ').');
         }
         function remaining(result) {
-            return Math.max(0, result.apres.arrieres - result.apres.avance);
+            return C.accountAmountDue(result.apres,o.releve).total_du;
         }
         function preview() {
             var amount = Number(m.q('#cui-montant').value);
@@ -292,7 +292,7 @@
                     if (existing.compteur_id !== o.compteurId || existing.montant !== amount || existing.statut !== 'valide') throw new Error('Ce versement a déjà été traité. Revenez au relevé.');
                     return { updates: {}, paiementId: pid, apres: C.computeAccount(S, o.compteurId) };
                 }
-                check(amount, C.invoiceAmountDue(S, o.compteurId).total_du);
+                check(amount, C.invoiceAmountDue(S, o.compteurId, o.releve).total_du);
                 return C.buildInvoicePaymentOps(S, Object.assign({}, base, values(amount)));
             }).then(function (result) {
                 saving = false;
@@ -313,8 +313,8 @@
     function openPaymentDialog(o) {
         if (!canCollect()) { alert("Seuls le président et le trésorier peuvent encaisser."); return; }
         if (!isMigrated()) { alert("La migration comptable doit d'abord être effectuée par le président."); return; }
-        if (C.invoiceAmountDue(getState(), o.compteurId).total_du <= 0) {
-            alert('Aucune facture des mois passés ne reste à payer. Le relevé du mois sera payable après sa clôture.');
+        if (C.invoiceAmountDue(getState(), o.compteurId, o.releve).total_du <= 0) {
+            alert('Aucune facture ou consommation relevée ne reste à payer.');
             return;
         }
         return openInstallmentDialog(o);

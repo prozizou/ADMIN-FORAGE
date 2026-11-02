@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v81';
+const STATS_BUILD = 'v82';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -524,7 +524,7 @@ function renderReceiptDetails() {
         const date = new Date(payment.date_paiement).toLocaleString('fr-FR', {day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Africa/Dakar'});
         return `<li><div><strong>${escHtml(client)}</strong><span>${escHtml(date)}</span>${unallocated > 0 ? `<span class="receipt-warning">À vérifier : ${money(unallocated)} non affectés aux factures.</span>` : ''}</div><b>${money(payment.montant)}</b></li>`;
     }).join('');
-    const html = `<h3 id="receipt-title">Versements encaissés</h3><p class="cui-sub">${escHtml(periodLabel)}</p><p class="receipt-total">${payments.length} versement${payments.length === 1 ? '' : 's'} · <strong>${money(encaisse)}</strong></p><p class="cui-sub">Les versements règlent les factures des mois passés, en une fois ou par tranches. Les anciennes sommes non affectées sont signalées pour vérification.</p><ul class="receipt-list">${rows || '<li>Aucun versement pour cette période.</li>'}</ul><div class="cui-act"><button type="button" class="cui-primary" id="close-receipts">Fermer</button></div>`;
+    const html = `<h3 id="receipt-title">Versements encaissés</h3><p class="cui-sub">${escHtml(periodLabel)}</p><p class="receipt-total">${payments.length} versement${payments.length === 1 ? '' : 's'} · <strong>${money(encaisse)}</strong></p><p class="cui-sub">Les versements règlent les arriérés et la consommation déjà relevée, en une fois ou par tranches. Les anciennes sommes non affectées sont signalées pour vérification.</p><ul class="receipt-list">${rows || '<li>Aucun versement pour cette période.</li>'}</ul><div class="cui-act"><button type="button" class="cui-primary" id="close-receipts">Fermer</button></div>`;
     if (receiptModal.markup === html) return;
     const box = receiptModal.q('.cui-box'), scroll = box.scrollTop, focused = document.activeElement && document.activeElement.id === 'close-receipts';
     box.innerHTML = html; receiptModal.markup = html; box.scrollTop = scroll;
@@ -1130,7 +1130,7 @@ function updateRelevesProgress() {
 function comptaButtons(item, due) {
     // ✅ v8 : Encaisser et Annuler restent disponibles en archive (mois passé) — payer une vieille dette
     // ou corriger un paiement mal saisi ne dépend pas du mois affiché à l'écran.
-    const invoiceDue = ComptaUI.isMigrated() ? Compta.invoiceAmountDue(ComptaUI.getState(), item.key).total_du : due;
+    const invoiceDue = ComptaUI.isMigrated() ? Compta.invoiceAmountDue(ComptaUI.getState(), item.key, isArchiveView ? null : item).total_du : due;
     const canPay = ComptaUI.canCollect() && invoiceDue > 0 && !item.estSolde;
     const ready = ledgerReady && (!isArchiveView || backupsLoaded) && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
@@ -1546,6 +1546,7 @@ window.submitEdit = function() {
     if (isArchiveView && ComptaUI.isMigrated()) {
         const newRecord = { ...(storeReleves[key] || {}), ...updatedData };
         ComptaUI.run((St, base) => {
+            if (propagatedTo && propagatedTo.cycle === 'actuel') Compta.validateReadingPayments(St,key,{last_index:newIdx});
             const c = Compta.buildArchiveCorrectionOps(St, { ...base, cycle: editedCycle, compteurId: key, newRecord, motif: `Correction du relevé ${monthLabelFR(editedCycle)} (index ${lastIdx} → ${newIdx})` });
             return { updates: Object.assign({}, updates, c.updates), correction: c };
         }).then((r) => {
@@ -1556,6 +1557,10 @@ window.submitEdit = function() {
         return;
     }
 
+    if (ComptaUI.isMigrated()) {
+        ComptaUI.run((St) => { Compta.validateReadingPayments(St,key,{...(storeReleves[key]||{}),...updatedData}); return {updates}; }).then(() => done()).catch(err => showToast('Erreur : '+err.message,true));
+        return;
+    }
     update(ref(db), updates)
         .then(() => done())
         .catch(err => showToast("Erreur lors de la mise à jour : " + err, true));

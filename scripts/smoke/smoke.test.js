@@ -449,20 +449,20 @@ async function main() {
             const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
             assert.ok(/7[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))));
         });
-        await check('versement : un seul montant, plafond des factures anciennes, aucune avance sur le relevé du mois', async () => {
+        await check('versement : un seul montant, plafond arriérés + relevé saisi, aucune avance future', async () => {
             await page.evaluate(() => window.encaisser('c1'));
             await page.waitForSelector('#cui-montant', { timeout: 8000 });
             assert.strictEqual(await page.inputValue('#cui-montant'), '');
-            assert.strictEqual(await page.getAttribute('#cui-montant','max'),'6000');
+            assert.strictEqual(await page.getAttribute('#cui-montant','max'),'7500');
             assert.strictEqual(await page.locator('.cui-box input,.cui-box select,.cui-box textarea').count(),1);
-            await page.fill('#cui-montant', '7000');
+            await page.fill('#cui-montant', '7501');
             await page.click('#cui-ok');
             assert.match(await page.textContent('#cui-err'), /dépasse/);
             assert.strictEqual(await page.evaluate(()=>window.__DB.writes.length),0);
-            await page.fill('#cui-montant', '6000');
-            assert.match(await page.textContent('#cui-prev'),/Reste à payer : 0 F/);
+            await page.fill('#cui-montant', '7000');
+            assert.match(await page.textContent('#cui-prev'),/Reste à payer : 500 F/);
         });
-        await check('validation : paiement entièrement affecté à deux factures, sans avance, en UNE écriture', async () => {
+        await check('validation : paiement affecté aux deux factures et au relevé saisi, sans avance, en UNE écriture', async () => {
             const w0 = await page.evaluate(() => window.__DB.writes.length);
             await page.click('#cui-ok');
             await page.waitForFunction(() => /Versement enregistré/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
@@ -471,20 +471,21 @@ async function main() {
             const pays = Object.values(F.paiements);
             assert.strictEqual(pays.length, 1);
             const p = pays[0]; paiementId = p.paiement_id;
-            assert.deepStrictEqual([p.montant, p.mode, p.reference, p.statut, p.encaisse_par], [6000, 'autre', null, 'valide', 'u1']);
+            assert.deepStrictEqual([p.montant, p.mode, p.reference, p.statut, p.encaisse_par], [7000, 'autre', null, 'valide', 'u1']);
             assert.ok(p.numero_recu.length > 0);
             assert.deepStrictEqual(Object.keys(F.affectations[p.paiement_id]).sort(), ['2026-06_c1', '2026-07_c1']);
             assert.strictEqual(F.factures['2026-06_c1'].statut, 'payee');
             assert.strictEqual(F.factures['2026-07_c1'].statut, 'payee');
             assert.strictEqual(F.soldes.c1.avance, 0);
+            assert.strictEqual(p.releve_affecte.montant,1000);
             assert.strictEqual(F.soldes.c1.arrieres, 0);
             assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_CREE' && e.role === 'trésorier'));
             assert.strictEqual(F.compteurs.c1.status, 'impaye');                  // le relevé du mois reste non facturé
             ['apaid', 'arriere', 'arrieres', 'facture', 'print', 'diff'].forEach(k => assert.ok(!(k in F.compteurs.c1), 'champ historique ' + k));
             await page.click('#cui-close');
         });
-        await check('indicateurs : Encaissé 6 000, aucune avance créée', async () => {
-            await page.waitForFunction(() => /6[\s  ,.]?000/.test(document.getElementById('total-money').textContent), null, { timeout: 8000 });
+        await check('indicateurs : Encaissé 7 000, aucune avance créée', async () => {
+            await page.waitForFunction(() => /7[\s  ,.]?000/.test(document.getElementById('total-money').textContent), null, { timeout: 8000 });
             assert.strictEqual(await page.evaluate(() => Object.keys(window.ComptaUI.getState().paiements).length), 1);
             assert.strictEqual(await page.evaluate(() => window.Compta.amountDueNow(window.ComptaUI.getState(), 'c1', window.__DB.tree.Asufor.Asufor_a.compteurs.c1).avance), 0);
         });
@@ -505,7 +506,7 @@ async function main() {
         });
         await check('aucune erreur JavaScript (encaissement)', () => assert.deepStrictEqual(errors.filter(e => !/PERMISSION_DENIED/.test(e)), []));
         // Donnée historique indépendante : les anciennes avances restent lisibles et annulables.
-        // Le nouveau formulaire ci-dessus a bien refusé 7 000 et enregistré seulement 6 000.
+        // Le nouveau formulaire ci-dessus a affecté les 7 000 F aux factures et au relevé, sans avance.
         afterPayment = migratedSeed();
         const old = Compta.buildPaymentOps(Compta.normState(afterPayment.Asufor[FA]), {
             paths:Compta.pathsFor('Asufor/'+FA),compteurId:'c1',montant:7000,mode:'especes',reference:'TX-42',numero_recu:'ANCIEN-42',
@@ -597,17 +598,17 @@ async function main() {
         await page.waitForSelector('.archive-lock, .item', { timeout: 8000 });
         await page.waitForFunction(() => document.getElementById('archive-banner').classList.contains('visible'));
         let paiementId2;
-        await check("encaisser depuis juin : plafond de 6 000 F sur les factures, aucun prépaiement du relevé courant", async () => {
+        await check("encaisser depuis juin : plafond de 7 500 F, arriérés et relevé réellement en cours inclus", async () => {
             await page.evaluate(() => window.encaisser('c1'));
             await page.waitForSelector('#cui-montant', { timeout: 8000 });
             assert.strictEqual(await page.inputValue('#cui-montant'), '');
-            assert.strictEqual(await page.getAttribute('#cui-montant','max'),'6000');
-            await page.fill('#cui-montant','6000');
+            assert.strictEqual(await page.getAttribute('#cui-montant','max'),'7500');
+            await page.fill('#cui-montant','7500');
             await page.click('#cui-ok');
             await page.waitForFunction(() => /Versement enregistré/.test(document.querySelector('.cui-box').textContent), null, { timeout: 8000 });
             const F = (await db(page)).Asufor[FA];
             paiementId2 = Object.values(F.paiements)[0].paiement_id;
-            assert.strictEqual(F.compteurs.c1.status, 'impaye');
+            assert.strictEqual(F.compteurs.c1.status, 'paye');
             assert.strictEqual(F.soldes.c1.arrieres, 0);
             assert.strictEqual(F.soldes.c1.avance,0);
             await page.click('#cui-close');
@@ -686,8 +687,8 @@ async function main() {
             const t = await page.textContent('#timeline');
             assert.match(t, /7[\s  ]?000 F/);
             assert.strictEqual(num(await page.textContent('#t-paye')), 6000);
-            assert.strictEqual(num(await page.textContent('#past-total')), 6000);
-            assert.strictEqual(num(await page.textContent('#total-due')), 0);
+            assert.strictEqual(num(await page.textContent('#past-total')), 7500);
+            assert.strictEqual(num(await page.textContent('#total-due')), 500);
         });
         for (const width of [320, 360, 390]) {
             await check(`fiche client ${width}px : total du jour, boutons nommés et détails à la demande`, async () => {
@@ -705,7 +706,7 @@ async function main() {
                 });
                 assert.ok(r.over <= 0, 'scroll horizontal ' + r.over);
                 assert.ok(r.minH >= 44); assert.ok(r.named); assert.ok(r.detailsClosed);
-                assert.strictEqual(num(r.total), 0);
+                assert.strictEqual(num(r.total), 500);
                 assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
                 assert.strictEqual(await page.locator('#btn-details, #btn-print, #btn-more, #menu, #btn-adj').count(), 0);
                 assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(248, 250, 252)');

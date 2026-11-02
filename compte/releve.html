@@ -43,11 +43,11 @@
         <div id="compta-migration" style="display:none"></div>
         <div id="statement">
         <h2 id="statement-title">Paiements par tranches</h2>
-        <p class="sub" id="statement-help">Réglez les factures des mois passés, en une fois ou par tranches.</p>
+        <p class="sub" id="statement-help">Réglez les arriérés et le relevé saisi, en une fois ou par tranches.</p>
         <div id="balance" aria-busy="true">
             <table class="simple-table" id="statement-table">
                 <tbody>
-                    <tr><th scope="row">Factures des mois passés</th><td class="money" id="past-total">—</td></tr>
+                    <tr><th scope="row">Factures et relevé saisi</th><td class="money" id="past-total">—</td></tr>
                     <tr><th scope="row">Versements cumulés</th><td class="money good" id="t-paye">—</td></tr>
                     <tr class="total-row"><th scope="row">Reste à payer</th><td class="money" id="total-due">—</td></tr>
                     <tr id="credit-row" hidden><th scope="row">Ancien versement non affecté — à vérifier</th><td class="money" id="t-credit" style="color:#9a3412">—</td></tr>
@@ -137,14 +137,14 @@ function setMeta(numero, zone) {
 function render() {
     const S = UI.getState();
     const acc = C.computeAccount(S, cid);
-    const du = C.invoiceAmountDue(S, cid);
+    const du = C.invoiceAmountDue(S, cid, releve);
     const info = UI.getStatus();
     const ready = UI.isReady() && info.status === 'ready' && releveLoaded;
     const migrated = UI.isMigrated();
     const showBalance = ready && migrated;
     const past = acc.factures.reduce((sum, f) => sum + f.montant_net, 0);
     const figure = value => showBalance ? fcfa(value) : '—';
-    document.getElementById('past-total').textContent = figure(past);
+    document.getElementById('past-total').textContent = figure(past + du.facture_provisoire);
     document.getElementById('t-paye').textContent = figure(acc.paiements.reduce((sum, p) => sum + (p.statut === 'valide' ? p.affecte : 0), 0));
     document.getElementById('total-due').textContent = figure(du.total_du);
     document.getElementById('total-due').className = 'money ' + (showBalance && du.total_du === 0 ? 'good' : '');
@@ -155,7 +155,7 @@ function render() {
         : !migrated ? 'Le président doit initialiser la comptabilité pour afficher les montants.'
         : '';
     document.getElementById('balance-state').hidden = showBalance;
-    document.getElementById('provisoire').textContent = showBalance ? 'Le relevé du mois en cours sera payable après sa clôture.' : '';
+    document.getElementById('provisoire').textContent = showBalance ? 'Le total comprend les arriérés et la consommation déjà relevée.' : '';
     const accountStatus = document.getElementById('account-status');
     accountStatus.hidden = !(releveError || ['error', 'degraded'].includes(info.status));
     accountStatus.textContent = releveError ? 'Les informations du client n’ont pas pu être chargées. Réessayez.' : 'Une partie du compte n’a pas pu être chargée. Réessayez.';
@@ -181,7 +181,7 @@ function render() {
             <td class="money ${valid ? 'good' : ''}">${fcfa(p.montant)}</td><td class="money">${fcfa(cumul)}</td></tr>`;
     }).join('');
     tl.innerHTML = !ready ? '<p class="empty">Vérification des paiements en cours…</p>' : !rows ? '<p class="empty">Aucun versement enregistré.</p>'
-        : `<table class="simple-table" id="payments-table"><caption>Le cumul contient les sommes affectées aux factures. Les versements annulés ou non affectés n’y entrent pas.</caption><thead><tr><th scope="col">Date</th><th scope="col" class="money">Versé</th><th scope="col" class="money">Cumul</th></tr></thead><tbody>${rows}</tbody></table>`;
+        : `<table class="simple-table" id="payments-table"><caption>Le cumul contient les sommes affectées aux factures et au relevé saisi. Les versements annulés ou non affectés n’y entrent pas.</caption><thead><tr><th scope="col">Date</th><th scope="col" class="money">Versé</th><th scope="col" class="money">Cumul</th></tr></thead><tbody>${rows}</tbody></table>`;
     document.getElementById('corrections').innerHTML = !ready || !acc.ajustements.length ? '' : `<details><summary>Corrections de factures</summary>${acc.ajustements.map(j => `<div class="m">${esc(TYPES[j.type] || j.type)} · ${esc(cyc(j.cycle))} · ${fcfa(j.montant)} · ${esc(STATUTS[j.statut] || j.statut)}<p class="sub">${esc(j.motif)}</p>${j.statut === 'en_attente' && UI.isPresident() ? `<div class="actions"><button class="btn" data-validate="${esc(j.ajustement_id)}">Valider</button><button class="btn" data-reject="${esc(j.ajustement_id)}">Rejeter</button></div>` : ''}</div>`).join('')}</details>`;
     if (archiveRequested && archiveState === 'ready') {
         document.getElementById('archive-content').setAttribute('aria-busy', String(!ready));
