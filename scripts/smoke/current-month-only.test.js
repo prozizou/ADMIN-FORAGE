@@ -89,7 +89,7 @@ const archiveReads = page => page.evaluate(root => ({
             assert.equal(await page.locator('#total-debt').innerText().then(s => s.replace(/\D/g, '')), '10500');
             assert.equal(await page.locator('#total-money').innerText(), '—');
             assert.equal(await page.locator('#rc-ajust').count(), 0);
-            assert.equal(await page.locator('#releves-list option[value="collect"]').first().isEnabled(), true);
+            assert.equal(await page.locator('#releves-list [data-action="collect"]').first().isEnabled(), true);
             assert.deepEqual(await archiveReads(page), { get: [], listen: [] });
             assert.deepEqual(errors, []);
             await page.waitForSelector('#cycle-status button');

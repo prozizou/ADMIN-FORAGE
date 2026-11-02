@@ -184,7 +184,7 @@ async function main() {
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
         await check('avant migration : bandeau « Migrer » (président) et encaissement bloqué', async () => {
             await page.waitForSelector('#compta-migration .cui-banner button', { timeout: 8000 });
-            const dis = await page.$$eval('#releves-list option[value="collect"]', bs => bs.length > 0 && bs.every(b => b.disabled));
+            const dis = await page.$$eval('#releves-list [data-action="collect"]', bs => bs.length > 0 && bs.every(b => b.disabled));
             assert.ok(dis, 'Encaisser doit être grisé avant la migration');
             await page.evaluate(() => window.encaisser('c1'));
             assert.match(await page.textContent('#toast'), /Migration comptable requise/);
@@ -231,7 +231,7 @@ async function main() {
         await page.setViewportSize({ width, height: 780 });
         await page.goto(base + '/statistiques/stats.html');
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list option[value="collect"]')].every(b => !b.disabled), null, { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list [data-action="collect"]')].every(b => !b.disabled), null, { timeout: 8000 });
         await check(`mobile ${width}px : titre, recherche, filtres, aucun scroll horizontal`, async () => {
             assert.match(await page.textContent('.list-title'), /Relevés de compteurs/);
             assert.deepStrictEqual(await page.$$eval('.chip', c => c.map(x => x.textContent.trim())), ['Tous', 'À relever', 'Relevés', 'Trier']);
@@ -255,23 +255,24 @@ async function main() {
             assert.ok(rows.inView, 'élément hors écran');
             assert.match(rows.pct, /^\d+,\d % encaissé$/);
         });
-        await check(`mobile ${width}px : actions nommées sur deux colonnes, sans débordement de la carte`, async () => {
+        await check(`mobile ${width}px : chips sur une ligne défilante, sans débordement de la carte`, async () => {
             await page.click('#chip-non-releves');
             await page.waitForFunction(() => document.querySelectorAll('#releves-list .bg-non-releve').length > 0);
             const bad = await page.evaluate(() => [...document.querySelectorAll('#releves-list .item')].flatMap((it) => {
                 const cr = it.getBoundingClientRect(); const out = [];
                 const row = it.querySelector('.citem-actions'); if (!row) return out;
                 const tops = new Set([...row.children].map(b => Math.round(b.getBoundingClientRect().top)));
-                if (tops.size > 3) out.push('trop de lignes d’actions');
-                row.querySelectorAll('select').forEach((b) => {
-                    const r = b.getBoundingClientRect();
-                    if (r.right > cr.right + 0.5 || r.left < cr.left - 0.5) out.push('bouton hors carte : ' + b.textContent.trim());
-                    if (b.scrollWidth > b.clientWidth + 1) out.push('texte coupé : ' + b.textContent.trim());
+                if (tops.size > 1) out.push('plusieurs lignes d’actions');
+                const rr = row.getBoundingClientRect();
+                if (rr.right > cr.right + .5 || rr.left < cr.left - .5) out.push('ligne hors carte');
+                row.querySelectorAll('.client-action-chip').forEach(b => {
+                    if (b.getBoundingClientRect().height < 44) out.push('cible tactile trop petite');
+                    if (!b.getAttribute('aria-label')) out.push('libellé accessible manquant');
                 });
                 return out;
             }));
             assert.deepStrictEqual(bad, []);
-            const labels = await page.$$eval('.bg-non-releve .citem-actions option', b => b.map(x => x.textContent.trim()));
+            const labels = await page.$$eval('.bg-non-releve .client-action-chip', b => b.map(x => x.textContent.trim()));
             assert.ok(labels.includes('Relever') && labels.includes('Paiements'), labels.join('|'));
         });
         if (width === 360) await page.screenshot({ path: process.env.SHOT_DIR ? process.env.SHOT_DIR + '/liste-360.png' : '/tmp/liste-360.png' });
@@ -443,7 +444,7 @@ async function main() {
         const { page, errors } = await newPage(browser, 'trésorier', migratedSeed());
         await page.goto(base + '/statistiques/stats.html');
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list option[value="collect"]')].length > 0 && [...document.querySelectorAll('#releves-list option[value="collect"]')].every(b => !b.disabled), null, { timeout: 8000 });
+        await page.waitForFunction(() => [...document.querySelectorAll('#releves-list [data-action="collect"]')].length > 0 && [...document.querySelectorAll('#releves-list [data-action="collect"]')].every(b => !b.disabled), null, { timeout: 8000 });
         await check('après migration : Aminata dû = arriérés 6 000 + relevé du mois 1 500', async () => {
             const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
             assert.ok(/7[,.\s  ]?500/.test(t.find(x => x.includes('Aminata'))));
@@ -488,7 +489,7 @@ async function main() {
             assert.strictEqual(await page.evaluate(() => window.Compta.amountDueNow(window.ComptaUI.getState(), 'c1', window.__DB.tree.Asufor.Asufor_a.compteurs.c1).avance), 1000);
         });
         await check('« Annuler encaissement » réservé au président : invisible pour le trésorier malgré le paiement existant', async () => {
-            assert.strictEqual(await page.$('#releves-list option[value="cancel"]'), null);
+            assert.strictEqual(await page.$('#releves-list [data-action="cancel"]'), null);
         });
         await check('écriture refusée (droits / concurrence) : message clair, rien d\'écrit', async () => {
             await page.evaluate(() => { window.__DB.denyWrites = true; });
@@ -512,19 +513,19 @@ async function main() {
         const { page, errors, ctx } = await newPage(browser, 'président', JSON.parse(JSON.stringify(afterPayment)));
         await page.goto(base + '/statistiques/stats.html');
         await page.waitForSelector('#releves-list .item', { timeout: 8000 });
-        await page.waitForFunction(() => document.querySelectorAll('#releves-list option[value="cancel"]').length > 0, null, { timeout: 8000 });
+        await page.waitForFunction(() => document.querySelectorAll('#releves-list [data-action="cancel"]').length > 0, null, { timeout: 8000 });
         await check('bouton visible uniquement sur la carte du client ayant un paiement valide (président)', async () => {
             const has = (name) => page.evaluate((n) => {
                 const el = [...document.querySelectorAll('#releves-list .item')].find(e => e.innerText.includes(n));
-                return el ? !!el.querySelector('option[value="cancel"]') : null;
+                return el ? !!el.querySelector('[data-action="cancel"]') : null;
             }, name);
             assert.strictEqual(await has('Aminata'), true);
             assert.strictEqual(await has('Boubacar'), false);   // aucun paiement valide : pas de bouton
         });
-        await check('sélecteur d’actions lisible et annulation disponible à 320 px', async () => {
+        await check('chips lisibles et annulation disponible à 320 px', async () => {
             await page.setViewportSize({width:320,height:780});
-            const control = page.locator('[data-counter-id="c1"] select');
-            assert.match(await control.locator('option[value="cancel"]').innerText(), /Annuler un paiement/);
+            const control = page.locator('[data-counter-id="c1"] [data-action="cancel"]');
+            assert.match(await control.innerText(), /Annuler un paiement/);
             assert.ok(await control.evaluate(el => el.getBoundingClientRect().height >= 44));
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         });
@@ -564,7 +565,7 @@ async function main() {
             assert.strictEqual(num(await page.textContent('#total-debt')), 10500);    // 3 500 (inchangé) + 6 000 (Aminata, de nouveau dus)
             const t = await page.$$eval('#releves-list .item', els => els.map(e => e.innerText));
             assert.ok(/7[,.\s\u202f\xa0]?500/.test(t.find(x => x.includes('Aminata'))));      // total dû revenu à l'identique d'avant paiement
-            assert.strictEqual(await page.$('#releves-list option[value="cancel"]'), null);   // plus aucun paiement valide à annuler
+            assert.strictEqual(await page.$('#releves-list [data-action="cancel"]'), null);   // plus aucun paiement valide à annuler
         });
         await check('double annulation empêchée proprement (jamais un second contre-passage silencieux)', async () => {
             const err = await page.evaluate((pid) => window.ComptaUI.run((S, base) =>
@@ -606,7 +607,7 @@ async function main() {
             await page.click('#cui-close');
         });
         await check("annuler ce paiement depuis la même archive : arriérés et statut du compteur EN VIGUEUR recalculés correctement", async () => {
-            await page.waitForFunction(() => document.querySelectorAll('#releves-list option[value="cancel"]').length > 0, null, { timeout: 8000 });
+            await page.waitForFunction(() => document.querySelectorAll('#releves-list [data-action="cancel"]').length > 0, null, { timeout: 8000 });
             await page.evaluate(() => window.annulerEncaissement('c1'));
             await page.waitForSelector('#cui-yes', { timeout: 8000 });
             await page.fill('#cui-motif', 'Test : annulation depuis une archive');
@@ -634,7 +635,7 @@ async function main() {
         await page.waitForFunction(() => [...document.querySelectorAll('#releves-list .item')].some(e => e.innerText.includes('Boubacar')), null, { timeout: 8000 });
         const card = (n) => page.evaluate((n) => {
             const el = [...document.querySelectorAll('#releves-list .item')].find(e => e.innerText.includes(n));
-            return el ? { paye: /Payé/.test(el.innerText) && !/Impayé/.test(el.innerText), encaisser: !!el.querySelector('option[value="collect"]'), nonPaye: !!el.querySelector('option[value="unpay"]') } : null;
+            return el ? { paye: /Payé/.test(el.innerText) && !/Impayé/.test(el.innerText), encaisser: !!el.querySelector('[data-action="collect"]'), nonPaye: !!el.querySelector('[data-action="unpay"]') } : null;
         }, n);
         await check('carte archivée « Payé » : bouton « Non payé » présent, pas d\'Encaisser ; carte impayée : pas de « Non payé »', async () => {
             const b = await card('Boubacar'), a = await card('Aminata');

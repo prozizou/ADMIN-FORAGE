@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v78';
+const STATS_BUILD = 'v79';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -1132,38 +1132,72 @@ function comptaButtons(item, due) {
     return pay + rel + details + cancel + unpay;
 }
 
+const actionLabels = new Set();
+function measureActionLabel(label) {
+    const text = label.firstElementChild;
+    if (!text || !label.isConnected) return;
+    const distance = Math.max(0, text.scrollWidth - label.clientWidth);
+    label.classList.toggle('is-marquee', distance > 1);
+    text.style.setProperty('--marquee-distance', -distance + 'px');
+    text.style.setProperty('--marquee-duration', Math.max(5, distance / 22 + 3) + 's');
+}
+const actionLabelObserver = window.ResizeObserver ? new ResizeObserver(entries => entries.forEach(entry => measureActionLabel(entry.target))) : null;
+function syncActionLabels(list) {
+    const current = new Set(list.querySelectorAll('.action-label'));
+    actionLabels.forEach(label => {
+        if (!current.has(label)) { if (actionLabelObserver) actionLabelObserver.unobserve(label); actionLabels.delete(label); }
+    });
+    current.forEach(label => {
+        if (actionLabels.has(label)) return;
+        actionLabels.add(label);
+        if (actionLabelObserver) actionLabelObserver.observe(label);
+        else measureActionLabel(label);
+    });
+}
+if (!actionLabelObserver) window.addEventListener('resize', () => actionLabels.forEach(measureActionLabel));
+
 function compactActions(card, key) {
     const actions = card.querySelector('.citem-actions');
     if (!actions) return;
     const names = { openEditModal: 'edit', encaisser: 'collect', openReleve: 'payments', openDetails: 'details', annulerEncaissement: 'cancel', marquerNonPaye: 'unpay' };
-    const select = document.createElement('select');
-    select.className = 'client-action-select'; select.dataset.clientActions = key;
-    select.setAttribute('aria-label', 'Actions pour ' + ((storeReleves[key] || {}).name || 'ce client'));
-    select.appendChild(new Option('Choisir une action…', ''));
-    actions.querySelectorAll('button, a').forEach(button => {
-        const handler = (button.getAttribute('onclick') || '').match(/^([a-zA-Z]+)\(/);
-        const phone = button.getAttribute('href');
+    const chips = [];
+    actions.querySelectorAll('button, a').forEach(source => {
+        const handler = (source.getAttribute('onclick') || '').match(/^([a-zA-Z]+)\(/);
+        const phone = source.getAttribute('href');
         const action = handler ? names[handler[1]] : phone && phone.startsWith('tel:') ? 'call' : null;
         if (!action) return;
-        const label = action === 'payments' ? 'Paiements' : action === 'cancel' ? 'Annuler un paiement' : button.textContent.trim();
-        const option = new Option(label, action); option.disabled = !!button.disabled;
-        if (action === 'call') option.dataset.phone = phone.slice(4);
-        select.appendChild(option);
+        const label = action === 'payments' ? 'Paiements' : action === 'cancel' ? 'Annuler un paiement' : source.textContent.trim();
+        const chip = document.createElement(action === 'call' ? 'a' : 'button');
+        chip.className = 'client-action-chip'; chip.dataset.clientActions = key; chip.dataset.action = action;
+        chip.setAttribute('aria-label', label); chip.title = source.title || label;
+        if (action === 'call') chip.href = 'tel:' + phone.slice(4).replace(/[^0-9+]/g, '');
+        else { chip.type = 'button'; chip.disabled = !!source.disabled; }
+        const icon = source.querySelector('i');
+        if (icon) { const copy = icon.cloneNode(true); copy.setAttribute('aria-hidden','true'); chip.appendChild(copy); }
+        const viewport = document.createElement('span'); viewport.className = 'action-label'; viewport.setAttribute('aria-hidden','true');
+        const text = document.createElement('span'); text.className = 'action-label-text'; text.textContent = label;
+        viewport.appendChild(text); chip.appendChild(viewport); chips.push(chip);
     });
-    if (select.options.length === 1) { actions.textContent = 'Lecture seule'; return; }
-    const control = document.createElement('div'); control.className = 'client-action-control';
-    control.appendChild(select); actions.replaceChildren(control);
+    actions.setAttribute('role','group');
+    actions.setAttribute('aria-label','Actions pour ' + ((storeReleves[key] || {}).name || 'ce client'));
+    if (!chips.length) { actions.textContent = 'Lecture seule'; return; }
+    actions.replaceChildren(...chips);
 }
-document.getElementById('releves-list').addEventListener('change', event => {
-    const select = event.target.closest('[data-client-actions]');
-    if (!select || !storeReleves[select.dataset.clientActions]) return;
-    const option = select.selectedOptions[0];
-    if (!option || option.disabled) return;
-    const action = select.value, key = select.dataset.clientActions, phone = option.dataset.phone;
-    select.value = '';
+// Le focus clavier doit révéler le chip, même quand la ligne a été balayée.
+document.getElementById('releves-list').addEventListener('focusin', event => {
+    const chip = event.target.closest('[data-client-actions]');
+    if (!chip) return;
+    const row = chip.parentElement;
+    const bounds = row.getBoundingClientRect(), target = chip.getBoundingClientRect();
+    if (target.right > bounds.right - 4) row.scrollLeft += target.right - bounds.right + 4;
+    else if (target.left < bounds.left + 4) row.scrollLeft -= bounds.left + 4 - target.left;
+});
+document.getElementById('releves-list').addEventListener('click', event => {
+    const chip = event.target.closest('[data-client-actions]');
+    if (!chip || chip.disabled || !storeReleves[chip.dataset.clientActions]) return;
+    const action = chip.dataset.action, key = chip.dataset.clientActions;
     const handlers = { edit: window.openEditModal, collect: window.encaisser, payments: window.openReleve, details: window.openDetails, cancel: window.annulerEncaissement, unpay: window.marquerNonPaye };
-    if (action === 'call' && phone) window.location.href = 'tel:' + phone.replace(/[^0-9+]/g, '');
-    else if (handlers[action]) handlers[action](key);
+    if (handlers[action]) handlers[action](key);
 });
 
 function renderList() {
@@ -1379,6 +1413,7 @@ function renderList() {
         if (card === cursor) cursor = cursor.nextElementSibling;
         else listDiv.insertBefore(card, cursor);
     });
+    syncActionLabels(listDiv);
     const btnLoadMore = document.getElementById('btn-load-more');
     if (currentFilteredData.length > displayLimit) {
         btnLoadMore.style.display = "block";
