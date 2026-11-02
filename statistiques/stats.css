@@ -520,3 +520,13 @@ body {
 .customer-view { position:fixed; inset:0; z-index:20000; background:#f8fafc; }
 .customer-view iframe { display:block; width:100%; height:100%; border:0; background:#f8fafc; }
 body.customer-view-open { overflow:hidden; }
+
+.receipt-link { display:block; align-self:flex-start; min-height:36px; margin-top:3px; padding:3px 0; border:0; background:transparent; color:#1d4ed8; font:600 .76rem/1.3 system-ui,sans-serif; text-align:left; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.receipt-link[hidden] { display:none; }
+.receipt-link:focus-visible { outline:2px solid #0052fe; outline-offset:3px; border-radius:4px; }
+.receipt-total { font-size:1rem; color:var(--text-main,#0f172a); }
+.receipt-list { list-style:none; padding:0; margin:0; }
+.receipt-list li { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-color,#e2e8f0); }
+.receipt-list li div { min-width:0; overflow-wrap:anywhere; }
+.receipt-list li span { display:block; color:var(--text-sub,#64748b); font-size:.8rem; margin-top:4px; }
+.receipt-list li > b { flex:none; white-space:nowrap; color:#15803d; }

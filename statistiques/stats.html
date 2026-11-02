@@ -122,6 +122,7 @@
                 <div class="recap-cell">
                     <span class="recap-lbl">Encaissé</span>
                     <span class="recap-val recap-val-good" id="total-money">—</span>
+                    <button type="button" id="show-receipts" class="receipt-link" hidden disabled>Voir les versements</button>
                     <div id="trend-money" class="trend-indicator"></div>
                 </div>
                 <div class="recap-cell">
@@ -132,11 +133,6 @@
             </div>
             <!-- ✅ v7 : chaque montant n'est compté qu'une fois (une facture > 100 m³ impayée : 1 problème + son montant en arriérés) -->
             <p class="recap-source" id="rc-source"></p>
-            <div id="cycle-status" class="compta-status" role="status" hidden>
-                <span>Date de dernière clôture indisponible pour le moment.</span>
-                <button type="button" onclick="retryCurrentCycle()">Réessayer</button>
-                <button type="button" onclick="showStatsDiagnostic()">Diagnostic</button>
-            </div>
             <div class="recap-barline">
                 <div class="recap-bar-bg"><div class="recap-bar-fill" id="recap-bar-fill"></div></div>
                 <div class="recap-pct" id="recap-pct">—</div>

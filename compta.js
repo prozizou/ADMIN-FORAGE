@@ -733,9 +733,21 @@
         return { windows: w, openStart: prev, lastCycle: cycles[cycles.length - 1] || null };
     }
 
+    /** Versements valides reçus dans la période ; même sélection pour le total et son détail. */
+    function periodPayments(S, o) {
+        S = normState(S);
+        var end = o.end === undefined || o.end === Infinity ? Infinity : o.end;
+        return vals(S.paiements).filter(function (p) {
+            if (!isValidPayment(p) || o.compteurIds && !o.compteurIds[p.compteur_id]) return false;
+            var date = t(p.date_paiement);
+            return !(o.startInclusive ? date < o.start : date <= o.start) && date <= end;
+        });
+    }
+
     /**
      * Indicateurs d'une période (ledger) : chaque montant n'est compté qu'une fois.
      * @param {object} o - { start, end (ms, Infinity = maintenant), cycle (période : factures émises),
+     *                       startInclusive? (mois civil : inclure minuit du premier jour),
      *                       compteurIds? ({id:true} : restreindre à ces compteurs, ex. filtre par agent) }
      * @returns {{facture, encaisse, arrieres, avances, ajustements, problemes, nb_paiements, par_mode}}
      */
@@ -751,17 +763,14 @@
             if (!st.annulee) facture += Number(f.montant_initial) || 0;
             if (f.probleme && f.probleme.actif && !f.probleme.resolu) problemes++;
         });
-        vals(S.paiements).forEach(function (p) {
-            if (!isValidPayment(p) || !keep(p.compteur_id)) return;
-            var d = t(p.date_paiement);
-            if (d <= o.start || d > end) return;
+        periodPayments(S, o).forEach(function (p) {
             encaisse += r0(p.montant); nbPay++;
             parMode[p.mode] = (parMode[p.mode] || 0) + r0(p.montant);
         });
         vals(S.ajustements).forEach(function (j) {
             if (!isValidAdjustment(j) || j.type === 'annulation' || !keep(j.compteur_id)) return;
             var d = t(j.date_validation);
-            if (d <= o.start || d > end) return;
+            if ((o.startInclusive ? d < o.start : d <= o.start) || d > end) return;
             ajust += signedAdjustment(j);
         });
         var ids = {};
@@ -818,6 +827,6 @@
         buildProblemResolutionOps: buildProblemResolutionOps, buildClosureOps: buildClosureOps,
         buildMigrationOps: buildMigrationOps, buildArchiveCorrectionOps: buildArchiveCorrectionOps,
         buildSoldesRebuild: buildSoldesRebuild, checkSoldes: checkSoldes,
-        parseDate: parseDate, cycleWindows: cycleWindows, periodStats: periodStats, historicStats: historicStats
+        parseDate: parseDate, cycleWindows: cycleWindows, periodPayments: periodPayments, periodStats: periodStats, historicStats: historicStats
     };
 });
