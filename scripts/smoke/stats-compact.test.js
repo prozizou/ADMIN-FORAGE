@@ -28,21 +28,23 @@ const counters = page => page.evaluate(() => ({ reads:window.__DB.reads.length, 
         await page.waitForFunction(() => document.getElementById('stats-summary')?.getAttribute('aria-busy') === 'false');
         assert.equal(await page.locator('.recap-grid, #rc-facture, #rc-arrieres, #rc-avances, #rc-ajust, #rc-problemes').count(), 0);
         const card = key => page.locator('[data-counter-id="' + key + '"]');
-        assert.equal(await card('c1').locator('.citem-actions select').count(), 1);
-        assert.equal(await card('c1').locator('.citem-actions button,.citem-actions a').count(), 0);
-        assert.equal(await card('c1').locator('option[value="payments"]').innerText(), 'Paiements');
+        assert.equal(await card('c1').locator('.citem-actions select').count(), 0);
+        assert.ok(await card('c1').locator('.client-action-chip').count() >= 3);
+        assert.equal(await card('c1').locator('[data-action="payments"]').innerText(), 'Paiements');
         for (const width of [320,390,768,1440]) {
             await page.setViewportSize({width,height:780});
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-            assert.ok(await card('c1').locator('select').evaluate(el => el.getBoundingClientRect().height >= 44));
+            assert.equal(await card('c1').locator('.citem-actions').evaluate(row => new Set([...row.children].map(el => Math.round(el.getBoundingClientRect().top))).size), 1);
+            assert.ok(await card('c1').locator('.client-action-chip').evaluateAll(chips => chips.every(el => el.getBoundingClientRect().height >= 44)));
             if (width === 390) {
                 await card('c1').scrollIntoViewIfNeeded();
-                await card('c1').screenshot({path:'/tmp/stats-action-spinner-390.png'});
+                await card('c1').evaluate(el => scrollTo(0, el.getBoundingClientRect().top + scrollY - 150));
+                await card('c1').screenshot({path:'/tmp/stats-action-chips-390.png'});
             }
         }
         await page.setViewportSize({width:390,height:780});
         await card('c1').scrollIntoViewIfNeeded();
-        await card('c1').locator('select').focus();
+        await card('c1').locator('[data-action="payments"]').focus();
         await page.evaluate(() => {
             window.__initialDocument = document;
             window.__firstCard = document.querySelector('[data-counter-id="c1"]');
@@ -51,7 +53,7 @@ const counters = page => page.evaluate(() => ({ reads:window.__DB.reads.length, 
             window.__viewY = scrollY;
         });
         const initial = await counters(page);
-        await card('c1').locator('select').selectOption('payments');
+        await card('c1').locator('[data-action="payments"]').click();
         const customer = page.frameLocator('#customer-frame');
         await customer.locator('#btn-pay').waitFor({state:'visible'});
         assert.equal(await customer.locator('#client').innerText(), 'Aminata');
@@ -65,10 +67,33 @@ const counters = page => page.evaluate(() => ({ reads:window.__DB.reads.length, 
         await page.waitForSelector('#customer-frame', {state:'detached'});
         assert.deepEqual(await counters(page), initial, 'le retour ne recrée aucune écoute et ne refait aucune lecture globale');
         assert.deepEqual(await page.evaluate(() => ({ document:document===window.__initialDocument, stable:window.__otherCard===document.querySelector('[data-counter-id="c2"]'), unchanged:window.__otherMarkup===window.__otherCard.innerHTML, scroll:Math.abs(scrollY-window.__viewY)<=2 })), {document:true, stable:true, unchanged:true, scroll:true});
-        console.log('✓ bilan épuré, sélecteur Paiements, retour après versement sans rechargement ni remplacement des autres cartes');
+        console.log('✓ bilan épuré, chip Paiements, retour après versement sans rechargement ni remplacement des autres cartes');
+
+        const cancel = card('c1').locator('[data-action="cancel"]');
+        await cancel.locator('.action-label.is-marquee').waitFor();
+        assert.equal(await cancel.getAttribute('aria-label'),'Annuler un paiement');
+        assert.equal(await cancel.locator('.action-label-text').evaluate(el => getComputedStyle(el).animationName),'action-label-marquee');
+        assert.ok(await card('c1').locator('.citem-actions').evaluate(row => row.scrollWidth > row.clientWidth), 'les actions restent sur une ligne balayable');
+        await cancel.focus();
+        await page.waitForFunction(() => {
+            const el=document.querySelector('[data-counter-id="c1"] [data-action="cancel"]');
+            const chip=el.getBoundingClientRect(), row=el.parentElement.getBoundingClientRect();
+            return chip.left >= row.left - 1 && chip.right <= row.right + 1;
+        }, {}, {timeout:2500});
+        await cancel.press('Enter');
+        await page.locator('#cui-yes').waitFor();
+        await page.click('#cui-no');
+        await page.emulateMedia({reducedMotion:'reduce'});
+        assert.equal(await cancel.locator('.action-label-text').evaluate(el => getComputedStyle(el).animationName),'none');
+        assert.ok(await cancel.locator('.action-label').evaluate(el => el.scrollWidth <= el.clientWidth + 1), 'texte complet sans animation en mouvement réduit');
+        await page.emulateMedia({reducedMotion:'no-preference'});
+        await cancel.locator('.action-label.is-marquee').waitFor();
+        await card('c1').evaluate(el => scrollTo(0, el.getBoundingClientRect().top + scrollY - 150));
+        await card('c1').screenshot({path:'/tmp/stats-action-chips-marquee-390.png'});
+        console.log('✓ chips horizontaux accessibles au clavier, libellé long animé, confirmation d’annulation et préférence de mouvement réduit');
 
         await page.evaluate(() => { window.__firstMarkup = window.__firstCard.innerHTML; });
-        await card('c2').locator('select').selectOption('edit');
+        await card('c2').locator('[data-action="edit"]').click();
         await page.fill('#edit-name', 'Boubacar modifié');
         await page.fill('#edit-new-index', '13');
         await page.click('button[onclick="submitEdit()"]');
@@ -84,7 +109,7 @@ const counters = page => page.evaluate(() => ({ reads:window.__DB.reads.length, 
 
         await card('c1').scrollIntoViewIfNeeded();
         const beforeDetails = await counters(page);
-        await card('c1').locator('select').selectOption('details');
+        await card('c1').locator('[data-action="details"]').click();
         await customer.locator('#archives-table').waitFor();
         assert.deepEqual(await customer.locator('.archive-index').allTextContents(), ['20 m³ – 24 m³','0 m³ – 20 m³']);
         assert.equal(await customer.locator('#invoice-checks').count(), 0, 'les index sont dans chaque mois, sans liste dupliquée');
