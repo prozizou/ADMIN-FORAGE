@@ -88,8 +88,8 @@ const archiveReads = page => page.evaluate(root => ({
             await page.waitForFunction(() => document.getElementById('stats-summary')?.getAttribute('aria-busy') === 'false');
             assert.equal(await page.locator('#total-debt').innerText().then(s => s.replace(/\D/g, '')), '10500');
             assert.equal(await page.locator('#total-money').innerText(), '—');
-            assert.equal(await page.locator('#rc-ajust').innerText(), '—');
-            assert.equal(await page.locator('#releves-list .btn-paye').first().isEnabled(), true);
+            assert.equal(await page.locator('#rc-ajust').count(), 0);
+            assert.equal(await page.locator('#releves-list option[value="collect"]').first().isEnabled(), true);
             assert.deepEqual(await archiveReads(page), { get: [], listen: [] });
             assert.deepEqual(errors, []);
             await page.waitForSelector('#cycle-status button');

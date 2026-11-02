@@ -19,6 +19,7 @@
     var fb = null;               // { db, ref, get, update, push, onValue }
     var paths = null;
     var customerFactures = null;
+    var keepSubscriptionsOnResume = false;
     var ctx = { session: {}, getUid: function () { return null; } };
     var state = null;            // état comptable normalisé (dernier chargé)
     var migration = null;        // migration_comptable/v1 (ou null)
@@ -50,6 +51,7 @@
         ctx.getUid = o.getUid || ctx.getUid;
         paths = C.pathsFor(o.basePath || String(o.P.compteurs).replace(/\/compteurs$/, ''));
         customerFactures = o.customerFactures || null;
+        keepSubscriptionsOnResume = !!o.keepSubscriptionsOnResume;
         ensureStyle();
         return paths;
     }
@@ -136,7 +138,11 @@
         live.S = C.emptyState();
         NODES.forEach(attach);
         var y = Sync();
-        if (y) y.onResync(function (why) { return restart(why === 'reconnect' || why === 'pageshow-bfcache' || why === 'visible' || why === 'loader-retry' || why === 'badge'); });
+        if (y) y.onResync(function (why) {
+            var force = why === 'reconnect' || why === 'pageshow-bfcache' || why === 'visible' || why === 'loader-retry' || why === 'badge';
+            if (keepSubscriptionsOnResume && y._state.connected === true && lastInfo.status === 'ready' && (why === 'visible' || why === 'pageshow-bfcache')) force = false;
+            return restart(force);
+        });
         var ms = (root.__ASUFOR_SYNC && root.__ASUFOR_SYNC.hydrate) || 6000;
         live.hydrate = setTimeout(function () { if (!ready) hydrateMissing(); }, ms);
     }

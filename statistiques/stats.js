@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v74';
+const STATS_BUILD = 'v77';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -311,10 +311,65 @@ window.marquerNonPaye = function(key) {
     });
 };
 
-window.openDetails = function(key) { window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}&vue=factures`; };
-window.openReleve = function(key) {
-    window.location.href = `../compte/releve.html?c=${encodeURIComponent(key)}`;
-};
+// La page des statistiques reste active pendant la consultation du client.
+let customerFrame = null;
+let customerFocus = null;
+function customerLocation() {
+    const params = new URLSearchParams(location.search);
+    const key = params.get('client');
+    const view = params.get('vue');
+    return key && ['paiements', 'factures'].includes(view) ? { key, view } : null;
+}
+function closeCustomerView() {
+    if (!customerFrame) return;
+    customerFrame.remove(); customerFrame = null;
+    document.querySelector('.main-layout').inert = false;
+    document.body.classList.remove('customer-view-open');
+    if (customerFocus && customerFocus.isConnected) customerFocus.focus({preventScroll:true});
+    customerFocus = null;
+}
+function showCustomerView(key, view, push = true) {
+    if (push) {
+        const url = new URL(location.href);
+        url.searchParams.set('client', key); url.searchParams.set('vue', view);
+        history.pushState({ ...history.state, asuforCustomer: true }, '', url);
+    }
+    if (customerFrame && customerFrame.dataset.client === key && customerFrame.dataset.view === view) return;
+    closeCustomerView();
+    customerFocus = document.activeElement;
+    const layer = document.createElement('div');
+    layer.className = 'customer-view'; layer.dataset.client = key; layer.dataset.view = view;
+    layer.setAttribute('role', 'dialog'); layer.setAttribute('aria-modal', 'true');
+    layer.setAttribute('aria-label', view === 'factures' ? 'Factures du client' : 'Paiements du client');
+    const frame = document.createElement('iframe');
+    frame.id = 'customer-frame'; frame.title = layer.getAttribute('aria-label');
+    const url = new URL('../compte/releve.html', location.href);
+    url.searchParams.set('c', key); url.searchParams.set('embedded', '1');
+    if (view === 'factures') url.searchParams.set('vue', 'factures');
+    frame.src = url.href;
+    frame.setAttribute('allow', "public-key-credentials-get 'self'");
+    frame.addEventListener('load', () => frame.focus());
+    layer.appendChild(frame); customerFrame = layer;
+    document.body.appendChild(layer);
+    document.querySelector('.main-layout').inert = true;
+    document.body.classList.add('customer-view-open');
+}
+function returnFromCustomer() {
+    if (history.state && history.state.asuforCustomer) history.back();
+    else {
+        const url = new URL(location.href); url.searchParams.delete('client'); url.searchParams.delete('vue');
+        history.replaceState(history.state, '', url); closeCustomerView();
+    }
+}
+window.addEventListener('popstate', () => { const target = customerLocation(); if (target) showCustomerView(target.key, target.view, false); else closeCustomerView(); });
+window.addEventListener('message', event => {
+    if (event.origin !== location.origin || !customerFrame || event.source !== customerFrame.querySelector('iframe').contentWindow) return;
+    if (event.data && event.data.type === 'asufor:return-statistics') returnFromCustomer();
+});
+window.openDetails = key => showCustomerView(key, 'factures');
+window.openReleve = key => showCustomerView(key, 'paiements');
+const initialCustomer = customerLocation();
+if (initialCustomer) showCustomerView(initialCustomer.key, initialCustomer.view, false);
 
 // --- EXPORT CSV ---
 window.exportCSV = function() {
@@ -574,7 +629,7 @@ function syncAgents(force) {
 // La reprise demande les écoutes immédiatement, sans attendre les trois get() qui expiraient.
 let syncStarted = false;
 function resyncAll(reason) {
-    const force = ['manual', 'badge', 'loader-retry', 'visible', 'pageshow-bfcache', 'online'].includes(reason);
+    const force = ['manual', 'badge', 'loader-retry'].includes(reason) || ((!Sync || Sync._state.connected !== true) && ['visible', 'pageshow-bfcache', 'online'].includes(reason));
     loadDataForMonth(currentSelection, { silent: true, force });
     syncAgents(force);
     if (archivesRequested) loadBackups(document.getElementById('month-filter'), force);
@@ -603,7 +658,7 @@ window.startSync = function() {
         Sync.onState(() => { if (!statisticsReady()) scheduleStatisticsRender(); });
     }
     // ✅ v7 : grand livre comptable (lecture continue ; écritures via compta.js).
-    ComptaUI.init({ db, ref, get, update, push, onValue, P, session: JSON.parse(localStorage.getItem('asufor_session') || '{}'), getUid: () => auth.currentUser && auth.currentUser.uid });
+    ComptaUI.init({ db, ref, get, update, push, onValue, P, keepSubscriptionsOnResume: true, session: JSON.parse(localStorage.getItem('asufor_session') || '{}'), getUid: () => auth.currentUser && auth.currentUser.uid });
     ComptaUI.subscribe((st, mig, ready, info) => {
         ledgerReady = ready && (!info || info.status === 'ready');
         renderLedgerStatus(info);
@@ -739,7 +794,7 @@ function renderPendingList() {
 function renderPendingStatistics() {
     setStatisticsAvailability(false);
     currentFilteredData = [];
-    for (const id of ['total-money', 'total-debt', 'rc-facture', 'rc-arrieres', 'rc-avances', 'rc-ajust', 'rc-problemes', 'recap-pct', 'releves-ratio', 'releves-progress-pct']) {
+    for (const id of ['total-money', 'total-debt', 'recap-pct', 'releves-ratio', 'releves-progress-pct']) {
         document.getElementById(id).textContent = '—';
     }
     document.getElementById('rc-source').textContent = '';
@@ -889,15 +944,9 @@ window.applyFilter = function() {
         : fig.arrieres;
     document.getElementById('total-money').innerText = F(fig.encaisse);
     document.getElementById('total-debt').innerText = F(aReclamer);
-    setTxt('rc-facture', F(fig.facture));
-    setTxt('rc-facture-lbl', fig.previsionnel ? 'Facturé (prév.)' : 'Facturé');
-    setTxt('rc-arrieres', F(fig.arrieres));
-    setTxt('rc-avances', F(fig.avances));
-    setTxt('rc-ajust', (fig.ajustements > 0 ? '+' : '') + F(fig.ajustements));
-    setTxt('rc-problemes', String(fig.problemes));
     setTxt('rc-source', fig.historique
         ? 'Chiffres reconstitués depuis les archives (avant la comptabilité).'
-        : (migrated ? (currentCycleStart === null && monthSel === 'actuel' ? 'Soldes vérifiés. Date de dernière clôture en cours de vérification ; encaissé et ajustements indisponibles.' : 'Grand livre : encaissé depuis la dernière clôture.') : (!backupsLoaded ? 'Mois courant uniquement. Arriérés historiques indisponibles avant consultation des archives ou migration comptable.' : '')));
+        : (migrated ? (currentCycleStart === null && monthSel === 'actuel' ? 'Soldes vérifiés. Date de dernière clôture en cours de vérification ; encaissé et ajustements indisponibles.' : 'Paiements reçus depuis la dernière clôture.') : (!backupsLoaded ? 'Mois courant uniquement. Arriérés historiques indisponibles avant consultation des archives ou migration comptable.' : '')));
 
     const recapKnown = fig.encaisse !== null && aReclamer !== null;
     const recapTotal = recapKnown ? fig.encaisse + aReclamer : 0;
@@ -1066,7 +1115,7 @@ function comptaButtons(item, due) {
     const ready = ledgerReady && (!isArchiveView || backupsLoaded) && ComptaUI.isMigrated();
     const lock = ready ? '' : `disabled title="${ComptaUI.isMigrated() ? 'Chargement de la comptabilité…' : 'Migration comptable requise'}" style="opacity:.55;cursor:wait"`;
     const pay = canPay ? `<button class="btn-paye btn-sec" onclick="encaisser('${item.key}')" ${lock}><i class="fa-solid fa-hand-holding-dollar"></i><span>Encaisser</span></button>` : '';
-    const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Relevé : suivi et paiements par tranches"><i class="fa-solid fa-file-invoice"></i><span>Relevé</span></button>`;
+    const rel = `<button class="btn-edit btn-ghost" onclick="openReleve('${item.key}')" title="Paiements : suivi des versements"><i class="fa-solid fa-file-invoice"></i><span>Paiements</span></button>`;
     // ✅ v8 : correction d'un paiement saisi par erreur — réservé au président, visible seulement si
     // ce client a au moins un paiement valide. Toute la logique (contre-écriture, FIFO, audit) est
     // dans Compta.buildPaymentCancelOps ; ce bouton ne fait qu'ouvrir la fenêtre de confirmation.
@@ -1080,12 +1129,60 @@ function comptaButtons(item, due) {
     return pay + rel + details + cancel + unpay;
 }
 
+function compactActions(card, key) {
+    const actions = card.querySelector('.citem-actions');
+    if (!actions) return;
+    const names = { openEditModal: 'edit', encaisser: 'collect', openReleve: 'payments', openDetails: 'details', annulerEncaissement: 'cancel', marquerNonPaye: 'unpay' };
+    const select = document.createElement('select');
+    select.className = 'client-action-select'; select.dataset.clientActions = key;
+    select.setAttribute('aria-label', 'Actions pour ' + ((storeReleves[key] || {}).name || 'ce client'));
+    select.appendChild(new Option('Choisir une action…', ''));
+    actions.querySelectorAll('button, a').forEach(button => {
+        const handler = (button.getAttribute('onclick') || '').match(/^([a-zA-Z]+)\(/);
+        const phone = button.getAttribute('href');
+        const action = handler ? names[handler[1]] : phone && phone.startsWith('tel:') ? 'call' : null;
+        if (!action) return;
+        const label = action === 'payments' ? 'Paiements' : action === 'cancel' ? 'Annuler un paiement' : button.textContent.trim();
+        const option = new Option(label, action); option.disabled = !!button.disabled;
+        if (action === 'call') option.dataset.phone = phone.slice(4);
+        select.appendChild(option);
+    });
+    if (select.options.length === 1) { actions.textContent = 'Lecture seule'; return; }
+    const control = document.createElement('div'); control.className = 'client-action-control';
+    control.appendChild(select); actions.replaceChildren(control);
+}
+document.getElementById('releves-list').addEventListener('change', event => {
+    const select = event.target.closest('[data-client-actions]');
+    if (!select || !storeReleves[select.dataset.clientActions]) return;
+    const option = select.selectedOptions[0];
+    if (!option || option.disabled) return;
+    const action = select.value, key = select.dataset.clientActions, phone = option.dataset.phone;
+    select.value = '';
+    const handlers = { edit: window.openEditModal, collect: window.encaisser, payments: window.openReleve, details: window.openDetails, cancel: window.annulerEncaissement, unpay: window.marquerNonPaye };
+    if (action === 'call' && phone) window.location.href = 'tel:' + phone.replace(/[^0-9+]/g, '');
+    else if (handlers[action]) handlers[action](key);
+});
+
 function renderList() {
     if (!statisticsReady()) { renderPendingList(); return; }
     // ✅ FIX XSS : échappement de toute valeur dynamique injectée dans innerHTML.
     const esc = escHtml;
     const listDiv = document.getElementById('releves-list');
-    listDiv.innerHTML = "";
+    const previousCards = new Map([...listDiv.querySelectorAll(':scope > [data-counter-id]')].map(card => [card.dataset.counterId, card]));
+    const desiredCards = [];
+    function appendCard(candidate, key) {
+        candidate.dataset.counterId = key;
+        compactActions(candidate, key);
+        const previous = previousCards.get(key);
+        const markup = candidate.innerHTML;
+        const card = previous || candidate;
+        if (previous && (previous.__asuforMarkup !== markup || previous.className !== candidate.className)) {
+            previous.className = candidate.className;
+            previous.innerHTML = markup;
+        }
+        card.__asuforMarkup = markup;
+        desiredCards.push(card);
+    }
     document.getElementById('item-count').innerText = `${currentFilteredData.length} élément(s) trouvé(s)`;
     const dataToShow = currentFilteredData.slice(0, displayLimit);
 
@@ -1168,7 +1265,7 @@ function renderList() {
                 ${noteHtml}
                 <div class="citem-actions">${editOrLock}${callBtn}${comptaButtons(item, item.totalDu || 0)}</div>
             `;
-            listDiv.appendChild(div);
+            appendCard(div, item.key);
             return;
         }
 
@@ -1197,7 +1294,7 @@ function renderList() {
                 ${noteHtml}
                 ${fixOrLock ? `<div class="citem-actions">${fixOrLock}</div>` : ''}
             `;
-            listDiv.appendChild(div);
+            appendCard(div, item.key);
             return;
         }
 
@@ -1269,9 +1366,16 @@ function renderList() {
                 ${editBtn}
             </div>
         `;
-        listDiv.appendChild(div);
+        appendCard(div, item.key);
     });
 
+    const wanted = new Set(desiredCards);
+    [...listDiv.children].forEach(card => { if (!wanted.has(card)) card.remove(); });
+    let cursor = listDiv.firstElementChild;
+    desiredCards.forEach(card => {
+        if (card === cursor) cursor = cursor.nextElementSibling;
+        else listDiv.insertBefore(card, cursor);
+    });
     const btnLoadMore = document.getElementById('btn-load-more');
     if (currentFilteredData.length > displayLimit) {
         btnLoadMore.style.display = "block";
