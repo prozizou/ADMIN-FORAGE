@@ -687,7 +687,7 @@ async function main() {
             await check(`fiche client ${width}px : total du jour, boutons nommés et détails à la demande`, async () => {
                 await page.setViewportSize({ width, height: 780 });
                 const r = await page.evaluate(() => {
-                    const buttons = [...document.querySelectorAll('#btn-pay, #btn-details')];
+                    const buttons = [...document.querySelectorAll('#btn-pay')];
                     return {
                         over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                         minH: Math.min(...buttons.map(b => b.getBoundingClientRect().height)),
@@ -701,7 +701,7 @@ async function main() {
                 assert.ok(r.minH >= 44); assert.ok(r.named); assert.ok(r.detailsClosed);
                 assert.strictEqual(num(r.total), 500);
                 assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
-                assert.strictEqual(await page.locator('#btn-print, #btn-more, #menu, #btn-adj').count(), 0);
+                assert.strictEqual(await page.locator('#btn-details, #btn-print, #btn-more, #menu, #btn-adj').count(), 0);
                 assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(248, 250, 252)');
             });
         }
@@ -716,14 +716,11 @@ async function main() {
             await r.page.context().close();
         });
         await check('président : annulation motivée → paiement « annule » conservé, factures rouvertes', async () => {
-            await page.locator('details:has([data-cancel]) > summary').click();
             await page.click('[data-cancel]');
-            await page.fill('#mot', 'Billet refusé à la banque');
-            await page.click('#ok');
-            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('t-paye').textContent === '0 F', null, {timeout:8000});
             const F = (await db(page)).Asufor[FA];
             const p = F.paiements[paiementId];
-            assert.deepStrictEqual([p.statut, p.montant, p.motif_annulation], ['annule', 7000, 'Billet refusé à la banque']);
+            assert.deepStrictEqual([p.statut, p.montant, p.motif_annulation], ['annule', 7000, 'Erreur de saisie — annulation depuis le relevé']);
             assert.strictEqual(F.factures['2026-06_c1'].reste_a_payer, 5000);
             assert.strictEqual(F.soldes.c1.arrieres, 6000);
             assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_ANNULE'));

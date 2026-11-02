@@ -47,8 +47,6 @@ h2 { margin: 0; font-size: 1.1rem; line-height: 1.4; font-weight: 700; }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .pay-action { width: 100%; min-height: 52px; margin-top: 20px; font-size: .95rem; }
 .action-help { margin: 7px 0 0; text-align: center; font-size: .76rem; }
-#btn-details { width: 100%; margin-top: 14px; color: var(--primary); background: #f8faff; border-color: #dbe6ff; }
-#btn-details:hover:enabled { background: #eff4ff; border-color: #b8cdfb; }
 #retry-account { margin-top: 12px; }
 details { min-width: 0; }
 summary { min-height: 44px; padding: 12px 0; color: var(--primary); font-size: .85rem; font-weight: 600; cursor: pointer; }
@@ -70,10 +68,6 @@ summary { min-height: 44px; padding: 12px 0; color: var(--primary); font-size: .
 .simple-table tbody tr:not(.total-row):hover { background: #f8fafc; }
 #payments-table td.money { padding-top: 14px; font-weight: 650; }
 #payments-table time { color: #475569; font-size: .82rem; }
-.row-actions { position: relative; }
-.row-actions summary { padding: 8px 0; font-size: .72rem; }
-.row-menu { position: absolute; z-index: 10; top: 100%; left: 0; width: min(216px, 65vw); padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 28px rgb(15 23 42 / 12%); }
-.row-menu .btn { width: 100%; margin: 3px 0; }
 #archive-panel { grid-column: 1 / -1; }
 #archive-panel h2 { scroll-margin-top: 20px; }
 #archive-status { margin: 7px 0 18px; }
@@ -132,3 +126,11 @@ summary { min-height: 44px; padding: 12px 0; color: var(--primary); font-size: .
     .cui-row { flex-direction: column; gap: 0; }
     .cui-act { flex-wrap: wrap; }
 }
+
+.cui-remaining { margin: 18px 0 4px; color: var(--text-main); font-size: 1rem; font-weight: 650; line-height: 1.55; }
+.cancel-payment { display: flex; margin-top: 8px; min-height: 44px; padding: 8px 12px; font-size: .75rem; }
+.payment-cancelled td:first-child .sub { margin-top: 8px; font-size: .75rem; }
+.payment-cancelled td:nth-child(2) { color: var(--text-sub); text-decoration: line-through; }
+#payments-table time { display: block; white-space: normal; line-height: 1.5; }
+
+.cui-err:empty { display: none; }
