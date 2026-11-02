@@ -99,6 +99,14 @@ const session = JSON.parse(localStorage.getItem('asufor_session') || '{}');
 const role = session.role;
 const cid = new URLSearchParams(location.search).get('c');
 const detailsView = new URLSearchParams(location.search).get('vue') === 'factures';
+const embedded = window.parent !== window && new URLSearchParams(location.search).get('embedded') === '1';
+function returnToStatistics(event) {
+    if (event) event.preventDefault();
+    if (embedded) window.parent.postMessage({type:'asufor:return-statistics'}, location.origin);
+    else window.location.href = '../statistiques/stats.html';
+}
+document.querySelector('a.back').addEventListener('click', returnToStatistics);
+document.getElementById('compta-migration').addEventListener('click', event => { if (event.target.closest('a')) returnToStatistics(event); });
 document.getElementById('client-view').dataset.view = detailsView ? 'factures' : 'versements';
 document.getElementById('statement').hidden = detailsView;
 document.getElementById('payments-section').hidden = detailsView;
@@ -319,12 +327,15 @@ function renderArchives(acc) {
         const amount = f ? f.montant_net : old.montant;
         const paid = f ? f.montant_paye : B.isPaid(record) ? amount : 0;
         const due = f ? f.reste_a_payer : Math.max(0, amount - paid);
-        return `<tr><th scope="row">${esc(cyc(month))}</th><td class="money">${!f && old.anomalie ? 'À vérifier' : fcfa(amount)}</td><td class="money good">${fcfa(paid)}</td><td class="money">${!f && old.anomalie ? '—' : fcfa(due)}</td></tr>`;
-    }).join('')}</tbody></table><details id="invoice-checks"><summary>Informations et vérification des factures</summary>${acc.factures.map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>`;
+        const previous = record && record.last_index != null ? record.last_index : f && f.ancien_index;
+        const next = record && record.new_index != null ? record.new_index : f && f.nouvel_index;
+        const indexText = value => value == null || value === '' || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('fr-FR', {maximumFractionDigits:3}) + ' m³';
+        return `<tr><th scope="row"><span>${esc(cyc(month))}</span><span class="archive-index">${indexText(previous)} – ${indexText(next)}</span></th><td class="money">${!f && old.anomalie ? 'À vérifier' : fcfa(amount)}</td><td class="money good">${fcfa(paid)}</td><td class="money">${!f && old.anomalie ? '—' : fcfa(due)}</td></tr>`;
+    }).join('')}</tbody></table>${acc.factures.some(f => f.probleme && f.probleme.actif) ? `<details id="invoice-checks"><summary>Relevés à vérifier</summary>${acc.factures.filter(f => f.probleme && f.probleme.actif).map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>` : ''}`;
 }
 
 document.getElementById('retry-archives').onclick = () => loadCustomerArchives(true);
-document.getElementById('hide-archives').onclick = () => { window.location.href = '../statistiques/stats.html'; };
+document.getElementById('hide-archives').onclick = returnToStatistics;
 function withMotif(title, label, onOk, explanation = '') {
     const m = UI.modal(`<h3>${esc(title)}</h3>${explanation ? `<p class="cui-sub">${esc(explanation)}</p>` : ''}<label for="mot">${esc(label)}</label><textarea id="mot" rows="3" maxlength="300"></textarea><div class="cui-err" id="err"></div><div class="cui-act"><button class="cui-ghost" id="no">Retour</button><button class="cui-primary" id="ok">Confirmer</button></div>`);
     m.q('#mot').focus();
