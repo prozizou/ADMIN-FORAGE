@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v77';
+const STATS_BUILD = 'v78';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -882,12 +882,12 @@ window.applyFilter = function() {
                 item.calculatedAmount = st.montant_net;
                 item.factureStatut = st.statut;
                 item.totalDu = st.reste_a_payer + anterieurs;
-                item.estSolde = st.statut === 'payee' || st.statut === 'annulee';
+                item.estSolde = st.statut === 'payee';
             } else {
                 item.calculatedAmount = 0;
                 item.factureStatut = null;
                 item.totalDu = anterieurs;
-                item.estSolde = anterieurs <= 0;
+                item.estSolde = false; // aucune facture pour ce mois
             }
             item.arriere = anterieurs;
         } else {
@@ -897,6 +897,9 @@ window.applyFilter = function() {
             item.totalDu = stmt.total;
             item.estSolde = window.Billing.isPaid(item);
         }
+        // Un compte soldé ou une avance ne constitue pas une facture payée
+        // tant qu'aucun relevé valide n'existe pour la période affichée.
+        item.estSolde = item.estSolde && parseFloat(item.new_index || 0) > 0 && !cur.anomalie;
         item.hasAnomalie = (parseFloat(item.new_index || 0) > 0 && cur.anomalie) || window.Billing.isUnusualConsumption(item);
         item.hasValidPayment = compteursAvecPaiement.has(item.key);
     });
