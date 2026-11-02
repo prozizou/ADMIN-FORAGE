@@ -24,6 +24,7 @@ async function open(browser, base, tree = example(), role = 'président', suffix
 async function versement(page, amount) {
     await page.click('#btn-pay');
     await page.waitForSelector('#cui-montant');
+    assert.ok(await page.evaluate(() => document.querySelector('.cui-box').scrollWidth <= document.querySelector('.cui-box').clientWidth + 1), 'la fenêtre de versement ne déborde pas');
     assert.equal(await page.inputValue('#cui-montant'), '', 'un versement demande la somme reçue, sans préremplir le total');
     await page.fill('#cui-montant', String(amount));
     await page.click('#cui-ok');
@@ -37,6 +38,7 @@ async function versement(page, amount) {
     try {
         {
             const { page, ctx, errors } = await open(browser, base);
+            await page.setViewportSize({ width: 320, height: 780 });
             assert.equal(num(await page.locator('#t-facture').innerText()), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             await versement(page, 2000);
@@ -46,11 +48,15 @@ async function versement(page, amount) {
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '1 000 F');
             assert.equal(num(await page.locator('#t-paye').innerText()), 5000);
             assert.deepEqual(await page.locator('#payments-table tbody tr').evaluateAll(rows => rows.map(row => row.cells[2].textContent.trim())), ['2 000 F', '5 000 F']);
-            for (const width of [320, 360, 390, 768]) {
+            for (const width of [320, 360, 390, 768, 1024, 1440]) {
                 await page.setViewportSize({ width, height: 900 });
                 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'pas de débordement à ' + width);
                 assert.ok(await page.locator('#btn-pay').evaluate(el => el.getBoundingClientRect().height >= 44));
-                if (width === 390) await page.screenshot({ path: '/tmp/releve-tranches-390.png', fullPage: true });
+                assert.equal(await page.locator('#btn-print, #btn-more, #menu, #btn-adj, #mi-refresh, #mi-copy').count(), 0);
+                const theme = await page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, card: getComputedStyle(document.querySelector('.card')).backgroundColor, mode: getComputedStyle(document.documentElement).colorScheme, columns: getComputedStyle(document.getElementById('client-view')).gridTemplateColumns.split(' ').length }));
+                assert.equal(theme.bg, 'rgb(248, 250, 252)'); assert.equal(theme.card, 'rgb(255, 255, 255)'); assert.equal(theme.mode, 'light');
+                assert.equal(theme.columns, width >= 960 ? 2 : 1);
+                if (width === 390 || width === 1440) await page.screenshot({ path: '/tmp/releve-light-' + width + '.png', fullPage: true });
             }
             const saved = await page.evaluate(() => window.__DB.tree);
             const reopened = await open(browser, base, saved);
@@ -59,8 +65,9 @@ async function versement(page, amount) {
             await reopened.ctx.close();
             const payments = await page.evaluate(() => Object.values(window.__DB.tree.Asufor.Asufor_a.paiements));
             assert.deepEqual(payments.map(p => p.montant), [2000, 3000], 'les paiements successifs restent distincts et ne sont pas écrasés');
-            await page.evaluate(() => { window.dispatchEvent(new Event('beforeprint')); window.dispatchEvent(new Event('afterprint')); });
-            assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] }, 'imprimer ne charge aucune archive');
+            await page.emulateMedia({ colorScheme: 'dark' });
+            assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), 'light', 'la vue reste claire même si le téléphone préfère le mode sombre');
+            assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             await versement(page, 1000);
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '0 F');
             assert.equal(await page.locator('#btn-pay').isDisabled(), true);
@@ -82,7 +89,7 @@ async function versement(page, amount) {
             assert.equal(num(await page.locator('#t-paye').innerText()), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             assert.deepEqual(errors, []);
-            console.log('✓ 6 000 − 2 000 − 3 000 = 1 000, cumul persistant, solde final et impression sans archives');
+            console.log('✓ 6 000 − 2 000 − 3 000 = 1 000, cumul persistant, solde final, thème clair et mise en page 320–1440 px');
             await ctx.close();
         }
         {
@@ -125,7 +132,7 @@ async function versement(page, amount) {
             assert.deepEqual(reads.listeners, []);
             assert.equal(await page.locator('#archives-table tbody tr').count(), 2, 'un mois sans facture du client n’apparaît pas');
             assert.match(await page.locator('#archives-table').innerText(), /Juillet 2026/);
-            for (const width of [320, 390]) {
+            for (const width of [320, 390, 768, 1440]) {
                 await page.setViewportSize({width, height:900});
                 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'tableau des archives lisible à ' + width);
             }
@@ -147,6 +154,7 @@ async function versement(page, amount) {
             assert.equal(num(await page.locator('#total-due').innerText()), 8000);
             assert.equal(await page.locator('#btn-pay').isVisible(), false);
             assert.equal(await page.locator('#statement').isVisible(), false, 'Détails ouvre seulement la consultation des factures');
+            assert.equal(await page.locator('#btn-print, #btn-more, #menu').count(), 0);
             assert.equal(await page.locator('#payments-section').isVisible(), false);
             assert.equal(await page.locator('#archives-table').count(), 0, 'aucun tableau d’archives incomplet n’est affiché');
             await page.evaluate(() => { window.__DB.failShallow = false; });
