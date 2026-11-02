@@ -687,7 +687,7 @@ async function main() {
             await check(`fiche client ${width}px : total du jour, boutons nommés et détails à la demande`, async () => {
                 await page.setViewportSize({ width, height: 780 });
                 const r = await page.evaluate(() => {
-                    const buttons = [...document.querySelectorAll('#btn-pay, #btn-print, #btn-more')];
+                    const buttons = [...document.querySelectorAll('#btn-pay, #btn-details')];
                     return {
                         over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
                         minH: Math.min(...buttons.map(b => b.getBoundingClientRect().height)),
@@ -701,10 +701,8 @@ async function main() {
                 assert.ok(r.minH >= 44); assert.ok(r.named); assert.ok(r.detailsClosed);
                 assert.strictEqual(num(r.total), 500);
                 assert.match(r.meta, /Compteur n°1/); assert.match(r.meta, /Nord/);
-                await page.click('#btn-more');
-                assert.ok(await page.isVisible('#menu'));
-                await page.keyboard.press('Escape');
-                assert.ok(!(await page.isVisible('#menu')));
+                assert.strictEqual(await page.locator('#btn-print, #btn-more, #menu, #btn-adj').count(), 0);
+                assert.strictEqual(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), 'rgb(248, 250, 252)');
             });
         }
         if (true) { await page.setViewportSize({ width: 360, height: 780 }); await page.screenshot({ path: (process.env.SHOT_DIR || '/tmp') + '/releve-360.png' }); }
@@ -730,23 +728,6 @@ async function main() {
             assert.strictEqual(F.soldes.c1.arrieres, 6000);
             assert.ok(Object.values(F.audit_comptable).some(e => e.action === 'PAIEMENT_ANNULE'));
         });
-        await check('ajustement : remise validée par le président (motif obligatoire), facture figée intacte', async () => {
-            await page.click('#btn-more');
-            await page.click('#btn-adj');
-            await page.selectOption('#typ', 'remise');
-            await page.fill('#mnt', '500');
-            await page.click('#ok');
-            await page.waitForFunction(() => /motif/i.test(document.getElementById('err').textContent));
-            await page.fill('#mot', 'Fuite sur le réseau public');
-            await page.click('#ok');
-            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
-            await page.waitForFunction(() => /Réduction de facture/.test(document.getElementById('corrections').textContent), null, { timeout: 8000 });
-            const F = (await db(page)).Asufor[FA];
-            const j = Object.values(F.ajustements)[0];
-            assert.deepStrictEqual([j.type, j.statut, j.montant], ['remise', 'valide', 500]);
-            const f = F.factures[j.facture_id];
-            assert.strictEqual(f.montant_net, f.montant_initial - 500);
-        });
         await check('aucune erreur JavaScript (relevé)', () => assert.deepStrictEqual(errors, []));
         await page.context().close();
     }
@@ -754,19 +735,9 @@ async function main() {
         const { page } = await newPage(browser, 'trésorier', JSON.parse(JSON.stringify(afterPayment)));
         await page.goto(base + '/compte/releve.html?c=c1');
         await page.waitForSelector('#timeline .ev', { timeout: 8000 });
-        await check('trésorier : ne peut pas annuler un paiement ; son ajustement reste « en attente »', async () => {
-            assert.strictEqual(await page.$('[data-cancel]'), null);
-            await page.click('#btn-more');
-            await page.click('#btn-adj');
-            await page.selectOption('#typ', 'majoration');
-            await page.fill('#mnt', '300');
-            await page.fill('#mot', 'Frais de réouverture');
-            await page.click('#ok');
-            await page.waitForSelector('.cui-ov', { state: 'detached', timeout: 8000 });
-            await page.waitForFunction(() => /en attente/i.test(document.getElementById('corrections').textContent), null, { timeout: 8000 });
-            const j = Object.values((await db(page)).Asufor[FA].ajustements)[0];
-            assert.strictEqual(j.statut, 'en_attente');
-            assert.strictEqual(await page.$('[data-validate]'), null);
+        await check('trésorier : aucun menu supprimé ni commande d’annulation réservée au président', async () => {
+            assert.strictEqual(await page.locator('#btn-print, #btn-more, #btn-adj, [data-cancel]').count(), 0);
+            assert.strictEqual(num(await page.textContent('#t-paye')), 7000);
         });
         await page.context().close();
     }

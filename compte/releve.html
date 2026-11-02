@@ -27,108 +27,13 @@
     <script>
         if (typeof window.checkAccess === 'function') window.checkAccess(['président', 'secrétaire', 'trésorier']);
     </script>
-    <style>
-        :root { color-scheme:dark; --bg:#0a0f1c; --surface:#121a2b; --surface-2:#182238; --text-main:#eef3fc; --text-sub:#b3bfd2; --border:#2b3952; --primary:#3b82f6; --primary-strong:#2563eb; --success:#6ee7b7; --danger:#fca5a5; --warn:#fcd34d; }
-        * { box-sizing:border-box; }
-        body { margin:0; background:var(--bg); color:var(--text-main); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
-        button,input,select,textarea { font:inherit; }
-        [hidden] { display:none !important; }
-        button,a,summary { -webkit-tap-highlight-color:transparent; }
-        button:focus-visible,a:focus-visible,summary:focus-visible { outline:3px solid #93c5fd; outline-offset:3px; }
-        .wrap { max-width:680px; margin:auto; padding:16px 12px 64px; }
-        .card { background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:18px; margin-bottom:16px; min-width:0; }
-        .top { display:flex; align-items:flex-start; gap:12px; }
-        .back { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:44px; color:var(--text-sub); font-size:.85rem; text-decoration:none; flex:none; }
-        .who { flex:1; min-width:0; }
-        .eyebrow { color:var(--text-sub); font-size:.8rem; margin-bottom:4px; }
-        h1 { margin:0; font-size:1.35rem; line-height:1.3; overflow-wrap:anywhere; }
-        h2 { margin:0; font-size:1.1rem; }
-        .chips { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:6px; }
-        .chip { display:inline-flex; gap:5px; align-items:center; font-size:.8rem; color:var(--text-sub); overflow-wrap:anywhere; max-width:100%; }
-        .sub { color:var(--text-sub); font-size:.88rem; line-height:1.5; }
-        .balance { margin-top:22px; padding:18px; background:linear-gradient(135deg,#192e50,#152138); border:1px solid #375782; border-radius:16px; }
-        .balance-label { font-size:1rem; font-weight:700; }
-        .balance-value { display:block; font-size:clamp(2rem,8vw,2.8rem); font-weight:850; line-height:1.25; margin:6px 0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-        .balance-state { margin:0; font-size:.88rem; color:var(--text-sub); }
-        .breakdown { margin:16px 0 0; padding-top:12px; border-top:1px solid #375782; }
-        .breakdown > div { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin:6px 0; font-size:.88rem; }
-        .breakdown dt { color:var(--text-sub); }
-        .breakdown dd { margin:0; font-weight:700; text-align:right; white-space:nowrap; }
-        #provisoire { margin:10px 0 0; font-size:.8rem; }
-        .good { color:var(--success); } .bad { color:var(--danger); } .warn { color:var(--warn); }
-        .actions { display:flex; gap:8px; margin-top:12px; }
-        .btn { min-width:0; min-height:48px; border:1px solid var(--border); border-radius:12px; padding:10px 14px; background:var(--surface-2); color:var(--text-main); font-size:.9rem; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; text-align:center; line-height:1.4; }
-        .btn.primary { background:var(--primary-strong); border-color:var(--primary-strong); color:white; }
-        .btn.danger { color:var(--danger); }
-        .btn:disabled { opacity:.5; cursor:not-allowed; }
-        .pay-action { width:100%; min-height:56px; font-size:1rem; margin-top:16px; }
-        .action-help { text-align:center; margin:6px 0 0; font-size:.8rem; }
-        .secondary-actions { display:grid; grid-template-columns:1fr 1fr; position:relative; }
-        .menu { display:none; position:absolute; top:calc(100% + 8px); right:0; width:min(320px,100%); background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:8px; z-index:20; box-shadow:0 12px 32px #0008; }
-        .menu.open { display:block; }
-        .menu a,.menu button { display:flex; align-items:center; gap:10px; width:100%; min-height:48px; padding:10px; border:0; border-radius:8px; background:none; color:var(--text-main); text-align:left; font-size:.9rem; text-decoration:none; cursor:pointer; }
-        .menu a:hover,.menu button:hover { background:#ffffff0a; }
-        details { min-width:0; }
-        summary { cursor:pointer; min-height:48px; padding:12px 0; color:#bfdbfe; font-size:.9rem; font-weight:650; }
-        .account-details { margin-top:12px; border-top:1px solid var(--border); }
-        .kpis { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:10px 0; }
-        .kpi { border:1px solid var(--border); border-radius:12px; padding:12px; min-width:0; }
-        .kpi .l { font-size:.8rem; color:var(--text-sub); }
-        .kpi .v { font-weight:750; font-size:1rem; overflow-wrap:anywhere; }
-        .history-head { margin-bottom:16px; }
-        .history-head p { margin:4px 0 0; }
-        .ev { padding:0 0 14px; min-width:0; }
-        .ev:last-child { padding:0; }
-        .ev .box { border:1px solid var(--border); border-radius:14px; padding:14px; background:var(--surface-2); min-width:0; }
-        .ev .h { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
-        .ev .t { font-size:.95rem; font-weight:750; overflow-wrap:anywhere; min-width:0; }
-        .ev .amt { flex:none; font-size:1rem; font-weight:800; white-space:nowrap; }
-        .ev .d { font-size:.8rem; color:var(--text-sub); margin-top:6px; overflow-wrap:anywhere; }
-        .ev .m { margin-top:8px; font-size:.88rem; overflow-wrap:anywhere; }
-        .ev .pr { display:flex; flex-wrap:wrap; gap:6px 18px; margin-top:10px; font-size:.88rem; }
-        .event-details { border-top:1px solid var(--border); margin-top:12px; }
-        .event-details .actions { flex-wrap:wrap; }
-        .event-details .actions .btn { flex:1 1 auto; }
-        .ev ul { padding-left:20px; font-size:.88rem; }
-        .pill { display:inline-block; font-size:.75rem; padding:3px 8px; border-radius:6px; font-weight:700; margin-top:6px; background:#93a4bc20; color:var(--text-sub); }
-        .pill.payee,.pill.valide { color:var(--success); background:#34d39918; }
-        .pill.ouverte { color:var(--danger); background:#f8717118; }
-        .pill.partielle,.pill.en_attente { color:var(--warn); background:#fbbf2418; }
-        .notice { border-radius:10px; background:#f59e0b15; color:#fde68a; padding:10px 12px; margin-top:12px; font-size:.85rem; }
-        .notice p { margin:4px 0; }
-        .empty { color:var(--text-sub); padding:16px 0; font-size:.9rem; }
-        #history-more { width:100%; margin-top:12px; }
-        .status { margin-top:12px; font-size:.88rem; color:var(--warn); }
-        @media (max-width:359px) { .card { padding:14px; } .balance { padding:14px; } .back span { font-size:.75rem; } .ev .h { flex-wrap:wrap; } .breakdown > div { font-size:.8rem; } }
-        .simple-table { width:100%; border-collapse:collapse; font-size:.9rem; margin-top:12px; }
-        .simple-table th,.simple-table td { padding:11px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; overflow-wrap:anywhere; }
-        .simple-table th { font-weight:650; }
-        .simple-table .money { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
-        .simple-table .total-row { background:#3b82f612; font-weight:800; }
-        .simple-table .total-row td { font-size:1.2rem; }
-        .simple-table caption { text-align:left; font-size:.85rem; color:var(--text-sub); margin-bottom:8px; }
-        .simple-table thead th { color:var(--text-sub); font-size:.8rem; }
-        .row-actions summary { font-size:.75rem; padding:6px 0; min-height:44px; }
-        .row-actions { position:relative; }
-        .row-menu { position:absolute; z-index:10; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:6px; width:200px; box-shadow:0 8px 24px #0008; }
-        .row-menu .btn { width:100%; margin:3px 0; }
-        #archives-table { font-size:.8rem; }
-        #archives-table th,#archives-table td { padding:10px 4px; }
-        #archive-panel h2 { scroll-margin-top:16px; }
-        .archive-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-        @media print {
-            :root { color-scheme:light; --bg:white; --surface:white; --surface-2:white; --text-main:black; --text-sub:#444; --border:#aaa; --success:#166534; --danger:#991b1b; --warn:#854d0e; }
-            .no-print,.actions,.ev .btn,.menu,summary { display:none !important; }
-            .wrap { max-width:none; padding:0; } .card { break-inside:avoid; } .balance { background:white; border-color:#aaa; }
-            details > * { display:block !important; } .notice { background:white; color:#444; }
-        }
-    </style>
+    <link rel="stylesheet" href="releve.css">
 </head>
 <body>
-<main class="wrap">
+<main class="wrap" id="client-view">
     <section class="card" aria-labelledby="client">
         <div class="top">
-            <a class="back no-print" href="../statistiques/stats.html"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour</span></a>
+            <a class="back" href="../statistiques/stats.html"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Retour</span></a>
             <div class="who">
                 <div class="eyebrow">Fiche client</div>
                 <h1 id="client">Chargement…</h1>
@@ -137,7 +42,7 @@
         </div>
         <div id="compta-migration" style="display:none"></div>
         <div id="statement">
-        <h2 style="margin-top:20px" id="statement-title">Paiements par tranches</h2>
+        <h2 id="statement-title">Paiements par tranches</h2>
         <p class="sub" id="statement-help">Versements cumulés, arriérés compris.</p>
         <div id="balance" aria-busy="true">
             <table class="simple-table" id="statement-table">
@@ -155,21 +60,10 @@
         </div>
         </div>
         <div id="account-status" class="status" role="status" hidden></div>
-        <button class="btn no-print" id="retry-account" hidden>Réessayer le chargement</button>
-        <button class="btn primary pay-action no-print" id="btn-pay" hidden disabled><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i><span>Ajouter un versement</span></button>
-        <p class="sub action-help no-print" id="pay-help" hidden>Saisissez uniquement la somme reçue aujourd’hui.</p>
-        <button class="btn no-print" id="btn-details" style="width:100%;margin-top:12px" disabled>Détails — factures archivées</button>
-        <div class="actions secondary-actions no-print">
-            <button class="btn" id="btn-print" onclick="window.print()" disabled><i class="fa-solid fa-print" aria-hidden="true"></i><span>Imprimer la fiche</span></button>
-            <button class="btn" id="btn-more" aria-haspopup="true" aria-expanded="false" aria-controls="menu"><span>Autres actions</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>
-            <div class="menu" id="menu">
-                <button id="btn-adj" hidden><i class="fa-solid fa-pen" aria-hidden="true"></i>Corriger une facture</button>
-                <a href="../statistiques/stats.html"><i class="fa-solid fa-chart-column" aria-hidden="true"></i>Revenir aux statistiques</a>
-                <button id="mi-refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i>Actualiser le compte</button>
-                <button id="mi-copy"><i class="fa-regular fa-copy" aria-hidden="true"></i>Copier le n° de compteur</button>
-            </div>
-        </div>
-        <p class="sub no-print" id="action-feedback" role="status" hidden></p>
+        <button class="btn" id="retry-account" hidden>Réessayer le chargement</button>
+        <button class="btn primary pay-action" id="btn-pay" hidden disabled><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i><span>Ajouter un versement</span></button>
+        <p class="sub action-help" id="pay-help" hidden>Saisissez uniquement la somme reçue aujourd’hui.</p>
+        <button class="btn" id="btn-details" disabled>Détails — factures archivées</button>
     </section>
     <section class="card" id="payments-section" aria-labelledby="history-title">
         <h2 id="history-title">Versements du client</h2>
@@ -180,7 +74,7 @@
         <h2 id="archive-title">Factures archivées de ce client</h2>
         <p class="sub" id="archive-status" role="status"></p>
         <div id="archive-content" aria-busy="false"></div>
-        <div class="archive-toolbar no-print">
+        <div class="archive-toolbar">
             <button class="btn" id="retry-archives" hidden>Réessayer les factures</button>
             <button class="btn" id="hide-archives">Fermer les détails</button>
         </div>
@@ -206,11 +100,11 @@ const session = JSON.parse(localStorage.getItem('asufor_session') || '{}');
 const role = session.role;
 const cid = new URLSearchParams(location.search).get('c');
 const detailsView = new URLSearchParams(location.search).get('vue') === 'factures';
+document.getElementById('client-view').dataset.view = detailsView ? 'factures' : 'versements';
 document.getElementById('statement').hidden = detailsView;
 document.getElementById('payments-section').hidden = detailsView;
 if (detailsView) {
     document.querySelector('.eyebrow').textContent = 'Factures archivées';
-    document.getElementById('btn-print').querySelector('span').textContent = 'Imprimer les factures';
 }
 let releve = null;
 let releveLoaded = false;
@@ -269,10 +163,8 @@ function render() {
     document.getElementById('btn-pay').hidden = detailsView || !UI.canCollect();
     document.getElementById('btn-pay').disabled = !showBalance || du.total_du <= 0;
     document.getElementById('pay-help').hidden = detailsView || !UI.canCollect() || (showBalance && du.total_du <= 0);
-    document.getElementById('btn-print').disabled = detailsView ? !(ready && archiveState === 'ready') : !showBalance || archiveState === 'loading' || (archiveRequested && archiveState === 'error');
     document.getElementById('btn-details').disabled = !ready;
     document.getElementById('btn-details').hidden = detailsView;
-    document.getElementById('btn-adj').hidden = !(UI.canCollect() && migrated && ready);
     if (UI.isReady() && info.status === 'ready') {
         const migration = document.getElementById('compta-migration');
         migration.style.display = migrated ? 'none' : '';
@@ -286,7 +178,7 @@ function render() {
         const valid = p.statut === 'valide';
         if (valid) cumul += p.montant;
         return `<tr class="ev paiement"><td><time datetime="${esc(p.date_paiement)}">${new Date(p.date_paiement).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit'})}</time>
-            <details class="row-actions no-print" data-payment="${esc(p.paiement_id)}"><summary>Reçu / actions</summary><div class="row-menu">
+            <details class="row-actions" data-payment="${esc(p.paiement_id)}"><summary>Reçu / actions</summary><div class="row-menu">
                 <button class="btn" data-recu="${esc(p.paiement_id)}">Voir le reçu</button>
                 ${valid && UI.isPresident() ? `<button class="btn danger" data-cancel="${esc(p.paiement_id)}">Annuler ce paiement</button>` : ''}
                 <p class="sub">Reçu n°${esc(p.numero_recu)} · ${esc(C.MODES_LABEL[p.mode] || p.mode)}</p>
@@ -435,17 +327,12 @@ function renderArchives(acc) {
         const paid = f ? f.montant_paye : B.isPaid(record) ? amount : 0;
         const due = f ? f.reste_a_payer : Math.max(0, amount - paid);
         return `<tr><th scope="row">${esc(cyc(month))}</th><td class="money">${!f && old.anomalie ? 'À vérifier' : fcfa(amount)}</td><td class="money good">${fcfa(paid)}</td><td class="money">${!f && old.anomalie ? '—' : fcfa(due)}</td></tr>`;
-    }).join('')}</tbody></table><details id="invoice-checks"><summary>Informations et vérification des factures</summary>${acc.factures.map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn no-print" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>`;
+    }).join('')}</tbody></table><details id="invoice-checks"><summary>Informations et vérification des factures</summary>${acc.factures.map(f => `<div class="m"><strong>Facture ${esc(cyc(f.cycle))}</strong><p class="sub">${f.ancien_index != null ? `Index ${esc(f.ancien_index)} → ${esc(f.nouvel_index)} · ${esc(f.consommation)} m³` : ''}</p>${f.probleme && f.probleme.actif ? `<p class="notice">${f.probleme.resolu ? 'Relevé vérifié' : 'Consommation élevée : ' + esc(f.probleme.valeur_m3) + ' m³'}</p>${!f.probleme.resolu && (UI.isPresident() || role === 'secrétaire') ? `<button class="btn" data-resolve="${esc(f.facture_id)}">Marquer le relevé vérifié</button>` : ''}` : ''}</div>`).join('')}</details>`;
 }
 
 document.getElementById('btn-details').onclick = () => { loadCustomerArchives(); document.getElementById('archive-panel').scrollIntoView({behavior:'smooth',block:'start'}); };
 document.getElementById('retry-archives').onclick = () => loadCustomerArchives(true);
 document.getElementById('hide-archives').onclick = () => { if (detailsView) { window.location.href = '../statistiques/stats.html'; return; } document.getElementById('archive-panel').hidden = true; archiveRequested = false; render(); document.getElementById('btn-details').focus(); };
-// Imprimer le relevé n'ouvre et ne télécharge jamais les archives.
-let printOpenDetails = null;
-window.addEventListener('beforeprint', () => { printOpenDetails = new Set([...document.querySelectorAll('details[open]')]); document.querySelectorAll('details:not(.row-actions)').forEach(el => { el.open = true; }); });
-window.addEventListener('afterprint', () => { if (printOpenDetails) document.querySelectorAll('details').forEach(el => { el.open = printOpenDetails.has(el); }); printOpenDetails = null; });
-
 function withMotif(title, label, onOk, explanation = '') {
     const m = UI.modal(`<h3>${esc(title)}</h3>${explanation ? `<p class="cui-sub">${esc(explanation)}</p>` : ''}<label for="mot">${esc(label)}</label><textarea id="mot" rows="3" maxlength="300"></textarea><div class="cui-err" id="err"></div><div class="cui-act"><button class="cui-ghost" id="no">Retour</button><button class="cui-primary" id="ok">Confirmer</button></div>`);
     m.q('#mot').focus();
@@ -455,36 +342,6 @@ function withMotif(title, label, onOk, explanation = '') {
         if (motif.length < 3) { m.q('#err').textContent = 'Le motif est obligatoire.'; return; }
         m.q('#ok').disabled = true;
         onOk(motif).then(() => { m.close(); render(); }, (e) => { m.q('#ok').disabled = false; m.q('#err').textContent = e.message || String(e); });
-    };
-}
-
-function openAdjustment() {
-    const acc = C.computeAccount(UI.getState(), cid);
-    const fs = acc.factures.filter(f => !f.annulee);
-    if (!fs.length) { toast('Aucune facture à corriger pour ce client.'); return; }
-    const pres = role === 'président';
-    const m = UI.modal(`<h3>Corriger une facture</h3><p class="cui-sub">${pres ? 'Expliquez la correction. Elle restera enregistrée dans l’historique.' : 'Cette correction devra être approuvée par le président.'}</p>
-        <label for="fac">Facture</label><select id="fac">${fs.map(f => `<option value="${esc(f.facture_id)}">${esc(cyc(f.cycle))} — ${fcfa(f.montant_net)} (reste à payer : ${fcfa(f.reste_a_payer)})</option>`).join('')}</select>
-        <label for="typ">Que souhaitez-vous faire ?</label><select id="typ"><option value="remise">Réduire le montant (remise)</option><option value="majoration">Ajouter un montant (frais)</option><option value="correction">Autre correction (+ ou −)</option><option value="annulation">Annulation de la facture</option></select>
-        <div id="amount-field"><label for="mnt" id="amount-label">Somme à retirer de la facture (F)</label><input id="mnt" type="number" inputmode="decimal" step="1" aria-describedby="amount-help"></div><p class="cui-sub" id="amount-help"></p>
-        <label for="mot">Pourquoi cette correction ? (obligatoire)</label><textarea id="mot" rows="2" maxlength="300"></textarea>
-        ${pres ? '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="val" checked style="width:auto"> Appliquer la correction maintenant</label>' : ''}
-        <div class="cui-err" id="err"></div>
-        <div class="cui-act"><button class="cui-ghost" id="no">Retour</button><button class="cui-primary" id="ok">Enregistrer</button></div>`);
-    const syncType = () => {
-        const type = m.q('#typ').value;
-        m.q('#mnt').disabled = type === 'annulation';
-        m.q('#amount-field').hidden = type === 'annulation';
-        m.q('#amount-label').textContent = { remise: 'Somme à retirer de la facture (F)', majoration: 'Somme à ajouter à la facture (F)', correction: 'Somme à ajouter (+) ou à retirer (−), en F', annulation: 'Montant' }[type];
-        m.q('#amount-help').textContent = { remise: 'Saisissez la somme à retirer de la facture.', majoration: 'Saisissez la somme à ajouter à la facture.', correction: 'Saisissez un montant négatif pour réduire la facture, ou positif pour l’augmenter.', annulation: 'La facture sera annulée. Un motif est obligatoire.' }[type];
-    };
-    m.q('#typ').onchange = syncType; syncType();
-    m.q('#fac').focus();
-    m.q('#no').onclick = m.close;
-    m.q('#ok').onclick = () => {
-        m.q('#ok').disabled = true; m.q('#err').textContent = '';
-        UI.run((S, base) => C.buildAdjustmentOps(S, { ...base, factureId: m.q('#fac').value, type: m.q('#typ').value, montant: Number(m.q('#mnt').value), motif: m.q('#mot').value, valider: pres && m.q('#val').checked, releve }))
-            .then(() => { m.close(); render(); }, (e) => { m.q('#ok').disabled = false; m.q('#err').textContent = e.message || String(e); });
     };
 }
 
@@ -506,27 +363,7 @@ document.getElementById('btn-pay').onclick = () => UI.openPaymentDialog({
     installments: true, compteurId: cid, releve, client: releve && releve.name, numero: releve && releve.numero_compteur,
     recuUrl: (pid) => `recu.html?p=${encodeURIComponent(pid)}`, onDone: render
 });
-document.getElementById('btn-adj').onclick = () => { setMenu(false); openAdjustment(); };
-
-const menu = document.getElementById('menu'), more = document.getElementById('btn-more');
-const setMenu = (open) => {
-    menu.classList.toggle('open', open); more.setAttribute('aria-expanded', String(open));
-    if (open) menu.querySelector('button:not([hidden]),a').focus();
-};
-more.onclick = (e) => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); };
-document.addEventListener('click', () => setMenu(false));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menu.classList.contains('open')) { setMenu(false); more.focus(); } });
-menu.addEventListener('focusout', () => { setTimeout(() => { if (!menu.contains(document.activeElement) && document.activeElement !== more) setMenu(false); }, 0); });
-function actionFeedback(text) { const el = document.getElementById('action-feedback'); el.textContent = text; el.hidden = false; }
-document.getElementById('mi-refresh').onclick = () => { setMenu(false); UI.retry(); loadClient(); actionFeedback('Actualisation demandée.'); };
 document.getElementById('retry-account').onclick = () => { UI.retry(); loadClient(); };
-document.getElementById('mi-copy').onclick = () => {
-    setMenu(false);
-    const n = (releve && releve.numero_compteur) || '';
-    if (!n) { actionFeedback('Numéro de compteur indisponible.'); return; }
-    if (navigator.clipboard) navigator.clipboard.writeText(String(n)).then(() => actionFeedback('Numéro de compteur copié.'), () => actionFeedback('Copie impossible. Numéro de compteur : ' + n));
-    else actionFeedback('Numéro de compteur : ' + n);
-};
 
 function applyClientSnapshot(snap) {
     releve = snap.exists() ? snap.val() : null;
