@@ -329,6 +329,29 @@ test('versements du mois : borne initiale incluse, total et détail identiques, 
     assert.deepStrictEqual(C.periodPayments(S,{...filtered,startInclusive:false}).map(p=>p.montant),[]);
 });
 
+test('versements sur factures : tranches FIFO, plafond des factures et aucune avance sur le relevé en cours', () => {
+    const db=newDb();
+    close(db,'2026-06',{c1:rel(0,20)}); // 5 000 F
+    close(db,'2026-07',{c1:rel(20,24)}); // 1 000 F
+    const current=rel(24,30); // 1 500 F encore non facturés
+    const base={paths:P,compteurId:'c1',mode:'autre',numero_recu:'V-1',releve:current,user:USER_T,newId};
+    assert.strictEqual(C.invoiceAmountDue(state(db),'c1').total_du,6000);
+    const unchanged=JSON.stringify(db.tree);
+    assert.throws(()=>C.buildInvoicePaymentOps(state(db),{...base,montant:6001,now:tick()}),/dépasse/);
+    assert.strictEqual(JSON.stringify(db.tree),unchanged);
+    for (const amount of [2000,3000,1000]) {
+        const result=C.buildInvoicePaymentOps(state(db),{...base,montant:amount,now:tick()});
+        assert.strictEqual(result.avance,0);
+        assert.strictEqual(result.affectations.reduce((sum,a)=>sum+a.montant,0),amount);
+        apply(db,result.updates);
+    }
+    assert.strictEqual(C.invoiceAmountDue(state(db),'c1').total_du,0);
+    assert.strictEqual(C.computeAccount(state(db),'c1').avance,0);
+    assert.strictEqual(C.amountDueNow(state(db),'c1',current).total_du,1500);
+    assert.throws(()=>C.buildInvoicePaymentOps(state(db),{...base,montant:1,now:tick()}),/Aucune facture/);
+    assert.throws(()=>C.buildInvoicePaymentOps(C.emptyState(),{...base,montant:1000,now:tick()}),/Aucune facture/);
+});
+
 test('statistiques : un paiement annulé ne compte pas dans l\'encaissé ; avances comptées une seule fois', () => {
     const db = newDb();
     close(db, '2026-06', { c1: rel(0, 20) });

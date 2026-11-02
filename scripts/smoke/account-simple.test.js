@@ -9,6 +9,7 @@ function example(arrears = 0) {
     const tree = migratedSeed(), f = tree.Asufor[FA];
     f.compteurs.c1 = { ...f.compteurs.c1, name: 'Client exemple', last_index: 0, new_index: 24, facteur: 250 };
     f.factures = {}; f.paiements = {}; f.affectations = {}; f.ajustements = {}; f.soldes = {}; f.backup = {};
+    f.factures['2026-10_c1'] = { facture_id:'2026-10_c1',compteur_id:'c1',cycle:'2026-10',montant_initial:6000,montant_net:6000,montant_paye:0,reste_a_payer:6000,statut:'ouverte',date_creation:'2026-10-31T12:00:00Z',source:'cloture',rev:1,ancien_index:0,nouvel_index:24,consommation:24,facteur:250 };
     if (arrears) {
         f.factures['2026-09_c1'] = { facture_id: '2026-09_c1', compteur_id: 'c1', cycle: '2026-09', montant_initial: arrears, montant_net: arrears, montant_paye: 0, reste_a_payer: arrears, statut: 'ouverte', date_creation: '2026-09-30T12:00:00Z', source: 'cloture', rev: 1, ancien_index: 0, nouvel_index: arrears / 250, consommation: arrears / 250, facteur: 250 };
         f.soldes.c1 = { ...C.soldeCache(C.computeAccount(f, 'c1')), rev: 1, updated_at: '2026-09-30T12:00:00Z' };
@@ -43,7 +44,7 @@ async function versement(page, amount) {
         {
             const { page, ctx, errors } = await open(browser, base);
             await page.setViewportSize({ width: 320, height: 780 });
-            assert.equal(num(await page.locator('#t-facture').innerText()), 6000);
+            assert.equal(num(await page.locator('#past-total').innerText()), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             await page.click('#btn-pay');
             await page.click('#cui-ok');
@@ -76,6 +77,9 @@ async function versement(page, amount) {
             const reopened = await open(browser, base, saved);
             assert.equal(num(await reopened.page.locator('#total-due').innerText()), 1000);
             assert.equal(num(await reopened.page.locator('#t-paye').innerText()), 5000);
+            await versement(reopened.page,1000);
+            assert.equal(num(await reopened.page.locator('#total-due').innerText()),0);
+            assert.equal(await reopened.page.locator('#btn-pay').isDisabled(),true,'le relevé courant ne permet pas un nouveau versement');
             await reopened.ctx.close();
             const payments = await page.evaluate(() => Object.values(window.__DB.tree.Asufor.Asufor_a.paiements));
             assert.equal(new Set(payments.map(p => p.numero_recu)).size, 2, 'les références internes sont générées automatiquement et distinctes');
@@ -96,14 +100,14 @@ async function versement(page, amount) {
                 }
                 window.__DB.listeners.slice().forEach(fn => fn());
             }, root);
-            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('past-total').textContent === '6 000 F');
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('past-total').textContent === '12 000 F');
             await page.click('#cui-ok');
             await page.waitForSelector('#cui-close');
-            assert.equal(num(await page.locator('.cui-remaining').innerText()), 0, 'le reçu simplifié reste exact si la clôture survient pendant la saisie');
+            assert.equal(num(await page.locator('.cui-remaining').innerText()), 6000, 'une nouvelle clôture émet une nouvelle facture, sans la prépayer');
             await page.click('#cui-close');
-            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('total-due').textContent === '0 F');
-            assert.equal(num(await page.locator('#total-due').innerText()), 0, 'la clôture et le nouveau relevé ne doublent pas la facture');
-            assert.equal(num(await page.locator('#t-facture').innerText()), 6000);
+            await page.waitForFunction(() => document.getElementById('balance').getAttribute('aria-busy') === 'false' && document.getElementById('total-due').textContent === '6 000 F');
+            assert.equal(num(await page.locator('#total-due').innerText()), 6000, 'le nouveau relevé clôturé devient payable une seule fois');
+            assert.equal(num(await page.locator('#past-total').innerText()), 12000);
             assert.equal(num(await page.locator('#t-paye').innerText()), 6000);
             assert.deepEqual(await archiveReads(page), { records: [], listeners: [], shallow: [] });
             assert.deepEqual(errors, []);
@@ -137,7 +141,7 @@ async function versement(page, amount) {
         }
         {
             const { page, ctx, errors } = await open(browser, base, example(2000));
-            assert.equal(num(await page.locator('#t-facture').innerText()), 8000);
+            assert.equal(num(await page.locator('#past-total').innerText()), 8000);
             await versement(page, 2000);
             await versement(page, 3000);
             await page.waitForFunction(() => document.getElementById('total-due').textContent === '3 000 F');
@@ -156,6 +160,7 @@ async function versement(page, amount) {
         }
         {
             const tree = example(2000), f = tree.Asufor[FA];
+            delete f.factures['2026-10_c1'];
             const rec = (amount, paid = false) => ({ name: 'Client exemple', last_index: 0, new_index: amount / 250, facteur: 250, status: paid ? 'paye' : 'impaye', statut: paid });
             f.factures['2026-09_c2'] = { ...f.factures['2026-09_c1'], facture_id:'2026-09_c2', compteur_id:'c2', montant_initial:999999 };
             f.backup = { '2026-07': { donnees: { c1: rec(1000, true), c2: { ...rec(999999), name: 'AUTRE CLIENT SECRET' } } }, '2026-08': { donnees: { c2: rec(12345) } }, '2026-09': { donnees: { c1: rec(2000), c2: rec(88888) } } };
@@ -176,7 +181,7 @@ async function versement(page, amount) {
                 assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'tableau des archives lisible à ' + width);
             }
             assert.ok(!(await page.locator('#archive-panel').innerText()).includes('AUTRE CLIENT SECRET'));
-            assert.equal(num(await page.locator('#total-due').innerText()), 8000, 'les archives consultées ne sont pas ajoutées une seconde fois à la dette');
+            assert.equal(num(await page.locator('#total-due').innerText()), 2000, 'les archives consultées ne sont pas ajoutées une seconde fois à la dette');
             await page.evaluate(() => window.AsuforSync.resync('visible', { force: true }));
             assert.deepEqual(await archiveReads(page), reads, 'la reprise ne télécharge pas à nouveau les archives');
             assert.deepEqual(errors, []);
@@ -197,7 +202,7 @@ async function versement(page, amount) {
             await page.evaluate(() => { window.__DB.failShallow = false; });
             await page.click('#retry-archives');
             await page.waitForSelector('#archives-table');
-            assert.equal(await page.locator('#archives-table tbody tr').count(), 1, 'les factures du grand livre restent consultables même sans copie d’archive');
+            assert.equal(await page.locator('#archives-table tbody tr').count(), 2, 'les factures du grand livre restent consultables même sans copie d’archive');
             assert.equal(await page.locator('[data-cancel]').count(), 0);
             assert.deepEqual(errors, []);
             console.log('✓ entrée Détails directe, erreur réessayable sans bloquer le relevé, droits du secrétaire conservés');
@@ -207,8 +212,9 @@ async function versement(page, amount) {
             for (const index of [0, -1]) {
                 const tree = example(); tree.Asufor[FA].compteurs.c1.new_index = index;
                 const { page, ctx, errors } = await open(browser, base, tree);
-                assert.equal(await page.locator('#due-current').innerText(), 'À relever');
-                assert.match(await page.locator('#provisoire').innerText(), /n’est pas inclus/);
+                assert.equal(await page.locator('#due-current').count(),0);
+                assert.equal(num(await page.locator('#total-due').innerText()),6000);
+                assert.match(await page.locator('#provisoire').innerText(), /après sa clôture/);
                 assert.deepEqual(errors, []); await ctx.close();
             }
             console.log('✓ relevé du mois absent : état expliqué, aucun montant inventé');
