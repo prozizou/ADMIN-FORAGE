@@ -284,6 +284,17 @@
           }
         },
 
+        // ── v85 : réabonnement mensuel (serveurs + développement) ──
+        // abonnement/{AAAA-MM} : false = non payé (carte de rappel affichée du 1er au 12),
+        // true = payé (carte masquée). Un membre du forage peut seulement CRÉER le nœud à false ;
+        // seul le super-admin (ou la console Firebase) le passe à true.
+        "abonnement": {
+          "$mois": {
+            ".write": "auth != null && ( auth.token.email == 'prozizou298@gmail.com' || ( root.child('users').child(auth.uid).child('forageKey').val() == $forageKey && !data.exists() && newData.val() == false ) )",
+            ".validate": "newData.isBoolean() && $mois.matches(/^[0-9]{4}-(0[1-9]|1[0-2])$/)"
+          }
+        },
+
         // ✅ CORRECTION v4 : Journal d'audit des modifications d'arriérés.
         //    Écriture par tout membre authentifié du forage (pour tracer qui a modifié quoi).
         //    Lecture uniquement par président et super-admin.

@@ -148,8 +148,8 @@
             <div id="top-quartiers"><p class="muted-note">Chargement…</p></div>
         </div>
 
-        <!-- ✅ v84 : rappel de réabonnement mensuel (serveurs Google + développement), paiement Wave -->
-        <div class="quartiers-card abonnement-card" id="abonnement-card"></div>
+        <!-- ✅ v85 : rappel de réabonnement (1er au 12 du mois, masqué dès que Asufor/{forage}/abonnement/{AAAA-MM} = true) -->
+        <div class="quartiers-card abonnement-card" id="abonnement-card" hidden></div>
 
         <!-- ✅ v2 : 4 onglets au lieu de 5 — Relevés/Non relevés deviennent un
              filtre secondaire à côté du tri (voir plus bas), la ligne

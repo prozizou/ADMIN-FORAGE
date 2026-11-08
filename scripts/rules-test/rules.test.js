@@ -507,3 +507,31 @@ describe('Non-régression des accès existants', () => {
         await assertFails(as('presA').ref('inconnu').set(1));
     });
 });
+
+// ─────────────────────────────────────────────────────────────
+describe('Réabonnement mensuel (v85)', () => {
+    const node = (m) => `Asufor/${FA}/abonnement/${m}`;
+
+    it('un membre du forage lit et crée le nœud du mois à false', async () => {
+        await assertSucceeds(as('tresA').ref(node('2026-11')).set(false));
+        await assertSucceeds(read(as('secA'), node('2026-11')));
+        assert.strictEqual(await raw(node('2026-11')), false);
+    });
+
+    it('seul le super-admin passe le mois à true (un président ne peut pas se déclarer payé)', async () => {
+        await assertFails(as('presA').ref(node('2026-11')).set(true));
+        await assertSucceeds(as('presA').ref(node('2026-11')).set(false));
+        await assertFails(as('presA').ref(node('2026-11')).set(true));
+        await assertFails(as('presA').ref(node('2026-11')).remove());
+        await assertSucceeds(superDb().ref(node('2026-11')).set(true));
+        await assertFails(as('presA').ref(node('2026-11')).set(false));
+    });
+
+    it('un autre forage ne lit ni n\'écrit l\'abonnement ; format du mois et booléen exigés', async () => {
+        await assertFails(as('presB').ref(node('2026-11')).set(false));
+        await assertFails(read(as('presB'), node('2026-11')));
+        await assertFails(as('presA').ref(node('2026-13')).set(false));
+        await assertFails(as('presA').ref(node('novembre')).set(false));
+        await assertFails(superDb().ref(node('2026-12')).set('oui'));
+    });
+});
