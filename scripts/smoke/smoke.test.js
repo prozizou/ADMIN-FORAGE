@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
 });
 
 // ── Firebase simulé (modules ES injectés à la place des CDN gstatic) ──
-const FB_APP = `export const initializeApp = () => ({}); export const deleteApp = async () => {};`;
+const FB_APP = `export const initializeApp = () => ({}); export const deleteApp = async () => {}; export const getApps = () => []; export const getApp = () => ({});`;
 const FB_AUTH = `const A = {}; export const getAuth = () => A; export const onAuthStateChanged = (a, cb) => { setTimeout(() => { A.currentUser = { uid: 'u1', email: 'x@asufor.local', getIdToken: async () => 'fake-token' }; cb(A.currentUser); }, 0); return () => {}; };
 export const createUserWithEmailAndPassword = async () => ({ user: { uid: 'x' } }); export const signOut = async () => {};`;
 const FB_DB = `
@@ -84,11 +84,22 @@ export const runTransaction = async () => ({ committed: true });
 
 const rec = (over) => Object.assign({ name: 'Client', numero_compteur: '1', zone: 'Nord', last_index: '0', new_index: 0, facteur: 250, status: 'impaye', statut: false, agent_id: 'ag1' }, over || {});
 
+function paidSubscription() {
+    const out = {};
+    const now = new Date();
+    for (let d = -2; d <= 2; d++) {
+        const m = new Date(now.getFullYear(), now.getMonth() + d, 1);
+        out[m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0')] = true;
+    }
+    return out;
+}
 function seed() {
     return {
         Asufor: {
             [FA]: {
                 config: { nom: 'Forage A' },
+                // Abonnement réglé : pas de carte de rappel ni de blocage pendant les tests (testés à part).
+                abonnement: paidSubscription(),
                 agents: { ag1: { agent: 'Agent Un', zone: 'Nord', agent_tel: '771234567' } },
                 compteurs: {
                     c1: rec({ name: 'Aminata', numero_compteur: '1', last_index: '24', new_index: 30 }),      // facture 1500
