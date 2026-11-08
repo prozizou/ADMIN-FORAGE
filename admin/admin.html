@@ -130,6 +130,12 @@
         /* ✅ Table scrollable horizontalement plutôt que débordante hors carte sur petit écran */
         .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+        /* ✅ v87 : statut d'abonnement mensuel (bascule super-admin) */
+        .abo-toggle { border: 0; border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.78rem; cursor: pointer; }
+        .abo-toggle.paid { background: #dcfce7; color: #15803d; }
+        .abo-toggle.unpaid { background: #fee2e2; color: #b91c1c; }
+        .abo-toggle:disabled { opacity: .5; cursor: wait; }
+
         .denied {
             text-align: center;
             padding: 60px 20px;
@@ -218,14 +224,17 @@
             <div class="table-scroll">
             <table>
                 <thead>
-                    <tr><th>Forage</th><th>Clé</th><th>Siège</th><th>Président(s)</th></tr>
+                    <tr><th>Forage</th><th>Clé</th><th>Siège</th><th>Président(s)</th><th id="abo-col">Abonnement</th></tr>
                 </thead>
                 <tbody id="forageList">
-                    <tr class="empty-row"><td colspan="4">Chargement…</td></tr>
+                    <tr class="empty-row"><td colspan="5">Chargement…</td></tr>
                 </tbody>
             </table>
             </div>
             <p style="font-size: 0.72rem; opacity: 0.5; margin: 10px 2px 0;">
+                <b>Abonnement</b> : touchez le statut pour basculer Payé ↔ Non payé (mois en cours).
+                Non payé après le 12 du mois → application bloquée pour ce forage ; un mois précédent
+                laissé « Non payé » bloque aussi jusqu'à sa régularisation.<br>
                 La « Clé » identifie le forage dans Firebase (utilisée par le script
                 <code>scripts/migrate-multi-forage.js --forage-key</code> lors de la migration).
             </p>
@@ -310,20 +319,51 @@
 
             const keys = Object.keys(forages);
             if (keys.length === 0) {
-                forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Aucun forage créé pour l\'instant.</td></tr>';
+                forageList.innerHTML = '<tr class="empty-row"><td colspan="5">Aucun forage créé pour l\'instant.</td></tr>';
                 return;
             }
 
+            const now = new Date();
+            const mois = aboMonthKey(now), prev = aboPrevMonthKey(now);
+            document.getElementById('abo-col').textContent = 'Abonnement ' + now.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
             forageList.innerHTML = keys.map((key) => {
                 const cfg = forages[key].config || {};
                 const presidents = (presidentsByForage[key] || []).map(escHtml).join(', ') || '—';
-                return '<tr><td>' + escHtml(cfg.nom || key) + '</td><td class="key-cell">' + escHtml(key) + '</td><td>' + escHtml(cfg.siege || '—') + '</td><td>' + presidents + '</td></tr>';
+                const abo = forages[key].abonnement || {};
+                const paid = abo[mois] === true;
+                const prevUnpaid = abo[prev] === false
+                    ? '<button type="button" class="abo-toggle unpaid" style="margin-top:4px" data-abo-key="' + escHtml(key) + '" data-abo-month="' + prev + '" data-abo-paid="0">' + prev + ' : Non payé</button>'
+                    : '';
+                const toggle = '<button type="button" class="abo-toggle ' + (paid ? 'paid' : 'unpaid') + '" data-abo-key="' + escHtml(key) + '" data-abo-month="' + mois + '" data-abo-paid="' + (paid ? 1 : 0) + '">' + (paid ? '✓ Payé' : '✗ Non payé') + '</button>';
+                return '<tr><td>' + escHtml(cfg.nom || key) + '</td><td class="key-cell">' + escHtml(key) + '</td><td>' + escHtml(cfg.siege || '—') + '</td><td>' + presidents + '</td><td>' + toggle + (prevUnpaid ? '<br>' + prevUnpaid : '') + '</td></tr>';
             }).join('');
         } catch (e) {
             console.error('Chargement forages échoué :', e);
-            forageList.innerHTML = '<tr class="empty-row"><td colspan="4">Erreur de chargement.</td></tr>';
+            forageList.innerHTML = '<tr class="empty-row"><td colspan="5">Erreur de chargement.</td></tr>';
         }
     }
+
+    // ✅ v87 : abonnement mensuel — le super-admin bascule Payé (true) ↔ Non payé (false).
+    const pad2 = (n) => (n < 10 ? '0' : '') + n;
+    const aboMonthKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+    const aboPrevMonthKey = (d) => aboMonthKey(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+    forageList.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-abo-key]');
+        if (!b) return;
+        const key = b.dataset.aboKey, mois = b.dataset.aboMonth, next = b.dataset.aboPaid !== '1';
+        const ok = confirm((next ? 'Marquer PAYÉ' : 'Révoquer le paiement (NON PAYÉ)') + ' — ' + key + ', ' + mois + ' ?'
+            + (next ? '' : '\nAprès le 12 du mois, l\'application sera bloquée pour ce forage.'));
+        if (!ok) return;
+        b.disabled = true;
+        try {
+            await set(ref(db, 'Asufor/' + key + '/abonnement/' + mois), next);
+            await loadForages();
+        } catch (err) {
+            console.error('Abonnement : mise à jour échouée', err);
+            alert('Mise à jour impossible : ' + (err && err.message ? err.message : err));
+            b.disabled = false;
+        }
+    });
 
     btn.addEventListener('click', async () => {
         clearErrors();

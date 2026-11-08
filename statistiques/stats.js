@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v86';
+const STATS_BUILD = 'v87';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 

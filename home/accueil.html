@@ -301,6 +301,11 @@
     <script src="../biometric.js"></script>
     <script src="../security.js"></script>
     <script src="../loader.js"></script>
+    <!-- ✅ v87 : blocage de l'application si l'abonnement mensuel n'est pas réglé -->
+    <script src="../firebase-config.js"></script>
+    <script src="../admin-config.js"></script>
+    <script src="../forage-context.js"></script>
+    <script src="../abonnement-guard.js"></script>
     <script>
         // ✅ CORRECTION : checkAccess() avant tout
         const session = window.checkAccess(['président', 'secrétaire', 'trésorier']);

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Test de fumée navigateur des pages Statistiques / Impression / Maintenance (Firebase simulé)",
   "scripts": {
-    "test": "node smoke.test.js && node recovery.test.js && node stats-loading.test.js && node print-resync.test.js && node stats-live.test.js && node current-month-only.test.js && node account-simple.test.js && node stats-compact.test.js && node paid-filter.test.js && node invoice-only.test.js && node amount-due.test.js"
+    "test": "node smoke.test.js && node recovery.test.js && node stats-loading.test.js && node print-resync.test.js && node stats-live.test.js && node current-month-only.test.js && node account-simple.test.js && node stats-compact.test.js && node paid-filter.test.js && node invoice-only.test.js && node amount-due.test.js && node abonnement.test.js"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"
