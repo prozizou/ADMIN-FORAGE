@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, goOffline, goOnline, ref, onValue, update, get, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ✅ CORRECTION : utiliser la config Firebase centralisée (firebase-config.js chargé dans stats.html)
@@ -13,7 +13,7 @@ const P = window.ForageContext.paths();
 // ✅ Lecture protégée (délai maximal + nouvelles tentatives, voir sync.js) : plus de chargement infini.
 const sget = (r) => window.AsuforSync ? window.AsuforSync.safeGet(get, r) : get(r);
 const Sync = window.AsuforSync || null;
-const STATS_BUILD = 'v83';
+const STATS_BUILD = 'v86';
 const liveSources = {};
 console.info('[ASUFOR] Statistiques ' + STATS_BUILD);
 
@@ -1618,6 +1618,8 @@ onAuthStateChanged(auth, (user) => {
         if (window.AsuforLoader) AsuforLoader.update('Chargement des relevés…');
         loadForageBranding();
         window.startSync();
+        // ✅ v85 : rappel de réabonnement (1er au 12 du mois, tant que le mois n'est pas marqué payé)
+        if (window.AsuforAbonnement && P.base) window.AsuforAbonnement.init({ db, ref, onValue, set, basePath: P.base });
     } else {
         // ✅ CORRECTION v4 : message visible (plus de redirection silencieuse)
         // + nettoyage centralisé via security.js, cohérent avec les autres pages.
