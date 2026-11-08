@@ -532,3 +532,35 @@ body.customer-view-open { overflow:hidden; }
 .receipt-list li > b { flex:none; white-space:nowrap; color:#15803d; }
 
 .receipt-list li .receipt-warning { color:#9a3412; font-weight:600; }
+
+/* ✅ v84 : rappel de réabonnement mensuel (Wave) */
+.abonnement-card { border-left: 4px solid var(--success); }
+.abonnement-card.abo-soon { border-left-color: #f59e0b; }
+.abonnement-card.abo-late { border-left-color: var(--danger); }
+.abo-intro { font-size: .74rem; color: var(--text-sub); margin: 0 0 8px; }
+.abo-status { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.abo-row { display: flex; align-items: center; gap: 8px; font-size: .76rem; flex-wrap: wrap; }
+.abo-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--success); }
+.abo-row.abo-soon .abo-dot { background: #f59e0b; }
+.abo-row.abo-late .abo-dot { background: var(--danger); }
+.abo-name { font-weight: 700; color: var(--text-main); }
+.abo-state { color: var(--text-sub); }
+.abo-row.abo-late .abo-state { color: var(--danger); font-weight: 600; }
+.abo-row.abo-soon .abo-state { color: #b45309; font-weight: 600; }
+.abo-plans { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.abo-plan {
+    display: flex; align-items: center; gap: 10px; text-decoration: none;
+    padding: 9px 12px; border-radius: 12px; border: 1px solid var(--border-color);
+    background: var(--bg); color: var(--text-main); transition: .2s;
+}
+.abo-plan:hover { border-color: #1dc8f2; }
+.abo-plan:last-child { background: rgba(29, 200, 242, .12); border-color: rgba(29, 200, 242, .45); }
+.abo-plan-lbl { flex: 1; font-size: .8rem; font-weight: 700; }
+.abo-plan-amt { font-size: .8rem; font-weight: 800; white-space: nowrap; }
+.abo-plan-amt small { font-weight: 500; color: var(--text-sub); }
+.abo-plan i { color: #1dc8f2; font-size: .75rem; }
+.abo-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; font-size: .78rem; }
+.abo-confirm span { flex: 1 1 100%; color: var(--text-main); font-weight: 600; }
+.abo-confirm button { border: 0; border-radius: 10px; padding: 8px 14px; font-weight: 700; font-size: .78rem; cursor: pointer; }
+.abo-btn-yes { background: var(--success); color: #fff; }
+.abo-btn-no { background: rgba(100, 116, 139, .12); color: var(--text-sub); }
