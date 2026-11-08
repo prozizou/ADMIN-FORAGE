@@ -1,4 +1,4 @@
-/* abonnement.js — Rappel de réabonnement mensuel (serveurs Google + frais de développement).
+/* abonnement.js — Rappel de réabonnement mensuel (serveurs Google + motivation du développeur).
  *
  * La carte n'apparaît que du 1er au 12 de chaque mois, tant que le mois n'est pas
  * marqué payé dans Firebase :
@@ -18,7 +18,7 @@
     var WAVE_BASE = 'https://pay.wave.com/m/M_sn_6W-tuxFYYkZa/c/sn/?amount=';
     var PLANS = [
         { label: 'Serveur (Google)', amount: 31000 },
-        { label: 'Frais de développement', amount: 30000 },
+        { label: 'Motivation du développeur', amount: 30000 },
         { label: 'Les deux', amount: 61000 }
     ];
     var LAST_DAY = 12;
