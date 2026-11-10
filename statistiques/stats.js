@@ -1392,6 +1392,13 @@ function renderList() {
         // d'un paiement se fait depuis le relevé de compte (annulation tracée par le président).
         const statusBtn = comptaButtons(item, totalDu);
 
+        // Montant affiché en tête : reste à payer si impayé ; une fois payé,
+        // le montant de la facture (sinon la carte affichait « 0 F » alors
+        // que le client a bien consommé et réglé).
+        const consoM3 = Math.max(0, nIdx - lIdx);
+        const montantFacture = calculatedAmount > 0 ? calculatedAmount : (window.Billing.computeCurrent(item).montant || 0);
+        const displayAmount = isPaid ? montantFacture : totalDu;
+
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
         // badge texte explicite (✓/✕), jamais la couleur seule.
@@ -1403,12 +1410,12 @@ function renderList() {
         div.innerHTML = `
             <div class="citem-main">
                 <span class="citem-name">${esc(item.name || 'Inconnu')}${relevesBadge}</span>
-                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}">${totalDu.toLocaleString()} F</span>
+                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}" title="${isPaid ? 'Montant facturé (payé)' : 'Reste à payer'}">${displayAmount.toLocaleString()} F</span>
             </div>
             <div class="citem-sub">
                 <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
                 <span><i class="fa-solid fa-gauge"></i>Compteur n°${esc(item.numero_compteur || 'N/A')}</span>
-                <span><i class="fa-solid fa-droplet"></i>${nIdx} m³ (préc. ${lIdx})</span>
+                <span><i class="fa-solid fa-droplet"></i>Conso : <b>${consoM3} m³</b>&nbsp;(${nIdx} − ${lIdx})</span>
             </div>
             <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${factStatut || (isPaid ? '✓ Payé' : '✕ Impayé')}</span>
             ${arriereHtml}
