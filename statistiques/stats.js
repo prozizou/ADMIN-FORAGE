@@ -878,6 +878,7 @@ window.applyFilter = function() {
         const cur = window.Billing.computeCurrent(item);
         item.conso = cur.conso;                               // 0 si anomalie de relevé
         item.avance = 0;
+        item.arriereRegle = 0;
         if (ledgerMode && monthSel === 'actuel') {
             const du = Compta.amountDueNow(S, item.key, item);
             item.calculatedAmount = du.facture_provisoire;    // relevé du mois (facturé à la clôture)
@@ -885,6 +886,10 @@ window.applyFilter = function() {
             item.avance = du.avance;
             item.totalDu = du.total_du;
             item.estSolde = du.total_du <= 0 && (du.facture_provisoire > 0 || du.account.total_paye > 0 || du.account.total_facture > 0);
+            // Arriérés réglés en même temps que ce relevé (versements rattachés au relevé courant,
+            // part affectée aux factures antérieures) — affichés dans le total payé de la carte.
+            item.arriereRegle = (du.account.paiements || []).reduce((t, p) =>
+                t + (p.statut === 'valide' && p.releve_affecte && Number(p.releve_affecte.ancien_index) === Number(item.last_index) ? (p.affecte_factures || 0) : 0), 0);
         } else if (ledgerMode) {
             const f = S.factures[Compta.factureId(monthSel, item.key)];
             const acc = Compta.computeAccount(S, item.key);
@@ -895,6 +900,15 @@ window.applyFilter = function() {
                 item.factureStatut = st.statut;
                 item.totalDu = st.reste_a_payer + anterieurs;
                 item.estSolde = st.statut === 'payee';
+                // Arriérés réglés par les mêmes versements que cette facture.
+                const fid = Compta.factureId(monthSel, item.key);
+                const cycleOf = {}; acc.factures.forEach(x => { cycleOf[x.facture_id] = x.cycle; });
+                item.arriereRegle = Object.keys(S.affectations || {}).reduce((t, pid) => {
+                    const m = S.affectations[pid] || {};
+                    const pay = (S.paiements || {})[pid];
+                    if (!pay || pay.statut !== 'valide' || !m[fid] || m[fid].statut === 'annulee') return t;
+                    return t + Object.keys(m).reduce((u, k) => u + (k !== fid && m[k] && m[k].statut !== 'annulee' && cycleOf[k] && cycleOf[k] < monthSel ? (Number(m[k].montant) || 0) : 0), 0);
+                }, 0);
             } else {
                 item.calculatedAmount = 0;
                 item.factureStatut = null;
@@ -1397,7 +1411,11 @@ function renderList() {
         // que le client a bien consommé et réglé).
         const consoM3 = Math.max(0, nIdx - lIdx);
         const montantFacture = calculatedAmount > 0 ? calculatedAmount : (window.Billing.computeCurrent(item).montant || 0);
-        const displayAmount = isPaid ? montantFacture : totalDu;
+        const arriereRegle = item.arriereRegle || 0;
+        const displayAmount = isPaid ? montantFacture + arriereRegle : totalDu;
+        const paidDetailHtml = (isPaid && arriereRegle > 0)
+            ? `<div style="font-size:0.8rem;color:var(--success);font-weight:700;">Payé : ${isArchiveView ? 'Facture' : 'Mois'} ${montantFacture.toLocaleString()} F + Arriérés ${arriereRegle.toLocaleString()} F = ${displayAmount.toLocaleString()} F</div>`
+            : '';
 
         // ✅ v3 : le fond coloré redevient le repère principal (payé=vert,
         // impayé=rouge) pour des utilisateurs novices — toujours doublé d'un
@@ -1410,7 +1428,7 @@ function renderList() {
         div.innerHTML = `
             <div class="citem-main">
                 <span class="citem-name">${esc(item.name || 'Inconnu')}${relevesBadge}</span>
-                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}" title="${isPaid ? 'Montant facturé (payé)' : 'Reste à payer'}">${displayAmount.toLocaleString()} F</span>
+                <span class="citem-amt" style="color: ${isPaid ? 'var(--success)' : 'var(--danger)'}" title="${isPaid ? 'Montant payé (facture + arriérés réglés)' : 'Reste à payer'}">${displayAmount.toLocaleString()} F</span>
             </div>
             <div class="citem-sub">
                 <span><i class="fa-solid fa-location-dot"></i>${zoneName}</span>
@@ -1419,6 +1437,7 @@ function renderList() {
             </div>
             <span class="status-pill ${isPaid ? 'status-pill-paid' : 'status-pill-unpaid'}">${factStatut || (isPaid ? '✓ Payé' : '✕ Impayé')}</span>
             ${arriereHtml}
+            ${paidDetailHtml}
             ${auditHtml}
             ${anomalyHtml}
             ${noteHtml}
